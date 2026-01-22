@@ -88,6 +88,20 @@ export function TaskCard({
             {/* Ready state - minimal info */}
             {isReady && task.research && (
               <div className="mt-2 space-y-2">
+                {/* Price if available */}
+                {quickInfo?.price && (
+                  <div className="text-sm font-medium text-green-600 dark:text-green-400">
+                    {quickInfo.price}
+                  </div>
+                )}
+
+                {/* Details if available */}
+                {quickInfo?.details && (
+                  <div className="text-sm text-gray-600 dark:text-gray-300">
+                    {quickInfo.details}
+                  </div>
+                )}
+
                 {/* Quick info: phone and hours */}
                 {(quickInfo?.phoneFormatted || quickInfo?.hours) && (
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600 dark:text-gray-300">

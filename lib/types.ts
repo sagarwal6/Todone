@@ -33,6 +33,8 @@ export interface QuickInfo {
   hours?: string;
   address?: string;
   website?: string;
+  price?: string;
+  details?: string;
 }
 
 export interface Research {
