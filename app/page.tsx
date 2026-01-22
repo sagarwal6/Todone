@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react';
 import { TaskInput } from '@/components/TaskInput';
 import { TaskList } from '@/components/TaskList';
+import { DetailPanel } from '@/components/DetailPanel';
 import { useTasks } from '@/hooks/useTasks';
 import { useResearch } from '@/hooks/useResearch';
 import { Feedback } from '@/lib/types';
@@ -12,6 +13,7 @@ type ViewMode = 'active' | 'completed' | 'archived';
 
 export default function Home() {
   const {
+    tasks,
     activeTasks,
     completedTasks,
     archivedTasks,
@@ -31,6 +33,10 @@ export default function Home() {
   const { isResearching, progress, error, research } = useResearch();
   const [researchingTaskId, setResearchingTaskId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('active');
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
+
+  const selectedTask = selectedTaskId ? tasks.find(t => t.id === selectedTaskId) || null : null;
 
   const handleAddTask = useCallback(async (title: string) => {
     const newTask = addTask(title);
@@ -46,12 +52,20 @@ export default function Home() {
         setResearch(newTask.id, result.research);
       }
     } catch {
-      // Task remains in pending state if research fails
       console.error('Research failed');
     } finally {
       setResearchingTaskId(null);
     }
   }, [addTask, startResearching, research, markAsPersonal, setResearch]);
+
+  const handleShowDetails = useCallback((taskId: string) => {
+    setSelectedTaskId(taskId);
+    setIsPanelOpen(true);
+  }, []);
+
+  const handleClosePanel = useCallback(() => {
+    setIsPanelOpen(false);
+  }, []);
 
   const handleFeedback = useCallback((taskId: string, feedback: Feedback) => {
     setFeedback(taskId, feedback);
@@ -133,7 +147,7 @@ export default function Home() {
           onArchive={archiveTask}
           onDelete={deleteTask}
           onRestore={restoreTask}
-          onFeedback={handleFeedback}
+          onShowDetails={handleShowDetails}
           onReorder={reorderTasks}
         />
 
@@ -142,6 +156,14 @@ export default function Home() {
           <p>Powered by Gemini AI with Google Search</p>
         </footer>
       </div>
+
+      {/* Detail Panel */}
+      <DetailPanel
+        task={selectedTask}
+        isOpen={isPanelOpen}
+        onClose={handleClosePanel}
+        onFeedback={handleFeedback}
+      />
     </main>
   );
 }

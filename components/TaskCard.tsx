@@ -1,10 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { Task, ProgressStatus, Feedback } from '@/lib/types';
-import { ActionButton } from './ActionButton';
-import { SourceList } from './SourceBadge';
-import { FeedbackWidget } from './FeedbackWidget';
+import { Task, ProgressStatus } from '@/lib/types';
 import { ProgressiveReveal } from './ProgressiveReveal';
 
 interface TaskCardProps {
@@ -14,7 +10,7 @@ interface TaskCardProps {
   onArchive: (taskId: string) => void;
   onDelete: (taskId: string) => void;
   onRestore: (taskId: string) => void;
-  onFeedback: (taskId: string, feedback: Feedback) => void;
+  onShowDetails: (taskId: string) => void;
   isDragging?: boolean;
 }
 
@@ -25,20 +21,25 @@ export function TaskCard({
   onArchive,
   onDelete,
   onRestore,
-  onFeedback,
+  onShowDetails,
   isDragging,
 }: TaskCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-
-  const handleFeedback = useCallback((feedback: Feedback) => {
-    onFeedback(task.id, feedback);
-  }, [task.id, onFeedback]);
-
   const isResearching = task.status === 'researching';
   const isReady = task.status === 'ready';
   const isPersonal = task.status === 'personal';
   const isCompleted = task.status === 'completed';
   const isArchived = task.status === 'archived';
+
+  const quickInfo = task.research?.quickInfo;
+  const primaryAction = task.research?.keyActions.find(a => a.isPrimary) || task.research?.keyActions[0];
+
+  const handleCall = () => {
+    if (quickInfo?.phone) {
+      window.location.href = quickInfo.phone;
+    } else if (primaryAction?.type === 'phone') {
+      window.location.href = primaryAction.value;
+    }
+  };
 
   return (
     <div
@@ -46,7 +47,6 @@ export function TaskCard({
         isDragging ? 'dragging' : ''
       } ${isCompleted ? 'opacity-60' : ''}`}
     >
-      {/* Header */}
       <div className="p-4">
         <div className="flex items-start gap-3">
           {/* Checkbox */}
@@ -66,21 +66,15 @@ export function TaskCard({
             )}
           </button>
 
-          {/* Title and status */}
+          {/* Content */}
           <div className="flex-1 min-w-0">
+            {/* Title row */}
             <div className="flex items-center gap-2">
               <h3 className={`font-medium ${isCompleted ? 'line-through text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
                 {task.title}
               </h3>
               {isPersonal && (
-                <span className="flex-shrink-0 text-xl" title="Personal task - no research needed">
-                  💭
-                </span>
-              )}
-              {task.research?.taskType && (
-                <span className="flex-shrink-0 px-2 py-0.5 text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-full">
-                  {task.research.taskType}
-                </span>
+                <span className="flex-shrink-0 text-lg" title="Personal task">💭</span>
               )}
             </div>
 
@@ -91,86 +85,87 @@ export function TaskCard({
               </div>
             )}
 
-            {/* Ready state - briefing summary */}
+            {/* Ready state - minimal info */}
             {isReady && task.research && (
-              <div className="mt-2">
-                <p className="text-sm text-gray-600 dark:text-gray-300">
-                  {task.research.summary}
-                </p>
-
-                {/* Action buttons */}
-                {task.research.keyActions.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {task.research.keyActions.map((action, index) => (
-                      <ActionButton key={index} action={action} />
-                    ))}
-                  </div>
-                )}
-
-                {/* Follow-up question */}
-                {task.research.followUpQuestion && (
-                  <p className="mt-3 text-sm text-blue-600 dark:text-blue-400 italic">
-                    {task.research.followUpQuestion}
-                  </p>
-                )}
-
-                {/* Expand/collapse for more details */}
-                <button
-                  onClick={() => setIsExpanded(!isExpanded)}
-                  className="mt-3 text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
-                >
-                  {isExpanded ? 'Show less' : 'Show more details'}
-                </button>
-
-                {/* Expanded content */}
-                {isExpanded && (
-                  <div className="mt-4 space-y-4 pt-4 border-t border-gray-100 dark:border-gray-700 animate-fade-in">
-                    {/* Raw markdown / full briefing */}
-                    {task.research.rawMarkdown && (
-                      <div className="prose prose-sm dark:prose-invert max-w-none">
-                        <div className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap">
-                          {task.research.rawMarkdown}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Sources */}
-                    <SourceList sources={task.research.sources} />
-
-                    {/* Confidence indicator */}
-                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                      <span>Confidence:</span>
-                      <span className={`font-medium ${
-                        task.research.confidence === 'high' ? 'text-green-600 dark:text-green-400' :
-                        task.research.confidence === 'medium' ? 'text-yellow-600 dark:text-yellow-400' :
-                        'text-red-600 dark:text-red-400'
-                      }`}>
-                        {task.research.confidence}
+              <div className="mt-2 space-y-2">
+                {/* Quick info: phone and hours */}
+                {(quickInfo?.phoneFormatted || quickInfo?.hours) && (
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600 dark:text-gray-300">
+                    {quickInfo?.phoneFormatted && (
+                      <span className="flex items-center gap-1.5">
+                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                        </svg>
+                        <span className="font-medium">{quickInfo.phoneFormatted}</span>
                       </span>
-                    </div>
-
-                    {/* Feedback widget */}
-                    <FeedbackWidget feedback={task.feedback} onFeedback={handleFeedback} />
+                    )}
+                    {quickInfo?.hours && (
+                      <span className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        {quickInfo.hours}
+                      </span>
+                    )}
                   </div>
                 )}
+
+                {/* Action buttons row */}
+                <div className="flex items-center gap-3">
+                  {/* Call button */}
+                  {(quickInfo?.phone || primaryAction?.type === 'phone') && (
+                    <button
+                      onClick={handleCall}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                      </svg>
+                      Call
+                    </button>
+                  )}
+
+                  {/* Website button if no phone */}
+                  {!quickInfo?.phone && primaryAction?.type === 'link' && (
+                    <a
+                      href={primaryAction.value}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                      {primaryAction.label}
+                    </a>
+                  )}
+
+                  {/* More details link */}
+                  <button
+                    onClick={() => onShowDetails(task.id)}
+                    className="text-sm text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
+                  >
+                    More details →
+                  </button>
+                </div>
               </div>
             )}
 
-            {/* Personal task message */}
+            {/* Personal task */}
             {isPersonal && (
               <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 italic">
-                This looks like a personal task. No research needed!
+                Personal task - no research needed
               </p>
             )}
           </div>
 
-          {/* Actions menu */}
+          {/* Actions */}
           <div className="flex-shrink-0 flex items-center gap-1">
             {!isArchived && (
               <button
                 onClick={() => onArchive(task.id)}
                 className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
-                aria-label="Archive task"
+                aria-label="Archive"
                 title="Archive"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -181,7 +176,7 @@ export function TaskCard({
             <button
               onClick={() => onDelete(task.id)}
               className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
-              aria-label="Delete task"
+              aria-label="Delete"
               title="Delete"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

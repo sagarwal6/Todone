@@ -27,16 +27,31 @@ export interface StructuredData {
   [key: string]: string | number | boolean | null | StructuredData | StructuredData[];
 }
 
+export interface QuickInfo {
+  phone?: string;
+  phoneFormatted?: string;
+  hours?: string;
+  address?: string;
+  website?: string;
+}
+
 export interface Research {
   summary: string;
   taskType: string;
   confidence: ConfidenceLevel;
+  quickInfo: QuickInfo;
   keyActions: Action[];
   sources: SourceReference[];
-  followUpQuestion: string | null;
   rawMarkdown: string;
   researchedAt: number;
   structuredData?: StructuredData;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
 }
 
 export interface Feedback {

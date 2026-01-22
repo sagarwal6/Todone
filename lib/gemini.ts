@@ -1,27 +1,34 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { Research, Action, SourceReference } from './types';
+import { Research, Action, SourceReference, QuickInfo } from './types';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-const RESEARCH_SYSTEM_PROMPT = `You are a CEO's executive assistant. Your job is to research tasks and provide concise, actionable briefings.
+const RESEARCH_SYSTEM_PROMPT = `You are a CEO's executive assistant. Your job is to research tasks and provide concise, actionable information.
 
 For each task, you will:
 1. First, determine if this task requires research (return isPersonal: true if it's a personal/ambiguous task like "call mom", "remember to breathe", etc.)
-2. If research is needed, gather information and provide a briefing
+2. If research is needed, find the KEY CONTACT INFO and provide it prominently
 
 Your response must be valid JSON with this exact structure:
 {
   "isPersonal": boolean,
   "research": {
-    "summary": "2-3 sentence executive summary of key findings",
-    "taskType": "category like 'healthcare', 'shopping', 'travel', 'finance', etc.",
+    "summary": "One short sentence describing what you found",
+    "taskType": "category like 'insurance', 'healthcare', 'shopping', 'travel', 'finance', etc.",
     "confidence": "high" | "medium" | "low",
+    "quickInfo": {
+      "phone": "tel:+1XXXXXXXXXX format for calling",
+      "phoneFormatted": "Human readable format like (800) 331-4754",
+      "hours": "Business hours like 'Mon-Fri 8am-5pm CT'",
+      "address": "Physical address if relevant",
+      "website": "Main website URL"
+    },
     "keyActions": [
       {
-        "label": "Button text (e.g., 'Call Office', 'Book Now', 'View Website')",
-        "type": "link" | "phone" | "email" | "copy",
-        "value": "URL, phone number, email, or text to copy",
-        "isPrimary": true for the most important action, false otherwise
+        "label": "Short button text like 'Call Now'",
+        "type": "phone",
+        "value": "tel:+1XXXXXXXXXX",
+        "isPrimary": true
       }
     ],
     "sources": [
@@ -30,28 +37,25 @@ Your response must be valid JSON with this exact structure:
         "url": "https://...",
         "type": "web",
         "confidence": "high" | "medium" | "low",
-        "snippet": "Relevant quote from the source"
+        "snippet": "Relevant quote"
       }
     ],
-    "followUpQuestion": "Optional follow-up question to clarify user intent" or null,
-    "rawMarkdown": "Full briefing in markdown format for expanded view"
+    "rawMarkdown": "Detailed briefing for the expanded view panel"
   }
 }
 
-Guidelines:
-- Be concise but comprehensive
-- Always include at least one actionable button
-- Phone numbers should be formatted as tel:+1XXXXXXXXXX
-- Email addresses should be formatted as mailto:email@example.com
-- Include 2-4 key actions maximum
-- Mark ONE action as isPrimary: true (the most important next step)
-- Sources should be real, verifiable URLs from your search
-- If you can't find specific information, say so honestly
-- For time-sensitive tasks, prioritize urgency in your summary
+CRITICAL GUIDELINES:
+- quickInfo.phone and quickInfo.phoneFormatted are REQUIRED if a phone number exists
+- The summary should be ONE sentence max, like "RLI Insurance customer service" or "Dr. Smith's dental office"
+- Do NOT ask follow-up questions - just provide the information
+- Do NOT explain what the task is - the user already knows
+- Phone numbers: always include both tel: format AND human-readable format
+- keyActions should have 1-2 buttons max, not 4
+- Keep it minimal - this shows on a task card
 
 Personal/Skip tasks (return isPersonal: true):
 - Personal reminders ("call mom", "drink water")
-- Ambiguous tasks without clear research need ("think about life")
+- Ambiguous tasks without clear research need
 - Tasks that require personal context you don't have`;
 
 export async function evaluateAndResearchTask(taskTitle: string): Promise<{
@@ -94,10 +98,19 @@ Remember: Return isPersonal: true for personal tasks that don't need research.`;
       return { isPersonal: true, research: null };
     }
 
+    const quickInfo: QuickInfo = {
+      phone: parsed.research?.quickInfo?.phone,
+      phoneFormatted: parsed.research?.quickInfo?.phoneFormatted,
+      hours: parsed.research?.quickInfo?.hours,
+      address: parsed.research?.quickInfo?.address,
+      website: parsed.research?.quickInfo?.website,
+    };
+
     const research: Research = {
       summary: parsed.research?.summary || 'Unable to generate summary',
       taskType: parsed.research?.taskType || 'general',
       confidence: parsed.research?.confidence || 'medium',
+      quickInfo,
       keyActions: (parsed.research?.keyActions || []).map((a: Partial<Action>) => ({
         label: a.label || 'Action',
         type: a.type || 'link',
@@ -111,7 +124,6 @@ Remember: Return isPersonal: true for personal tasks that don't need research.`;
         confidence: s.confidence || 'medium',
         snippet: s.snippet || null,
       })),
-      followUpQuestion: parsed.research?.followUpQuestion || null,
       rawMarkdown: parsed.research?.rawMarkdown || parsed.research?.summary || '',
       researchedAt: Date.now(),
     };

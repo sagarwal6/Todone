@@ -18,7 +18,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Task, ProgressStatus, Feedback } from '@/lib/types';
+import { Task, ProgressStatus } from '@/lib/types';
 import { TaskCard } from './TaskCard';
 
 interface SortableTaskProps {
@@ -28,7 +28,7 @@ interface SortableTaskProps {
   onArchive: (taskId: string) => void;
   onDelete: (taskId: string) => void;
   onRestore: (taskId: string) => void;
-  onFeedback: (taskId: string, feedback: Feedback) => void;
+  onShowDetails: (taskId: string) => void;
 }
 
 function SortableTask({
@@ -38,7 +38,7 @@ function SortableTask({
   onArchive,
   onDelete,
   onRestore,
-  onFeedback,
+  onShowDetails,
 }: SortableTaskProps) {
   const {
     attributes,
@@ -80,7 +80,7 @@ function SortableTask({
             onArchive={onArchive}
             onDelete={onDelete}
             onRestore={onRestore}
-            onFeedback={onFeedback}
+            onShowDetails={onShowDetails}
             isDragging={isDragging}
           />
         </div>
@@ -97,7 +97,7 @@ interface TaskListProps {
   onArchive: (taskId: string) => void;
   onDelete: (taskId: string) => void;
   onRestore: (taskId: string) => void;
-  onFeedback: (taskId: string, feedback: Feedback) => void;
+  onShowDetails: (taskId: string) => void;
   onReorder: (taskIds: string[]) => void;
 }
 
@@ -109,7 +109,7 @@ export function TaskList({
   onArchive,
   onDelete,
   onRestore,
-  onFeedback,
+  onShowDetails,
   onReorder,
 }: TaskListProps) {
   const sensors = useSensors(
@@ -166,7 +166,7 @@ export function TaskList({
               onArchive={onArchive}
               onDelete={onDelete}
               onRestore={onRestore}
-              onFeedback={onFeedback}
+              onShowDetails={onShowDetails}
             />
           ))}
         </div>
