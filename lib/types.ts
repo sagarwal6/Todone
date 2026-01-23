@@ -27,6 +27,20 @@ export interface StructuredData {
   [key: string]: string | number | boolean | null | StructuredData | StructuredData[];
 }
 
+// Generic option card for comparing choices (flights, hotels, products, services, etc.)
+export interface OptionCard {
+  id: string;
+  title: string;           // e.g., "United Airlines", "Hilton Garden Inn", "iPhone 15 Pro"
+  subtitle?: string;       // e.g., "Flight UA 123", "4-star hotel", "128GB Space Gray"
+  price?: string;          // e.g., "$382", "$150/night", "$999"
+  priceValue?: number;     // For sorting: 382, 150, 999
+  details: string[];       // e.g., ["8:50 AM - 1:39 PM", "4h 49m", "Nonstop"]
+  badge?: string;          // e.g., "Best Price", "Recommended", "Fast"
+  actionLabel: string;     // e.g., "Book Flight", "Reserve", "Buy Now"
+  actionUrl: string;       // Deep link to booking/purchase page
+  provider?: string;       // e.g., "Google Flights", "Booking.com", "Amazon"
+}
+
 export interface QuickInfo {
   phone?: string;
   phoneFormatted?: string;
@@ -36,6 +50,14 @@ export interface QuickInfo {
   price?: string;
   details?: string;
 }
+
+// UI types the AI can choose based on the task
+export type UIType =
+  | 'options_list'     // List of comparable options (flights, hotels, products)
+  | 'contact_card'     // Phone, hours, address - for appointments, support calls
+  | 'info_card'        // General information display
+  | 'comparison_table' // Side-by-side comparison
+  | 'steps_list';      // Step-by-step instructions
 
 export interface Research {
   summary: string;
@@ -47,6 +69,8 @@ export interface Research {
   rawMarkdown: string;
   researchedAt: number;
   structuredData?: StructuredData;
+  options?: OptionCard[];  // Comparable options (flights, hotels, products, etc.)
+  uiType?: UIType;         // AI-selected UI type for this task
 }
 
 export interface ChatMessage {

@@ -89,10 +89,12 @@ function SortableTask({
   );
 }
 
+// Progress map type for tracking multiple tasks
+type ProgressMap = Record<string, ProgressStatus | null>;
+
 interface TaskListProps {
   tasks: Task[];
-  researchingTaskId?: string | null;
-  progress?: ProgressStatus | null;
+  progressMap?: ProgressMap;
   onComplete: (taskId: string) => void;
   onArchive: (taskId: string) => void;
   onDelete: (taskId: string) => void;
@@ -103,8 +105,7 @@ interface TaskListProps {
 
 export function TaskList({
   tasks,
-  researchingTaskId,
-  progress,
+  progressMap = {},
   onComplete,
   onArchive,
   onDelete,
@@ -161,7 +162,7 @@ export function TaskList({
             <SortableTask
               key={task.id}
               task={task}
-              progress={task.id === researchingTaskId ? progress : null}
+              progress={progressMap[task.id] || null}
               onComplete={onComplete}
               onArchive={onArchive}
               onDelete={onDelete}

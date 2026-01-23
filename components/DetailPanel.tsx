@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { Task, ChatMessage, Feedback } from '@/lib/types';
 import { SourceList } from './SourceBadge';
 import { FeedbackWidget } from './FeedbackWidget';
+import { OptionList } from './OptionCard';
 import { v4 as uuidv4 } from 'uuid';
 
 interface DetailPanelProps {
@@ -183,6 +184,16 @@ export function DetailPanel({ task, isOpen, onClose, onFeedback }: DetailPanelPr
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* Options list */}
+            {task.research.options && task.research.options.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                  {task.research.options.length} Options Found
+                </h3>
+                <OptionList options={task.research.options} />
               </div>
             )}
 

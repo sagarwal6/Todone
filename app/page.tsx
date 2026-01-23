@@ -30,8 +30,7 @@ export default function Home() {
     reorderTasks,
   } = useTasks();
 
-  const { isResearching, progress, error, research } = useResearch();
-  const [researchingTaskId, setResearchingTaskId] = useState<string | null>(null);
+  const { progressMap, error, research, getProgress } = useResearch();
   const [viewMode, setViewMode] = useState<ViewMode>('active');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
@@ -40,22 +39,20 @@ export default function Home() {
 
   const handleAddTask = useCallback(async (title: string) => {
     const newTask = addTask(title);
-    setResearchingTaskId(newTask.id);
     startResearching(newTask.id);
 
-    try {
-      const result = await research(newTask.id, title);
-
-      if (result.isPersonal) {
-        markAsPersonal(newTask.id);
-      } else if (result.research) {
-        setResearch(newTask.id, result.research);
-      }
-    } catch {
-      console.error('Research failed');
-    } finally {
-      setResearchingTaskId(null);
-    }
+    // Research runs in background - don't await or block
+    research(newTask.id, title)
+      .then((result) => {
+        if (result.isPersonal) {
+          markAsPersonal(newTask.id);
+        } else if (result.research) {
+          setResearch(newTask.id, result.research);
+        }
+      })
+      .catch(() => {
+        console.error('Research failed');
+      });
   }, [addTask, startResearching, research, markAsPersonal, setResearch]);
 
   const handleShowDetails = useCallback((taskId: string) => {
@@ -103,7 +100,7 @@ export default function Home() {
 
           {/* Task input */}
           <div className="mb-6">
-            <TaskInput onAddTask={handleAddTask} disabled={isResearching} />
+            <TaskInput onAddTask={handleAddTask} />
             {error && (
               <p className="mt-2 text-sm text-red-600 dark:text-red-400">
                 {error}
@@ -142,8 +139,7 @@ export default function Home() {
           {/* Task list */}
           <TaskList
             tasks={currentTasks}
-            researchingTaskId={researchingTaskId}
-            progress={progress}
+            progressMap={progressMap}
             onComplete={completeTask}
             onArchive={archiveTask}
             onDelete={deleteTask}

@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { Research, Action, SourceReference, QuickInfo } from './types';
+import { Research, Action, SourceReference, QuickInfo, OptionCard, UIType } from './types';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
@@ -10,6 +10,7 @@ CRITICAL: You must SEARCH and find ACTUAL DATA. Never tell the user to "go searc
 For each task, you will:
 1. First, determine if this task requires research (return isPersonal: true if it's a personal/ambiguous task like "call mom", "remember to breathe", etc.)
 2. If research is needed, USE GOOGLE SEARCH to find REAL, SPECIFIC information
+3. When there are MULTIPLE OPTIONS to compare (flights, hotels, products, services), return them in the "options" array
 
 Your response must be valid JSON with this exact structure:
 {
@@ -17,6 +18,7 @@ Your response must be valid JSON with this exact structure:
   "research": {
     "summary": "One short sentence with SPECIFIC info found",
     "taskType": "category like 'insurance', 'healthcare', 'shopping', 'travel', 'finance', etc.",
+    "uiType": "options_list" | "contact_card" | "info_card" | "comparison_table" | "steps_list",
     "confidence": "high" | "medium" | "low",
     "quickInfo": {
       "phone": "tel:+1XXXXXXXXXX format for calling",
@@ -27,6 +29,20 @@ Your response must be valid JSON with this exact structure:
       "price": "Price or price range found (e.g., '$245-$380')",
       "details": "Key specific details (e.g., flight times, product specs)"
     },
+    "options": [
+      {
+        "id": "unique-id-1",
+        "title": "Provider/Product name (e.g., 'United Airlines', 'Hilton', 'iPhone 15')",
+        "subtitle": "Secondary info (e.g., 'Flight UA 123', '4-star', '128GB')",
+        "price": "$XXX",
+        "priceValue": 123,
+        "details": ["Detail 1", "Detail 2", "Detail 3"],
+        "badge": "Best Price" | "Recommended" | "Fastest" | null,
+        "actionLabel": "Book Flight" | "Reserve" | "Buy Now",
+        "actionUrl": "CONSTRUCTED URL with parameters - see URL rules below",
+        "provider": "Source like 'Google Flights', 'Amazon', 'Booking.com'"
+      }
+    ],
     "keyActions": [
       {
         "label": "Short button text like 'Book Now'",
@@ -48,26 +64,49 @@ Your response must be valid JSON with this exact structure:
   }
 }
 
+URL CONSTRUCTION RULES (CRITICAL):
+You MUST construct working URLs with proper parameters:
+
+FOR FLIGHTS - Use Google Flights URL format:
+https://www.google.com/travel/flights/search?tfs=CBwQAhoeEgoyMDI2LTAzLTAxagcIARID[ORIGIN]cgcIARID[DEST]&curr=USD
+OR simpler format:
+https://www.google.com/travel/flights?q=Flights+from+[ORIGIN]+to+[DEST]+on+[DATE]
+Example: https://www.google.com/travel/flights?q=Flights+from+MEX+to+SFO+on+March+1+2026
+
+FOR HOTELS - Use Google Hotels URL format:
+https://www.google.com/travel/hotels/[CITY]?q=[CITY]+hotels&dates=[CHECKIN]_[CHECKOUT]
+Example: https://www.google.com/travel/hotels/San+Francisco?q=San+Francisco+hotels&dates=2026-03-01_2026-03-05
+
+FOR PRODUCTS - Link directly to product pages on retailers (Amazon, Best Buy, etc.)
+
+FOR RESTAURANTS - Use Google Maps or OpenTable:
+https://www.google.com/maps/search/[RESTAURANT]+[CITY]
+
 TASK-SPECIFIC REQUIREMENTS:
 
 FOR FLIGHTS:
-- Search for actual flight options on the specified route and date
-- Include: airlines, departure times, prices, flight duration
-- rawMarkdown should list 3-5 specific flight options with times and prices
-- Link directly to Google Flights search results or airline booking pages
-- Example summary: "United 8:50am $289, Delta 10:15am $245, AA 2:30pm $312"
+- Return 3-5 flight options in the "options" array
+- Each option: airline name, departure/arrival times, duration, price, number of stops
+- actionUrl MUST be a working Google Flights URL with origin, destination, and date
+- Mark cheapest as "Best Price", fastest as "Fastest"
+- Example option details: ["8:50 AM - 1:39 PM", "4h 49m", "Nonstop"]
+
+FOR HOTELS:
+- Return 3-5 hotel options in the "options" array
+- Each option: hotel name, star rating, price per night, amenities
+- actionUrl should link to booking page with dates pre-filled
 
 FOR SHOPPING/PRODUCTS:
-- Find actual prices from retailers
-- Include: product names, prices, where to buy
-- Link directly to product pages
+- Return 3-5 product options from different retailers
+- Each option: product name, store, price, key specs
+- actionUrl links directly to product page
 
 FOR APPOINTMENTS (doctors, dentists, etc.):
-- Find actual phone numbers and addresses
+- Use quickInfo for phone/hours (not options array)
 - Include: office hours, how to book
 
 FOR INSURANCE/FINANCE:
-- Find customer service numbers
+- Use quickInfo for phone/hours (not options array)
 - Include: hours of operation, online portal links
 
 CRITICAL RULES:
@@ -75,7 +114,16 @@ CRITICAL RULES:
 2. ALWAYS include specific prices, times, or data when available
 3. Summary must contain ACTUAL DATA, not instructions
 4. If you can't find specific data, say "Unable to find current [prices/times/etc]" but still provide what you found
-5. quickInfo.price and quickInfo.details should contain the most important specific info
+5. quickInfo.price should show the price RANGE (e.g., "$245-$380")
+6. options array should have individual items with their specific prices
+7. actionUrl MUST be a fully constructed, working URL - never a placeholder
+
+UI TYPE SELECTION (choose the best UI for the task):
+- "options_list": Use for comparing multiple options (flights, hotels, products, restaurants, services)
+- "contact_card": Use for tasks that need phone/contact info (call insurance, make appointment, contact support)
+- "info_card": Use for general information lookup (what is X, how does Y work)
+- "comparison_table": Use when comparing features of 2-3 specific items
+- "steps_list": Use for how-to tasks (how to file taxes, how to apply for X)
 
 Personal/Skip tasks (return isPersonal: true):
 - Personal reminders ("call mom", "drink water")
@@ -128,7 +176,23 @@ Remember: Return isPersonal: true for personal tasks that don't need research.`;
       hours: parsed.research?.quickInfo?.hours,
       address: parsed.research?.quickInfo?.address,
       website: parsed.research?.quickInfo?.website,
+      price: parsed.research?.quickInfo?.price,
+      details: parsed.research?.quickInfo?.details,
     };
+
+    // Parse options if present
+    const options: OptionCard[] = (parsed.research?.options || []).map((o: Partial<OptionCard>, index: number) => ({
+      id: o.id || `option-${index}`,
+      title: o.title || 'Option',
+      subtitle: o.subtitle,
+      price: o.price,
+      priceValue: o.priceValue,
+      details: o.details || [],
+      badge: o.badge,
+      actionLabel: o.actionLabel || 'Select',
+      actionUrl: o.actionUrl || '#',
+      provider: o.provider,
+    }));
 
     const research: Research = {
       summary: parsed.research?.summary || 'Unable to generate summary',
@@ -150,6 +214,8 @@ Remember: Return isPersonal: true for personal tasks that don't need research.`;
       })),
       rawMarkdown: parsed.research?.rawMarkdown || parsed.research?.summary || '',
       researchedAt: Date.now(),
+      options: options.length > 0 ? options : undefined,
+      uiType: parsed.research?.uiType as UIType || 'info_card',
     };
 
     return { isPersonal: false, research };

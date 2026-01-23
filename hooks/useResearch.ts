@@ -3,36 +3,45 @@
 import { useState, useCallback } from 'react';
 import { Research, ResearchResponse, ProgressStatus, PROGRESS_STAGES } from '@/lib/types';
 
+// Track progress per task
+type ProgressMap = Record<string, ProgressStatus | null>;
+
 interface UseResearchReturn {
-  isResearching: boolean;
-  progress: ProgressStatus | null;
+  progressMap: ProgressMap;
   error: string | null;
   research: (taskId: string, taskTitle: string) => Promise<{
     isPersonal: boolean;
     research: Research | null;
   }>;
+  getProgress: (taskId: string) => ProgressStatus | null;
 }
 
 export function useResearch(): UseResearchReturn {
-  const [isResearching, setIsResearching] = useState(false);
-  const [progress, setProgress] = useState<ProgressStatus | null>(null);
+  const [progressMap, setProgressMap] = useState<ProgressMap>({});
   const [error, setError] = useState<string | null>(null);
+
+  const getProgress = useCallback((taskId: string): ProgressStatus | null => {
+    return progressMap[taskId] || null;
+  }, [progressMap]);
 
   const research = useCallback(async (taskId: string, taskTitle: string): Promise<{
     isPersonal: boolean;
     research: Research | null;
   }> => {
-    setIsResearching(true);
     setError(null);
-    setProgress(PROGRESS_STAGES[0]);
+
+    // Set initial progress for this task
+    setProgressMap(prev => ({ ...prev, [taskId]: PROGRESS_STAGES[0] }));
 
     // Simulate progressive stages while waiting for API
     const progressInterval = setInterval(() => {
-      setProgress(prev => {
-        if (!prev) return PROGRESS_STAGES[0];
-        const currentIndex = PROGRESS_STAGES.findIndex(s => s.stage === prev.stage);
+      setProgressMap(prev => {
+        const currentProgress = prev[taskId];
+        if (!currentProgress) return prev;
+
+        const currentIndex = PROGRESS_STAGES.findIndex(s => s.stage === currentProgress.stage);
         const nextIndex = Math.min(currentIndex + 1, PROGRESS_STAGES.length - 1);
-        return PROGRESS_STAGES[nextIndex];
+        return { ...prev, [taskId]: PROGRESS_STAGES[nextIndex] };
       });
     }, 2000);
 
@@ -65,15 +74,19 @@ export function useResearch(): UseResearchReturn {
       setError(errorMessage);
       return { isPersonal: false, research: null };
     } finally {
-      setIsResearching(false);
-      setProgress(null);
+      // Clear progress for this task
+      setProgressMap(prev => {
+        const newMap = { ...prev };
+        delete newMap[taskId];
+        return newMap;
+      });
     }
   }, []);
 
   return {
-    isResearching,
-    progress,
+    progressMap,
     error,
     research,
+    getProgress,
   };
 }

@@ -2,6 +2,7 @@
 
 import { Task, ProgressStatus } from '@/lib/types';
 import { ProgressiveReveal } from './ProgressiveReveal';
+import { OptionList } from './OptionCard';
 
 interface TaskCardProps {
   task: Task;
@@ -88,80 +89,95 @@ export function TaskCard({
             {/* Ready state - minimal info */}
             {isReady && task.research && (
               <div className="mt-2 space-y-2">
-                {/* Price if available */}
-                {quickInfo?.price && (
-                  <div className="text-sm font-medium text-green-600 dark:text-green-400">
-                    {quickInfo.price}
-                  </div>
-                )}
-
-                {/* Details if available */}
-                {quickInfo?.details && (
-                  <div className="text-sm text-gray-600 dark:text-gray-300">
-                    {quickInfo.details}
-                  </div>
-                )}
-
-                {/* Quick info: phone and hours */}
-                {(quickInfo?.phoneFormatted || quickInfo?.hours) && (
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600 dark:text-gray-300">
-                    {quickInfo?.phoneFormatted && (
-                      <span className="flex items-center gap-1.5">
-                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                        </svg>
-                        <span className="font-medium">{quickInfo.phoneFormatted}</span>
-                      </span>
-                    )}
-                    {quickInfo?.hours && (
-                      <span className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        {quickInfo.hours}
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                {/* Action buttons row */}
-                <div className="flex items-center gap-3">
-                  {/* Call button */}
-                  {(quickInfo?.phone || primaryAction?.type === 'phone') && (
+                {/* Options list UI - show compact cards */}
+                {task.research.uiType === 'options_list' && task.research.options && task.research.options.length > 0 ? (
+                  <div className="mt-3">
+                    <OptionList options={task.research.options} compact maxDisplay={2} />
                     <button
-                      onClick={handleCall}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                      onClick={() => onShowDetails(task.id)}
+                      className="mt-2 text-sm text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                      </svg>
-                      Call
+                      View all {task.research.options.length} options →
                     </button>
-                  )}
+                  </div>
+                ) : (
+                  <>
+                    {/* Price if available */}
+                    {quickInfo?.price && (
+                      <div className="text-sm font-medium text-green-600 dark:text-green-400">
+                        {quickInfo.price}
+                      </div>
+                    )}
 
-                  {/* Website button if no phone */}
-                  {!quickInfo?.phone && primaryAction?.type === 'link' && (
-                    <a
-                      href={primaryAction.value}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                      </svg>
-                      {primaryAction.label}
-                    </a>
-                  )}
+                    {/* Details if available */}
+                    {quickInfo?.details && (
+                      <div className="text-sm text-gray-600 dark:text-gray-300">
+                        {quickInfo.details}
+                      </div>
+                    )}
 
-                  {/* More details link */}
-                  <button
-                    onClick={() => onShowDetails(task.id)}
-                    className="text-sm text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
-                  >
-                    More details →
-                  </button>
-                </div>
+                    {/* Quick info: phone and hours */}
+                    {(quickInfo?.phoneFormatted || quickInfo?.hours) && (
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600 dark:text-gray-300">
+                        {quickInfo?.phoneFormatted && (
+                          <span className="flex items-center gap-1.5">
+                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                            </svg>
+                            <span className="font-medium">{quickInfo.phoneFormatted}</span>
+                          </span>
+                        )}
+                        {quickInfo?.hours && (
+                          <span className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {quickInfo.hours}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Action buttons row */}
+                    <div className="flex items-center gap-3">
+                      {/* Call button */}
+                      {(quickInfo?.phone || primaryAction?.type === 'phone') && (
+                        <button
+                          onClick={handleCall}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                          </svg>
+                          Call
+                        </button>
+                      )}
+
+                      {/* Website button if no phone */}
+                      {!quickInfo?.phone && primaryAction?.type === 'link' && (
+                        <a
+                          href={primaryAction.value}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                          {primaryAction.label}
+                        </a>
+                      )}
+
+                      {/* More details link */}
+                      <button
+                        onClick={() => onShowDetails(task.id)}
+                        className="text-sm text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
+                      >
+                        More details →
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
