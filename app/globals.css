@@ -2,27 +2,149 @@
 @tailwind components;
 @tailwind utilities;
 
+/* MD3 Color Tokens - Light Mode */
 :root {
-  --background: #fafafa;
-  --foreground: #171717;
+  /* Primary */
+  --md-primary: #1A73E8;
+  --md-on-primary: #FFFFFF;
+  --md-primary-container: #D3E3FD;
+  --md-on-primary-container: #041E49;
+
+  /* Secondary */
+  --md-secondary: #5F6368;
+  --md-on-secondary: #FFFFFF;
+  --md-secondary-container: #E8EAED;
+  --md-on-secondary-container: #1F1F1F;
+
+  /* Tertiary */
+  --md-tertiary: #1E8E3E;
+  --md-on-tertiary: #FFFFFF;
+  --md-tertiary-container: #CEEAD6;
+  --md-on-tertiary-container: #0D3B1B;
+
+  /* Surface */
+  --md-surface: #FFFFFF;
+  --md-surface-dim: #DDE3EA;
+  --md-surface-bright: #FFFFFF;
+  --md-surface-container-lowest: #FFFFFF;
+  --md-surface-container-low: #F8F9FA;
+  --md-surface-container: #F1F3F4;
+  --md-surface-container-high: #E8EAED;
+  --md-surface-container-highest: #DDE3EA;
+  --md-on-surface: #202124;
+  --md-on-surface-variant: #5F6368;
+
+  /* Outline */
+  --md-outline: #DADCE0;
+  --md-outline-variant: #E8EAED;
+
+  /* Error */
+  --md-error: #D93025;
+  --md-on-error: #FFFFFF;
+  --md-error-container: #F9DEDC;
+  --md-on-error-container: #410E0B;
+
+  /* Success */
+  --md-success: #1E8E3E;
+  --md-on-success: #FFFFFF;
+  --md-success-container: #CEEAD6;
+  --md-on-success-container: #0D3B1B;
+
+  /* Inverse */
+  --md-inverse-surface: #303134;
+  --md-inverse-on-surface: #F1F3F4;
+  --md-inverse-primary: #A8C7FA;
+
+  /* Scrim */
+  --md-scrim: rgba(0, 0, 0, 0.32);
+
+  /* Background (legacy support) */
+  --background: #FFFFFF;
+  --foreground: #202124;
 }
 
+/* MD3 Color Tokens - Dark Mode */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* Primary */
+    --md-primary: #A8C7FA;
+    --md-on-primary: #062E6F;
+    --md-primary-container: #0842A0;
+    --md-on-primary-container: #D3E3FD;
+
+    /* Secondary */
+    --md-secondary: #C4C7C5;
+    --md-on-secondary: #2E312F;
+    --md-secondary-container: #444746;
+    --md-on-secondary-container: #E0E3E0;
+
+    /* Tertiary */
+    --md-tertiary: #81C995;
+    --md-on-tertiary: #0D3B1B;
+    --md-tertiary-container: #0F5223;
+    --md-on-tertiary-container: #CEEAD6;
+
+    /* Surface */
+    --md-surface: #1F1F1F;
+    --md-surface-dim: #131314;
+    --md-surface-bright: #39393C;
+    --md-surface-container-lowest: #0E0E0E;
+    --md-surface-container-low: #1F1F1F;
+    --md-surface-container: #242428;
+    --md-surface-container-high: #2E2E32;
+    --md-surface-container-highest: #39393C;
+    --md-on-surface: #E3E3E3;
+    --md-on-surface-variant: #C4C7C5;
+
+    /* Outline */
+    --md-outline: #5F6368;
+    --md-outline-variant: #444746;
+
+    /* Error */
+    --md-error: #F28B82;
+    --md-on-error: #601410;
+    --md-error-container: #8C1D18;
+    --md-on-error-container: #F9DEDC;
+
+    /* Success */
+    --md-success: #81C995;
+    --md-on-success: #0D3B1B;
+    --md-success-container: #0F5223;
+    --md-on-success-container: #CEEAD6;
+
+    /* Inverse */
+    --md-inverse-surface: #E3E3E3;
+    --md-inverse-on-surface: #303134;
+    --md-inverse-primary: #0B57D0;
+
+    /* Scrim */
+    --md-scrim: rgba(0, 0, 0, 0.6);
+
+    /* Background (legacy support) */
+    --background: #1F1F1F;
+    --foreground: #E3E3E3;
   }
 }
 
+/* Base body styles */
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--md-on-surface);
+  background: var(--md-surface);
+  font-family: "Roboto", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Safe area insets for mobile */
+.safe-area-inset {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -30,25 +152,36 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #d1d5db;
-  border-radius: 3px;
+  background: var(--md-outline);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
+  background: var(--md-on-surface-variant);
 }
 
-@media (prefers-color-scheme: dark) {
-  ::-webkit-scrollbar-thumb {
-    background: #4b5563;
+/* Skeleton shimmer animation */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
   }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background: #6b7280;
+  100% {
+    background-position: 200% 0;
   }
 }
 
-/* Progressive reveal animation */
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--md-surface-container) 0%,
+    var(--md-surface-container-high) 50%,
+    var(--md-surface-container) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Progress bar animation */
 @keyframes progressFill {
   0% {
     width: 0%;
@@ -62,20 +195,114 @@ body {
   animation: progressFill 8s ease-out forwards;
 }
 
+/* MD3 Focus styles */
+.focus-ring {
+  @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-surface;
+}
+
+/* MD3 State layer (for hover/press states) */
+.state-layer {
+  position: relative;
+  overflow: hidden;
+}
+
+.state-layer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.state-layer:hover::before {
+  opacity: 0.08;
+}
+
+.state-layer:active::before {
+  opacity: 0.12;
+}
+
+.state-layer:focus-visible::before {
+  opacity: 0.12;
+}
+
 /* Task card transitions */
 .task-card {
-  @apply transition-all duration-200 ease-in-out;
+  @apply transition-all duration-200 ease-md-standard;
 }
 
 .task-card:hover {
-  @apply shadow-md;
+  @apply shadow-elevation-2;
 }
 
 /* Drag and drop styles */
 .dragging {
-  @apply opacity-50 shadow-lg scale-105;
+  @apply opacity-50 shadow-elevation-4 scale-[1.02];
 }
 
 .drop-target {
-  @apply border-2 border-dashed border-blue-400;
+  @apply border-2 border-dashed border-primary;
+}
+
+/* Ripple effect */
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.2;
+  transform: scale(0);
+  animation: ripple 0.6s linear;
+  pointer-events: none;
+}
+
+@keyframes ripple {
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+/* Bottom sheet backdrop */
+.backdrop {
+  background: var(--md-scrim);
+  backdrop-filter: blur(4px);
+}
+
+/* AI accent border */
+.ai-accent {
+  border-left: 3px solid var(--md-primary);
+  padding-left: 12px;
+}
+
+/* Utility classes */
+@layer utilities {
+  .elevation-0 {
+    box-shadow: none;
+  }
+
+  .elevation-1 {
+    box-shadow: 0px 1px 3px 1px rgba(0, 0, 0, 0.15), 0px 1px 2px 0px rgba(0, 0, 0, 0.3);
+  }
+
+  .elevation-2 {
+    box-shadow: 0px 2px 6px 2px rgba(0, 0, 0, 0.15), 0px 1px 2px 0px rgba(0, 0, 0, 0.3);
+  }
+
+  .elevation-3 {
+    box-shadow: 0px 4px 8px 3px rgba(0, 0, 0, 0.15), 0px 1px 3px 0px rgba(0, 0, 0, 0.3);
+  }
+
+  .text-on-surface {
+    color: var(--md-on-surface);
+  }
+
+  .text-on-surface-variant {
+    color: var(--md-on-surface-variant);
+  }
+
+  .bg-surface-container {
+    background-color: var(--md-surface-container);
+  }
 }

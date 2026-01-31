@@ -4,8 +4,13 @@ import { useCallback, useState } from 'react';
 import { TaskInput } from '@/components/TaskInput';
 import { TaskList } from '@/components/TaskList';
 import { DetailPanel } from '@/components/DetailPanel';
+import { Sidebar, BottomNav, MobileHeader } from '@/components/Navigation';
+import { FAB } from '@/components/ui/FAB';
+import { Modal, BottomSheet } from '@/components/ui/Modal';
+import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { useTasks } from '@/hooks/useTasks';
 import { useResearch } from '@/hooks/useResearch';
+import { useResponsive } from '@/hooks/useResponsive';
 import { Feedback } from '@/lib/types';
 import { getRemainingRequests } from '@/lib/storage';
 
@@ -30,16 +35,25 @@ export default function Home() {
     reorderTasks,
   } = useTasks();
 
-  const { progressMap, error, research, getProgress } = useResearch();
+  const { progressMap, error, research } = useResearch();
+  const { isMobile, isDesktop } = useResponsive();
   const [viewMode, setViewMode] = useState<ViewMode>('active');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [showAddTaskModal, setShowAddTaskModal] = useState(false);
 
   const selectedTask = selectedTaskId ? tasks.find(t => t.id === selectedTaskId) || null : null;
   const isPanelOpen = selectedTaskId !== null;
 
+  const counts: Record<ViewMode, number> = {
+    active: activeTasks.length,
+    completed: completedTasks.length,
+    archived: archivedTasks.length,
+  };
+
   const handleAddTask = useCallback(async (title: string) => {
     const newTask = addTask(title);
     startResearching(newTask.id);
+    setShowAddTaskModal(false);
 
     // Research runs in background - don't await or block
     research(newTask.id, title)
@@ -77,64 +91,36 @@ export default function Home() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      <div className="min-h-screen flex items-center justify-center bg-surface">
+        <MaterialIcon
+          name="progress_activity"
+          size={32}
+          className="animate-spin text-primary"
+        />
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
-      {/* Main content - task list */}
-      <main className={`flex-1 transition-all duration-300 ${isPanelOpen ? 'mr-0' : ''}`}>
-        <div className={`mx-auto px-4 py-8 transition-all duration-300 ${isPanelOpen ? 'max-w-xl' : 'max-w-2xl'}`}>
-          {/* Header */}
-          <header className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-              Todone
-            </h1>
-            <p className="mt-2 text-gray-600 dark:text-gray-400">
-              AI-powered task research with CEO-style briefings
-            </p>
-          </header>
+  // Mobile Layout
+  if (isMobile) {
+    return (
+      <div className="min-h-screen bg-surface pb-20">
+        {/* Mobile Header */}
+        <MobileHeader />
 
-          {/* Task input */}
-          <div className="mb-6">
-            <TaskInput onAddTask={handleAddTask} />
-            {error && (
-              <p className="mt-2 text-sm text-red-600 dark:text-red-400">
-                {error}
-              </p>
-            )}
-            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-              {remainingRequests} research requests remaining today
-            </p>
-          </div>
+        {/* Main Content */}
+        <main className="px-4 py-4">
+          {/* Error message */}
+          {error && (
+            <div className="mb-4 p-3 bg-error-container text-on-error-container rounded-md text-body-medium">
+              {error}
+            </div>
+          )}
 
-          {/* View tabs */}
-          <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-gray-700">
-            <TabButton
-              active={viewMode === 'active'}
-              onClick={() => setViewMode('active')}
-              count={activeTasks.length}
-            >
-              Active
-            </TabButton>
-            <TabButton
-              active={viewMode === 'completed'}
-              onClick={() => setViewMode('completed')}
-              count={completedTasks.length}
-            >
-              Completed
-            </TabButton>
-            <TabButton
-              active={viewMode === 'archived'}
-              onClick={() => setViewMode('archived')}
-              count={archivedTasks.length}
-            >
-              Archived
-            </TabButton>
-          </div>
+          {/* Remaining requests */}
+          <p className="mb-4 text-body-small text-on-surface-variant">
+            {remainingRequests} research requests remaining today
+          </p>
 
           {/* Task list */}
           <TaskList
@@ -148,28 +134,218 @@ export default function Home() {
             onReorder={reorderTasks}
           />
 
+          {currentTasks.length === 0 && (
+            <div className="text-center py-12">
+              <MaterialIcon
+                name={viewMode === 'active' ? 'add_task' : viewMode === 'completed' ? 'task_alt' : 'inventory_2'}
+                size={48}
+                className="text-on-surface-variant/40 mx-auto mb-4"
+              />
+              <p className="text-body-large text-on-surface-variant">
+                {viewMode === 'active'
+                  ? 'No active tasks. Tap + to add one!'
+                  : viewMode === 'completed'
+                    ? 'No completed tasks yet.'
+                    : 'No archived tasks.'}
+              </p>
+            </div>
+          )}
+        </main>
+
+        {/* Bottom Navigation */}
+        <BottomNav
+          currentView={viewMode}
+          onViewChange={setViewMode}
+          counts={counts}
+        />
+
+        {/* FAB for adding task */}
+        <div className="fixed right-4 bottom-20 z-50 pb-safe-bottom">
+          <FAB
+            icon="add"
+            variant="primary"
+            size="medium"
+            onClick={() => setShowAddTaskModal(true)}
+            aria-label="Add task"
+          />
+        </div>
+
+        {/* Add Task Bottom Sheet */}
+        <BottomSheet
+          isOpen={showAddTaskModal}
+          onClose={() => setShowAddTaskModal(false)}
+          title="Add Task"
+        >
+          <TaskInput onAddTask={handleAddTask} />
+        </BottomSheet>
+
+        {/* Detail Panel as Bottom Sheet */}
+        <BottomSheet
+          isOpen={isPanelOpen}
+          onClose={handleClosePanel}
+          title={selectedTask?.title || 'Task Details'}
+          showCloseButton={false}
+        >
+          {selectedTask && (
+            <DetailPanel
+              task={selectedTask}
+              isOpen={true}
+              onClose={handleClosePanel}
+              onFeedback={handleFeedback}
+              embedded
+            />
+          )}
+        </BottomSheet>
+      </div>
+    );
+  }
+
+  // Desktop/Tablet Layout
+  return (
+    <div className="min-h-screen bg-surface flex">
+      {/* Sidebar - Desktop */}
+      {isDesktop && (
+        <Sidebar
+          currentView={viewMode}
+          onViewChange={setViewMode}
+          counts={counts}
+          className="w-64 flex-shrink-0 border-r border-outline-variant"
+        />
+      )}
+
+      {/* Main content - task list */}
+      <main className={`flex-1 transition-all duration-300 ${isPanelOpen && isDesktop ? '' : ''}`}>
+        <div className={`mx-auto px-6 py-8 transition-all duration-300 ${isPanelOpen ? 'max-w-xl' : 'max-w-2xl'}`}>
+          {/* Header - Tablet only */}
+          {!isDesktop && (
+            <header className="mb-8 flex items-center justify-between">
+              <div>
+                <h1 className="text-headline-medium font-display text-on-surface flex items-center gap-2">
+                  <MaterialIcon name="task_alt" size={32} className="text-primary" fill />
+                  Todone
+                </h1>
+                <p className="mt-1 text-body-medium text-on-surface-variant">
+                  AI-powered task research with CEO-style briefings
+                </p>
+              </div>
+            </header>
+          )}
+
+          {/* Task input */}
+          <div className="mb-6">
+            <TaskInput onAddTask={handleAddTask} />
+            {error && (
+              <p className="mt-2 text-body-small text-error">
+                {error}
+              </p>
+            )}
+            <p className="mt-2 text-body-small text-on-surface-variant">
+              {remainingRequests} research requests remaining today
+            </p>
+          </div>
+
+          {/* View tabs - Tablet only */}
+          {!isDesktop && (
+            <div className="flex gap-1 mb-6 border-b border-outline-variant">
+              <TabButton
+                active={viewMode === 'active'}
+                onClick={() => setViewMode('active')}
+                count={activeTasks.length}
+              >
+                Active
+              </TabButton>
+              <TabButton
+                active={viewMode === 'completed'}
+                onClick={() => setViewMode('completed')}
+                count={completedTasks.length}
+              >
+                Completed
+              </TabButton>
+              <TabButton
+                active={viewMode === 'archived'}
+                onClick={() => setViewMode('archived')}
+                count={archivedTasks.length}
+              >
+                Archived
+              </TabButton>
+            </div>
+          )}
+
+          {/* Task list */}
+          <TaskList
+            tasks={currentTasks}
+            progressMap={progressMap}
+            onComplete={completeTask}
+            onArchive={archiveTask}
+            onDelete={deleteTask}
+            onRestore={restoreTask}
+            onShowDetails={handleShowDetails}
+            onReorder={reorderTasks}
+          />
+
+          {currentTasks.length === 0 && (
+            <div className="text-center py-12">
+              <MaterialIcon
+                name={viewMode === 'active' ? 'add_task' : viewMode === 'completed' ? 'task_alt' : 'inventory_2'}
+                size={64}
+                className="text-on-surface-variant/40 mx-auto mb-4"
+              />
+              <p className="text-body-large text-on-surface-variant">
+                {viewMode === 'active'
+                  ? 'No active tasks. Add one above to get started!'
+                  : viewMode === 'completed'
+                    ? 'No completed tasks yet.'
+                    : 'No archived tasks.'}
+              </p>
+            </div>
+          )}
+
           {/* Footer */}
-          <footer className="mt-12 pt-6 border-t border-gray-200 dark:border-gray-700 text-center text-xs text-gray-500 dark:text-gray-400">
-            <p>Powered by Gemini AI with Google Search</p>
+          <footer className="mt-12 pt-6 border-t border-outline-variant text-center">
+            <p className="text-body-small text-on-surface-variant">
+              Powered by Gemini AI with Google Search
+            </p>
           </footer>
         </div>
       </main>
 
-      {/* Detail Panel - side by side */}
-      <div
-        className={`flex-shrink-0 w-[480px] border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 transition-all duration-300 ${
-          isPanelOpen ? 'translate-x-0' : 'translate-x-full w-0 border-l-0'
-        }`}
-      >
-        {isPanelOpen && (
-          <DetailPanel
-            task={selectedTask}
-            isOpen={isPanelOpen}
-            onClose={handleClosePanel}
-            onFeedback={handleFeedback}
-          />
-        )}
-      </div>
+      {/* Detail Panel - Desktop side panel */}
+      {isDesktop && (
+        <div
+          className={`flex-shrink-0 w-[480px] bg-surface transition-all duration-300 ${
+            isPanelOpen ? 'translate-x-0' : 'translate-x-full w-0 overflow-hidden'
+          }`}
+        >
+          {isPanelOpen && (
+            <DetailPanel
+              task={selectedTask}
+              isOpen={isPanelOpen}
+              onClose={handleClosePanel}
+              onFeedback={handleFeedback}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Detail Panel Modal - Tablet */}
+      {!isDesktop && !isMobile && (
+        <Modal
+          isOpen={isPanelOpen}
+          onClose={handleClosePanel}
+          title={selectedTask?.title || 'Task Details'}
+          variant="dialog"
+        >
+          {selectedTask && (
+            <DetailPanel
+              task={selectedTask}
+              isOpen={true}
+              onClose={handleClosePanel}
+              onFeedback={handleFeedback}
+              embedded
+            />
+          )}
+        </Modal>
+      )}
     </div>
   );
 }
@@ -185,18 +361,18 @@ function TabButton({ active, onClick, count, children }: TabButtonProps) {
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+      className={`px-4 py-3 text-label-large font-medium border-b-2 -mb-px transition-colors ${
         active
-          ? 'border-blue-600 text-blue-600 dark:text-blue-400'
-          : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+          ? 'border-primary text-primary'
+          : 'border-transparent text-on-surface-variant hover:text-on-surface'
       }`}
     >
       {children}
       {count > 0 && (
-        <span className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${
+        <span className={`ml-2 px-2 py-0.5 text-label-small rounded-pill ${
           active
-            ? 'bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-300'
-            : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+            ? 'bg-primary-container text-on-primary-container'
+            : 'bg-surface-container-high text-on-surface-variant'
         }`}>
           {count}
         </span>

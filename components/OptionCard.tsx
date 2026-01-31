@@ -1,6 +1,9 @@
 'use client';
 
 import { OptionCard as OptionCardType } from '@/lib/types';
+import { Card } from './ui/Card';
+import { MaterialIcon } from './ui/MaterialIcon';
+import { Button } from './ui/Button';
 
 interface OptionCardProps {
   option: OptionCardType;
@@ -8,26 +11,29 @@ interface OptionCardProps {
 }
 
 export function OptionCard({ option, compact = false }: OptionCardProps) {
+  const getBadgeStyles = (badge: string) => {
+    switch (badge) {
+      case 'Best Price':
+        return 'bg-success-container text-on-success-container';
+      case 'Fastest':
+        return 'bg-primary-container text-on-primary-container';
+      default:
+        return 'bg-tertiary-container text-on-tertiary-container';
+    }
+  };
+
   return (
-    <div className={`bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden ${
-      compact ? 'p-3' : 'p-4'
-    }`}>
+    <Card variant="outlined" className={compact ? 'p-3' : 'p-4'}>
       <div className="flex items-start justify-between gap-3">
         {/* Left side - info */}
         <div className="flex-1 min-w-0">
           {/* Title row with badge */}
-          <div className="flex items-center gap-2">
-            <h4 className={`font-medium text-gray-900 dark:text-white ${compact ? 'text-sm' : ''}`}>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h4 className={`font-medium text-on-surface ${compact ? 'text-body-medium' : 'text-title-medium'}`}>
               {option.title}
             </h4>
             {option.badge && (
-              <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                option.badge === 'Best Price'
-                  ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                  : option.badge === 'Fastest'
-                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
-                  : 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
-              }`}>
+              <span className={`px-2 py-0.5 text-label-small font-medium rounded-pill ${getBadgeStyles(option.badge)}`}>
                 {option.badge}
               </span>
             )}
@@ -35,19 +41,19 @@ export function OptionCard({ option, compact = false }: OptionCardProps) {
 
           {/* Subtitle */}
           {option.subtitle && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+            <p className="text-body-small text-on-surface-variant mt-0.5">
               {option.subtitle}
             </p>
           )}
 
           {/* Details */}
           {option.details.length > 0 && (
-            <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 text-gray-600 dark:text-gray-300 ${
-              compact ? 'text-xs mt-1' : 'text-sm mt-2'
+            <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 text-on-surface-variant ${
+              compact ? 'text-body-small mt-1' : 'text-body-medium mt-2'
             }`}>
               {option.details.map((detail, index) => (
                 <span key={index} className="flex items-center gap-1">
-                  {index > 0 && <span className="text-gray-300 dark:text-gray-600">·</span>}
+                  {index > 0 && <span className="text-outline">·</span>}
                   {detail}
                 </span>
               ))}
@@ -56,7 +62,7 @@ export function OptionCard({ option, compact = false }: OptionCardProps) {
 
           {/* Provider */}
           {option.provider && !compact && (
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+            <p className="text-body-small text-on-surface-variant/60 mt-2">
               via {option.provider}
             </p>
           )}
@@ -65,7 +71,7 @@ export function OptionCard({ option, compact = false }: OptionCardProps) {
         {/* Right side - price and action */}
         <div className="flex-shrink-0 text-right">
           {option.price && (
-            <div className={`font-semibold text-gray-900 dark:text-white ${compact ? 'text-base' : 'text-lg'}`}>
+            <div className={`font-semibold text-on-surface ${compact ? 'text-title-medium' : 'text-title-large'}`}>
               {option.price}
             </div>
           )}
@@ -73,18 +79,22 @@ export function OptionCard({ option, compact = false }: OptionCardProps) {
             href={option.actionUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className={`inline-flex items-center justify-center gap-1.5 font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors ${
-              compact ? 'px-3 py-1.5 text-xs mt-1' : 'px-4 py-2 text-sm mt-2'
-            }`}
+            className={`
+              inline-flex items-center justify-center gap-1.5
+              font-medium
+              bg-primary text-on-primary
+              rounded-pill
+              hover:shadow-elevation-1
+              transition-all duration-200 ease-md-standard
+              ${compact ? 'px-3 py-1.5 text-label-small mt-1' : 'px-4 py-2 text-label-large mt-2'}
+            `}
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-            </svg>
+            <MaterialIcon name="open_in_new" size={compact ? 16 : 18} />
             {option.actionLabel}
           </a>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -104,7 +114,7 @@ export function OptionList({ options, compact = false, maxDisplay }: OptionListP
         <OptionCard key={option.id} option={option} compact={compact} />
       ))}
       {remaining > 0 && (
-        <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
+        <p className="text-body-small text-on-surface-variant text-center py-2">
           +{remaining} more option{remaining > 1 ? 's' : ''}
         </p>
       )}
