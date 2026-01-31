@@ -3,10 +3,11 @@
 import { useCallback, useState } from 'react';
 import { TaskInput } from '@/components/TaskInput';
 import { TaskList } from '@/components/TaskList';
-import { DetailPanel } from '@/components/DetailPanel';
-import { Sidebar, BottomNav, MobileHeader } from '@/components/Navigation';
+import { ConversationPanel } from '@/components/ConversationPanel';
+import { TaskContextPanel } from '@/components/TaskContextPanel';
+import { BottomNav, MobileHeader } from '@/components/Navigation';
 import { FAB } from '@/components/ui/FAB';
-import { Modal, BottomSheet } from '@/components/ui/Modal';
+import { BottomSheet } from '@/components/ui/Modal';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { useTasks } from '@/hooks/useTasks';
 import { useResearch } from '@/hooks/useResearch';
@@ -36,13 +37,13 @@ export default function Home() {
   } = useTasks();
 
   const { progressMap, error, research } = useResearch();
-  const { isMobile, isDesktop } = useResponsive();
+  const { isMobile } = useResponsive();
   const [viewMode, setViewMode] = useState<ViewMode>('active');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
 
   const selectedTask = selectedTaskId ? tasks.find(t => t.id === selectedTaskId) || null : null;
-  const isPanelOpen = selectedTaskId !== null;
+  const isTaskSelected = selectedTaskId !== null && selectedTask !== null;
 
   const counts: Record<ViewMode, number> = {
     active: activeTasks.length,
@@ -55,7 +56,6 @@ export default function Home() {
     startResearching(newTask.id);
     setShowAddTaskModal(false);
 
-    // Research runs in background - don't await or block
     research(newTask.id, title)
       .then((result) => {
         if (result.isPersonal) {
@@ -105,24 +105,19 @@ export default function Home() {
   if (isMobile) {
     return (
       <div className="min-h-screen bg-surface pb-20">
-        {/* Mobile Header */}
         <MobileHeader />
 
-        {/* Main Content */}
         <main className="px-4 py-4">
-          {/* Error message */}
           {error && (
             <div className="mb-4 p-3 bg-error-container text-on-error-container rounded-md text-body-medium">
               {error}
             </div>
           )}
 
-          {/* Remaining requests */}
           <p className="mb-4 text-body-small text-on-surface-variant">
             {remainingRequests} research requests remaining today
           </p>
 
-          {/* Task list */}
           <TaskList
             tasks={currentTasks}
             progressMap={progressMap}
@@ -152,14 +147,12 @@ export default function Home() {
           )}
         </main>
 
-        {/* Bottom Navigation */}
         <BottomNav
           currentView={viewMode}
           onViewChange={setViewMode}
           counts={counts}
         />
 
-        {/* FAB for adding task */}
         <div className="fixed right-4 bottom-20 z-50 pb-safe-bottom">
           <FAB
             icon="add"
@@ -170,7 +163,6 @@ export default function Home() {
           />
         </div>
 
-        {/* Add Task Bottom Sheet */}
         <BottomSheet
           isOpen={showAddTaskModal}
           onClose={() => setShowAddTaskModal(false)}
@@ -179,20 +171,17 @@ export default function Home() {
           <TaskInput onAddTask={handleAddTask} />
         </BottomSheet>
 
-        {/* Detail Panel as Bottom Sheet */}
         <BottomSheet
-          isOpen={isPanelOpen}
+          isOpen={isTaskSelected}
           onClose={handleClosePanel}
           title={selectedTask?.title || 'Task Details'}
           showCloseButton={false}
         >
           {selectedTask && (
-            <DetailPanel
+            <ConversationPanel
               task={selectedTask}
-              isOpen={true}
               onClose={handleClosePanel}
               onFeedback={handleFeedback}
-              embedded
             />
           )}
         </BottomSheet>
@@ -200,180 +189,181 @@ export default function Home() {
     );
   }
 
-  // Desktop/Tablet Layout
+  // Desktop Layout - Two states: clean list OR 3-pane
   return (
-    <div className="min-h-screen bg-surface flex">
-      {/* Sidebar - Desktop */}
-      {isDesktop && (
-        <Sidebar
-          currentView={viewMode}
-          onViewChange={setViewMode}
-          counts={counts}
-          className="w-64 flex-shrink-0 border-r border-outline-variant"
-        />
-      )}
+    <div className="min-h-screen bg-surface-dim flex flex-col">
+      {/* Header with filter bubbles */}
+      <header className="flex-shrink-0 bg-surface border-b border-outline-variant px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <h1 className="text-headline-small font-display text-on-surface flex items-center gap-2">
+              <MaterialIcon name="task_alt" size={28} className="text-primary" fill />
+              Todone
+            </h1>
 
-      {/* Main content - task list */}
-      <main className={`flex-1 transition-all duration-300 ${isPanelOpen && isDesktop ? '' : ''}`}>
-        <div className={`mx-auto px-6 py-8 transition-all duration-300 ${isPanelOpen ? 'max-w-xl' : 'max-w-2xl'}`}>
-          {/* Header - Tablet only */}
-          {!isDesktop && (
-            <header className="mb-8 flex items-center justify-between">
-              <div>
-                <h1 className="text-headline-medium font-display text-on-surface flex items-center gap-2">
-                  <MaterialIcon name="task_alt" size={32} className="text-primary" fill />
-                  Todone
-                </h1>
-                <p className="mt-1 text-body-medium text-on-surface-variant">
-                  AI-powered task research with CEO-style briefings
-                </p>
-              </div>
-            </header>
-          )}
-
-          {/* Task input */}
-          <div className="mb-6">
-            <TaskInput onAddTask={handleAddTask} />
-            {error && (
-              <p className="mt-2 text-body-small text-error">
-                {error}
-              </p>
-            )}
-            <p className="mt-2 text-body-small text-on-surface-variant">
-              {remainingRequests} research requests remaining today
-            </p>
-          </div>
-
-          {/* View tabs - Tablet only */}
-          {!isDesktop && (
-            <div className="flex gap-1 mb-6 border-b border-outline-variant">
-              <TabButton
+            {/* Filter bubbles */}
+            <div className="flex items-center gap-2 ml-6">
+              <FilterBubble
                 active={viewMode === 'active'}
                 onClick={() => setViewMode('active')}
-                count={activeTasks.length}
+                count={counts.active}
+                icon="radio_button_unchecked"
+                iconActive="task_alt"
               >
                 Active
-              </TabButton>
-              <TabButton
+              </FilterBubble>
+              <FilterBubble
                 active={viewMode === 'completed'}
                 onClick={() => setViewMode('completed')}
-                count={completedTasks.length}
+                count={counts.completed}
+                icon="check_circle"
+                iconActive="check_circle"
               >
                 Completed
-              </TabButton>
-              <TabButton
+              </FilterBubble>
+              <FilterBubble
                 active={viewMode === 'archived'}
                 onClick={() => setViewMode('archived')}
-                count={archivedTasks.length}
+                count={counts.archived}
+                icon="inventory_2"
+                iconActive="inventory_2"
               >
                 Archived
-              </TabButton>
+              </FilterBubble>
+            </div>
+          </div>
+
+          <p className="text-body-small text-on-surface-variant">
+            {remainingRequests} requests remaining
+          </p>
+        </div>
+      </header>
+
+      {/* Main content */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Task List Panel */}
+        <div className={`
+          flex flex-col bg-surface
+          transition-all duration-300 ease-md-standard
+          ${isTaskSelected ? 'w-80 flex-shrink-0 border-r border-outline-variant' : 'flex-1'}
+        `}>
+          {/* Task input - only show when no task selected */}
+          {!isTaskSelected && (
+            <div className="px-6 py-6 border-b border-outline-variant">
+              <TaskInput onAddTask={handleAddTask} />
+              {error && (
+                <p className="mt-2 text-body-small text-error">
+                  {error}
+                </p>
+              )}
             </div>
           )}
 
           {/* Task list */}
-          <TaskList
-            tasks={currentTasks}
-            progressMap={progressMap}
-            onComplete={completeTask}
-            onArchive={archiveTask}
-            onDelete={deleteTask}
-            onRestore={restoreTask}
-            onShowDetails={handleShowDetails}
-            onReorder={reorderTasks}
-          />
+          <div className="flex-1 overflow-y-auto px-4 py-4">
+            {isTaskSelected && (
+              <div className="mb-4">
+                <TaskInput onAddTask={handleAddTask} />
+              </div>
+            )}
 
-          {currentTasks.length === 0 && (
-            <div className="text-center py-12">
-              <MaterialIcon
-                name={viewMode === 'active' ? 'add_task' : viewMode === 'completed' ? 'task_alt' : 'inventory_2'}
-                size={64}
-                className="text-on-surface-variant/40 mx-auto mb-4"
-              />
-              <p className="text-body-large text-on-surface-variant">
-                {viewMode === 'active'
-                  ? 'No active tasks. Add one above to get started!'
-                  : viewMode === 'completed'
-                    ? 'No completed tasks yet.'
-                    : 'No archived tasks.'}
+            <TaskList
+              tasks={currentTasks}
+              progressMap={progressMap}
+              onComplete={completeTask}
+              onArchive={archiveTask}
+              onDelete={deleteTask}
+              onRestore={restoreTask}
+              onShowDetails={handleShowDetails}
+              onReorder={reorderTasks}
+              compact={isTaskSelected}
+              selectedTaskId={selectedTaskId}
+            />
+
+            {currentTasks.length === 0 && (
+              <div className="text-center py-12">
+                <MaterialIcon
+                  name={viewMode === 'active' ? 'add_task' : viewMode === 'completed' ? 'task_alt' : 'inventory_2'}
+                  size={isTaskSelected ? 40 : 64}
+                  className="text-on-surface-variant/40 mx-auto mb-4"
+                />
+                <p className={`text-on-surface-variant ${isTaskSelected ? 'text-body-small' : 'text-body-large'}`}>
+                  {viewMode === 'active'
+                    ? 'No active tasks'
+                    : viewMode === 'completed'
+                      ? 'No completed tasks'
+                      : 'No archived tasks'}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Footer - only when not task selected */}
+          {!isTaskSelected && (
+            <footer className="px-6 py-4 border-t border-outline-variant text-center">
+              <p className="text-body-small text-on-surface-variant">
+                Powered by Gemini AI with Google Search
               </p>
-            </div>
+            </footer>
           )}
-
-          {/* Footer */}
-          <footer className="mt-12 pt-6 border-t border-outline-variant text-center">
-            <p className="text-body-small text-on-surface-variant">
-              Powered by Gemini AI with Google Search
-            </p>
-          </footer>
         </div>
-      </main>
 
-      {/* Detail Panel - Desktop side panel */}
-      {isDesktop && (
-        <div
-          className={`flex-shrink-0 w-[480px] bg-surface transition-all duration-300 ${
-            isPanelOpen ? 'translate-x-0' : 'translate-x-full w-0 overflow-hidden'
-          }`}
-        >
-          {isPanelOpen && (
-            <DetailPanel
+        {/* Conversation Panel (middle) */}
+        {isTaskSelected && selectedTask && (
+          <div className="flex-1 min-w-0 border-r border-outline-variant">
+            <ConversationPanel
               task={selectedTask}
-              isOpen={isPanelOpen}
               onClose={handleClosePanel}
               onFeedback={handleFeedback}
             />
-          )}
-        </div>
-      )}
+          </div>
+        )}
 
-      {/* Detail Panel Modal - Tablet */}
-      {!isDesktop && !isMobile && (
-        <Modal
-          isOpen={isPanelOpen}
-          onClose={handleClosePanel}
-          title={selectedTask?.title || 'Task Details'}
-          variant="dialog"
-        >
-          {selectedTask && (
-            <DetailPanel
-              task={selectedTask}
-              isOpen={true}
-              onClose={handleClosePanel}
-              onFeedback={handleFeedback}
-              embedded
-            />
-          )}
-        </Modal>
-      )}
+        {/* Context Panel (right) */}
+        {isTaskSelected && selectedTask && (
+          <div className="w-80 flex-shrink-0">
+            <TaskContextPanel task={selectedTask} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-interface TabButtonProps {
+interface FilterBubbleProps {
   active: boolean;
   onClick: () => void;
   count: number;
+  icon: string;
+  iconActive: string;
   children: React.ReactNode;
 }
 
-function TabButton({ active, onClick, count, children }: TabButtonProps) {
+function FilterBubble({ active, onClick, count, icon, iconActive, children }: FilterBubbleProps) {
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-3 text-label-large font-medium border-b-2 -mb-px transition-colors ${
-        active
-          ? 'border-primary text-primary'
-          : 'border-transparent text-on-surface-variant hover:text-on-surface'
-      }`}
+      className={`
+        inline-flex items-center gap-2 px-4 py-2
+        rounded-pill text-label-large font-medium
+        transition-all duration-200 ease-md-standard
+        ${active
+          ? 'bg-primary-container text-on-primary-container'
+          : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
+        }
+      `}
     >
+      <MaterialIcon
+        name={active ? iconActive : icon}
+        size="small"
+        fill={active}
+      />
       {children}
       {count > 0 && (
-        <span className={`ml-2 px-2 py-0.5 text-label-small rounded-pill ${
-          active
-            ? 'bg-primary-container text-on-primary-container'
-            : 'bg-surface-container-high text-on-surface-variant'
-        }`}>
+        <span className={`
+          px-2 py-0.5 text-label-small rounded-pill
+          ${active ? 'bg-on-primary-container/20' : 'bg-outline/20'}
+        `}>
           {count}
         </span>
       )}

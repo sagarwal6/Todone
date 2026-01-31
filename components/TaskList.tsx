@@ -20,6 +20,8 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { Task, ProgressStatus } from '@/lib/types';
 import { TaskCard } from './TaskCard';
+import { CompactTaskCard } from './CompactTaskCard';
+import { MaterialIcon } from './ui/MaterialIcon';
 
 interface SortableTaskProps {
   task: Task;
@@ -29,6 +31,8 @@ interface SortableTaskProps {
   onDelete: (taskId: string) => void;
   onRestore: (taskId: string) => void;
   onShowDetails: (taskId: string) => void;
+  compact?: boolean;
+  isSelected?: boolean;
 }
 
 function SortableTask({
@@ -39,6 +43,8 @@ function SortableTask({
   onDelete,
   onRestore,
   onShowDetails,
+  compact,
+  isSelected,
 }: SortableTaskProps) {
   const {
     attributes,
@@ -54,23 +60,41 @@ function SortableTask({
     transition,
   };
 
+  if (compact) {
+    return (
+      <div ref={setNodeRef} style={style} {...attributes}>
+        <div className="flex items-center gap-2">
+          <button
+            {...listeners}
+            className="flex-shrink-0 p-1 text-on-surface-variant hover:text-on-surface cursor-grab active:cursor-grabbing touch-none"
+            aria-label="Drag to reorder"
+          >
+            <MaterialIcon name="drag_indicator" size={16} />
+          </button>
+          <div className="flex-1">
+            <CompactTaskCard
+              task={task}
+              progress={progress}
+              onComplete={onComplete}
+              onShowDetails={onShowDetails}
+              isDragging={isDragging}
+              isSelected={isSelected}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div ref={setNodeRef} style={style} {...attributes}>
       <div className="flex items-center gap-2">
-        {/* Drag handle */}
         <button
           {...listeners}
-          className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-grab active:cursor-grabbing touch-none"
+          className="flex-shrink-0 p-1 text-on-surface-variant hover:text-on-surface cursor-grab active:cursor-grabbing touch-none"
           aria-label="Drag to reorder"
         >
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-            <circle cx="9" cy="5" r="1.5" />
-            <circle cx="9" cy="12" r="1.5" />
-            <circle cx="9" cy="19" r="1.5" />
-            <circle cx="15" cy="5" r="1.5" />
-            <circle cx="15" cy="12" r="1.5" />
-            <circle cx="15" cy="19" r="1.5" />
-          </svg>
+          <MaterialIcon name="drag_indicator" size={18} />
         </button>
         <div className="flex-1">
           <TaskCard
@@ -89,7 +113,6 @@ function SortableTask({
   );
 }
 
-// Progress map type for tracking multiple tasks
 type ProgressMap = Record<string, ProgressStatus | null>;
 
 interface TaskListProps {
@@ -101,6 +124,8 @@ interface TaskListProps {
   onRestore: (taskId: string) => void;
   onShowDetails: (taskId: string) => void;
   onReorder: (taskIds: string[]) => void;
+  compact?: boolean;
+  selectedTaskId?: string | null;
 }
 
 export function TaskList({
@@ -112,6 +137,8 @@ export function TaskList({
   onRestore,
   onShowDetails,
   onReorder,
+  compact = false,
+  selectedTaskId,
 }: TaskListProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -136,15 +163,7 @@ export function TaskList({
   }, [tasks, onReorder]);
 
   if (tasks.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <div className="text-4xl mb-4">📝</div>
-        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">No tasks yet</h3>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Add a task above to get started with AI-powered research
-        </p>
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -157,7 +176,7 @@ export function TaskList({
         items={tasks.map((t) => t.id)}
         strategy={verticalListSortingStrategy}
       >
-        <div className="space-y-3">
+        <div className={compact ? 'space-y-2' : 'space-y-3'}>
           {tasks.map((task) => (
             <SortableTask
               key={task.id}
@@ -168,6 +187,8 @@ export function TaskList({
               onDelete={onDelete}
               onRestore={onRestore}
               onShowDetails={onShowDetails}
+              compact={compact}
+              isSelected={selectedTaskId === task.id}
             />
           ))}
         </div>
