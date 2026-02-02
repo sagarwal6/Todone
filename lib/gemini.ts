@@ -65,13 +65,27 @@ Your response must be valid JSON with this exact structure:
 }
 
 URL CONSTRUCTION RULES (CRITICAL):
-You MUST construct working URLs with proper parameters:
+You MUST construct working URLs with proper parameters.
+IMPORTANT: Before creating any URL, verify it matches the user's intent (one-way vs round-trip, dates, etc.)
 
-FOR FLIGHTS - Use Google Flights URL format:
-https://www.google.com/travel/flights/search?tfs=CBwQAhoeEgoyMDI2LTAzLTAxagcIARID[ORIGIN]cgcIARID[DEST]&curr=USD
-OR simpler format:
-https://www.google.com/travel/flights?q=Flights+from+[ORIGIN]+to+[DEST]+on+[DATE]
-Example: https://www.google.com/travel/flights?q=Flights+from+MEX+to+SFO+on+March+1+2026
+FOR FLIGHTS - CAREFULLY analyze the task:
+1. ONE-WAY vs ROUND-TRIP detection:
+   - ONE-WAY: Task mentions only ONE date (e.g., "flight on March 1", "fly March 1st")
+   - ROUND-TRIP: Task mentions TWO dates or "round trip" (e.g., "March 1-5", "March 1 returning March 5")
+   - If unclear, default to ONE-WAY (user can modify)
+
+2. URL format based on trip type:
+   ONE-WAY flights (single date mentioned):
+   https://www.google.com/travel/flights?q=Flights+from+[ORIGIN]+to+[DEST]+on+[DATE]+one+way
+   Example: https://www.google.com/travel/flights?q=Flights+from+MEX+to+SFO+on+March+1+2026+one+way
+
+   ROUND-TRIP flights (two dates or explicit round-trip):
+   https://www.google.com/travel/flights?q=Flights+from+[ORIGIN]+to+[DEST]+[DATE1]+to+[DATE2]
+   Example: https://www.google.com/travel/flights?q=Flights+from+MEX+to+SFO+March+1+to+March+5+2026
+
+3. VERIFY before submitting: Does the URL match what the user asked for?
+   - "buy flight mexico city to sfo on march 1" = ONE-WAY (only one date)
+   - "book round trip NYC to LA march 1-5" = ROUND-TRIP
 
 FOR HOTELS - Use Google Hotels URL format:
 https://www.google.com/travel/hotels/[CITY]?q=[CITY]+hotels&dates=[CHECKIN]_[CHECKOUT]
@@ -85,11 +99,13 @@ https://www.google.com/maps/search/[RESTAURANT]+[CITY]
 TASK-SPECIFIC REQUIREMENTS:
 
 FOR FLIGHTS:
+- FIRST: Determine if ONE-WAY or ROUND-TRIP based on dates mentioned in task
 - Return 3-5 flight options in the "options" array
 - Each option: airline name, departure/arrival times, duration, price, number of stops
-- actionUrl MUST be a working Google Flights URL with origin, destination, and date
+- actionUrl MUST be a working Google Flights URL - include "one+way" for one-way flights!
 - Mark cheapest as "Best Price", fastest as "Fastest"
 - Example option details: ["8:50 AM - 1:39 PM", "4h 49m", "Nonstop"]
+- DOUBLE-CHECK: Does the URL match the user's request (one-way vs round-trip)?
 
 FOR HOTELS:
 - Return 3-5 hotel options in the "options" array

@@ -22,6 +22,7 @@ import { Task, ProgressStatus } from '@/lib/types';
 import { TaskCard } from './TaskCard';
 import { CompactTaskCard } from './CompactTaskCard';
 import { MaterialIcon } from './ui/MaterialIcon';
+import { useResponsive } from '@/hooks/useResponsive';
 
 interface SortableTaskProps {
   task: Task;
@@ -33,6 +34,7 @@ interface SortableTaskProps {
   onShowDetails: (taskId: string) => void;
   compact?: boolean;
   isSelected?: boolean;
+  isMobile?: boolean;
 }
 
 function SortableTask({
@@ -45,6 +47,7 @@ function SortableTask({
   onShowDetails,
   compact,
   isSelected,
+  isMobile,
 }: SortableTaskProps) {
   const {
     attributes,
@@ -106,6 +109,7 @@ function SortableTask({
             onRestore={onRestore}
             onShowDetails={onShowDetails}
             isDragging={isDragging}
+            isMobile={isMobile}
           />
         </div>
       </div>
@@ -140,6 +144,7 @@ export function TaskList({
   compact = false,
   selectedTaskId,
 }: TaskListProps) {
+  const { isMobile } = useResponsive();
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -189,6 +194,7 @@ export function TaskList({
               onShowDetails={onShowDetails}
               compact={compact}
               isSelected={selectedTaskId === task.id}
+              isMobile={isMobile}
             />
           ))}
         </div>

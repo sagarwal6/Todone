@@ -302,15 +302,7 @@ export default function Home() {
               )}
             </div>
 
-            {/* Footer - only when not task selected */}
-            {!isTaskSelected && (
-              <footer className="px-6 py-4 border-t border-outline-variant text-center">
-                <p className="text-body-small text-on-surface-variant">
-                  Powered by Gemini AI with Google Search
-                </p>
-              </footer>
-            )}
-          </div>
+                      </div>
         </div>
 
         {/* Conversation Panel (middle) */}
