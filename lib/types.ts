@@ -96,6 +96,7 @@ export interface Task {
   createdAt: number;
   updatedAt: number;
   completedAt: number | null;
+  completedSteps?: string[];
 }
 
 export interface ResearchRequest {

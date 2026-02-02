@@ -34,6 +34,7 @@ export default function Home() {
     markAsPersonal,
     startResearching,
     reorderTasks,
+    toggleStep,
   } = useTasks();
 
   const { progressMap, error, research } = useResearch();
@@ -247,65 +248,71 @@ export default function Home() {
           transition-all duration-300 ease-md-standard
           ${isTaskSelected ? 'w-96 flex-shrink-0 border-r border-outline-variant' : 'flex-1'}
         `}>
-          {/* Task input - only show when no task selected */}
-          {!isTaskSelected && (
-            <div className="px-6 py-6 border-b border-outline-variant">
-              <TaskInput onAddTask={handleAddTask} />
-              {error && (
-                <p className="mt-2 text-body-small text-error">
-                  {error}
-                </p>
+          {/* Centered content wrapper - constrains width when single-pane */}
+          <div className={`
+            flex-1 flex flex-col min-h-0
+            ${isTaskSelected ? '' : 'max-w-3xl mx-auto w-full'}
+          `}>
+            {/* Task input - only show when no task selected */}
+            {!isTaskSelected && (
+              <div className="px-6 py-6 border-b border-outline-variant">
+                <TaskInput onAddTask={handleAddTask} />
+                {error && (
+                  <p className="mt-2 text-body-small text-error">
+                    {error}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Task list */}
+            <div className="flex-1 overflow-y-auto px-4 py-4">
+              {isTaskSelected && (
+                <div className="mb-4">
+                  <TaskInput onAddTask={handleAddTask} />
+                </div>
+              )}
+
+              <TaskList
+                tasks={currentTasks}
+                progressMap={progressMap}
+                onComplete={completeTask}
+                onArchive={archiveTask}
+                onDelete={deleteTask}
+                onRestore={restoreTask}
+                onShowDetails={handleShowDetails}
+                onReorder={reorderTasks}
+                compact={isTaskSelected}
+                selectedTaskId={selectedTaskId}
+              />
+
+              {currentTasks.length === 0 && (
+                <div className="text-center py-12">
+                  <MaterialIcon
+                    name={viewMode === 'active' ? 'add_task' : viewMode === 'completed' ? 'task_alt' : 'inventory_2'}
+                    size={isTaskSelected ? 40 : 64}
+                    className="text-on-surface-variant/40 mx-auto mb-4"
+                  />
+                  <p className={`text-on-surface-variant ${isTaskSelected ? 'text-body-small' : 'text-body-large'}`}>
+                    {viewMode === 'active'
+                      ? 'No active tasks'
+                      : viewMode === 'completed'
+                        ? 'No completed tasks'
+                        : 'No archived tasks'}
+                  </p>
+                </div>
               )}
             </div>
-          )}
 
-          {/* Task list */}
-          <div className="flex-1 overflow-y-auto px-4 py-4">
-            {isTaskSelected && (
-              <div className="mb-4">
-                <TaskInput onAddTask={handleAddTask} />
-              </div>
-            )}
-
-            <TaskList
-              tasks={currentTasks}
-              progressMap={progressMap}
-              onComplete={completeTask}
-              onArchive={archiveTask}
-              onDelete={deleteTask}
-              onRestore={restoreTask}
-              onShowDetails={handleShowDetails}
-              onReorder={reorderTasks}
-              compact={isTaskSelected}
-              selectedTaskId={selectedTaskId}
-            />
-
-            {currentTasks.length === 0 && (
-              <div className="text-center py-12">
-                <MaterialIcon
-                  name={viewMode === 'active' ? 'add_task' : viewMode === 'completed' ? 'task_alt' : 'inventory_2'}
-                  size={isTaskSelected ? 40 : 64}
-                  className="text-on-surface-variant/40 mx-auto mb-4"
-                />
-                <p className={`text-on-surface-variant ${isTaskSelected ? 'text-body-small' : 'text-body-large'}`}>
-                  {viewMode === 'active'
-                    ? 'No active tasks'
-                    : viewMode === 'completed'
-                      ? 'No completed tasks'
-                      : 'No archived tasks'}
+            {/* Footer - only when not task selected */}
+            {!isTaskSelected && (
+              <footer className="px-6 py-4 border-t border-outline-variant text-center">
+                <p className="text-body-small text-on-surface-variant">
+                  Powered by Gemini AI with Google Search
                 </p>
-              </div>
+              </footer>
             )}
           </div>
-
-          {/* Footer - only when not task selected */}
-          {!isTaskSelected && (
-            <footer className="px-6 py-4 border-t border-outline-variant text-center">
-              <p className="text-body-small text-on-surface-variant">
-                Powered by Gemini AI with Google Search
-              </p>
-            </footer>
-          )}
         </div>
 
         {/* Conversation Panel (middle) */}
@@ -322,7 +329,7 @@ export default function Home() {
         {/* Context Panel (right) */}
         {isTaskSelected && selectedTask && (
           <div className="w-80 flex-shrink-0">
-            <TaskContextPanel task={selectedTask} />
+            <TaskContextPanel task={selectedTask} onToggleStep={toggleStep} />
           </div>
         )}
       </div>

@@ -119,3 +119,19 @@ export function moveTaskToBottom(taskId: string): void {
     reorderTasks(taskIds);
   }
 }
+
+export function toggleTaskStep(taskId: string, stepLabel: string): Task | null {
+  const tasks = getTasks();
+  const task = tasks.find(t => t.id === taskId);
+
+  if (!task) return null;
+
+  const completedSteps = task.completedSteps || [];
+  const isCompleted = completedSteps.includes(stepLabel);
+
+  const newCompletedSteps = isCompleted
+    ? completedSteps.filter(s => s !== stepLabel)
+    : [...completedSteps, stepLabel];
+
+  return updateTask(taskId, { completedSteps: newCompletedSteps });
+}

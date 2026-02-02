@@ -144,6 +144,24 @@ export function useTasks() {
     taskOps.reorderTaskList(taskIds);
   }, []);
 
+  // Toggle a step completion for a task
+  const toggleStep = useCallback((taskId: string, stepLabel: string): void => {
+    // Optimistic update
+    setTasks(prev => prev.map(t => {
+      if (t.id !== taskId) return t;
+
+      const completedSteps = t.completedSteps || [];
+      const isCompleted = completedSteps.includes(stepLabel);
+      const newCompletedSteps = isCompleted
+        ? completedSteps.filter(s => s !== stepLabel)
+        : [...completedSteps, stepLabel];
+
+      return { ...t, completedSteps: newCompletedSteps, updatedAt: Date.now() };
+    }));
+
+    taskOps.toggleTaskStep(taskId, stepLabel);
+  }, []);
+
   // Filter helpers
   const activeTasks = tasks.filter(t => t.status !== 'completed' && t.status !== 'archived');
   const completedTasks = tasks.filter(t => t.status === 'completed');
@@ -168,5 +186,6 @@ export function useTasks() {
     updateTitle,
     reorderTasks,
     refreshTasks,
+    toggleStep,
   };
 }

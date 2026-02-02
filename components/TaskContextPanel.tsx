@@ -8,6 +8,7 @@ import { SourceList } from './SourceBadge';
 interface TaskContextPanelProps {
   task: Task;
   className?: string;
+  onToggleStep?: (taskId: string, stepLabel: string) => void;
 }
 
 interface CollapsibleSectionProps {
@@ -51,7 +52,7 @@ function CollapsibleSection({ title, icon, defaultOpen = true, children, badge }
   );
 }
 
-export function TaskContextPanel({ task, className = '' }: TaskContextPanelProps) {
+export function TaskContextPanel({ task, className = '', onToggleStep }: TaskContextPanelProps) {
   const research = task.research;
   const quickInfo = research?.quickInfo;
 
@@ -59,7 +60,7 @@ export function TaskContextPanel({ task, className = '' }: TaskContextPanelProps
   const getProgressSteps = () => {
     const taskType = research?.taskType?.toLowerCase() || '';
     const isResearched = task.status !== 'researching' && task.status !== 'pending';
-    const isCompleted = task.status === 'completed' || task.status === 'archived';
+    const manuallyCompleted = task.completedSteps || [];
 
     // Task-specific step labels
     let stepLabels = ['Research task', 'Review options', 'Take action'];
@@ -76,10 +77,11 @@ export function TaskContextPanel({ task, className = '' }: TaskContextPanelProps
       stepLabels = ['Get contact info', 'Review details', 'Make call'];
     }
 
+    // First step is auto-completed by research, steps 2 and 3 are manually toggled
     const steps = [
-      { label: stepLabels[0], completed: isResearched },
-      { label: stepLabels[1], completed: isCompleted },
-      { label: stepLabels[2], completed: isCompleted },
+      { label: stepLabels[0], completed: isResearched, isAutomatic: true },
+      { label: stepLabels[1], completed: manuallyCompleted.includes(stepLabels[1]), isAutomatic: false },
+      { label: stepLabels[2], completed: manuallyCompleted.includes(stepLabels[2]), isAutomatic: false },
     ];
 
     // Show active state for first step while researching
@@ -117,24 +119,46 @@ export function TaskContextPanel({ task, className = '' }: TaskContextPanelProps
               />
             </div>
 
-            {progressSteps.map((step, index) => (
-              <div key={index} className="flex items-center gap-3">
-                <div className={`
-                  w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0
-                  ${step.completed
-                    ? 'bg-primary text-on-primary'
-                    : 'border-2 border-outline text-transparent'
-                  }
-                `}>
-                  {step.completed && <MaterialIcon name="check" size={14} />}
+            {progressSteps.map((step, index) => {
+              const isClickable = !step.isAutomatic && onToggleStep;
+              const stepContent = (
+                <>
+                  <div className={`
+                    w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0
+                    ${step.completed
+                      ? 'bg-primary text-on-primary'
+                      : 'border-2 border-outline text-transparent'
+                    }
+                    ${isClickable ? 'group-hover:border-primary' : ''}
+                  `}>
+                    {step.completed && <MaterialIcon name="check" size={14} />}
+                  </div>
+                  <span className={`text-body-medium ${
+                    step.completed ? 'text-on-surface line-through opacity-60' : 'text-on-surface'
+                  }`}>
+                    {step.label}
+                  </span>
+                </>
+              );
+
+              if (isClickable) {
+                return (
+                  <button
+                    key={index}
+                    onClick={() => onToggleStep(task.id, step.label)}
+                    className="flex items-center gap-3 w-full text-left group hover:bg-on-surface/4 -mx-2 px-2 py-1 rounded-md transition-colors"
+                  >
+                    {stepContent}
+                  </button>
+                );
+              }
+
+              return (
+                <div key={index} className="flex items-center gap-3 py-1">
+                  {stepContent}
                 </div>
-                <span className={`text-body-medium ${
-                  step.completed ? 'text-on-surface line-through opacity-60' : 'text-on-surface'
-                }`}>
-                  {step.label}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </CollapsibleSection>
 
