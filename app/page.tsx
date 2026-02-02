@@ -71,7 +71,8 @@ export default function Home() {
   }, [addTask, startResearching, research, markAsPersonal, setResearch]);
 
   const handleShowDetails = useCallback((taskId: string) => {
-    setSelectedTaskId(taskId);
+    // Toggle selection - clicking same task again closes detail view
+    setSelectedTaskId(prev => prev === taskId ? null : taskId);
   }, []);
 
   const handleClosePanel = useCallback(() => {
@@ -314,7 +315,7 @@ export default function Home() {
 
         {/* Conversation Panel (middle) */}
         {isTaskSelected && selectedTask && (
-          <div className="flex-1 min-w-0 border-r border-outline-variant">
+          <div className="flex-1 min-w-0 border-r border-outline-variant overflow-hidden">
             <ConversationPanel
               task={selectedTask}
               onClose={handleClosePanel}
@@ -325,7 +326,7 @@ export default function Home() {
 
         {/* Context Panel (right) */}
         {isTaskSelected && selectedTask && (
-          <div className="w-80 flex-shrink-0">
+          <div className="w-80 flex-shrink-0 overflow-hidden">
             <TaskContextPanel task={selectedTask} onToggleStep={toggleStep} />
           </div>
         )}

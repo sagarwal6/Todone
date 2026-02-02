@@ -8,6 +8,78 @@ import { Button } from './ui/Button';
 import { OptionList } from './OptionCard';
 import { v4 as uuidv4 } from 'uuid';
 
+interface SuggestedAction {
+  label: string;
+  prompt: string;
+  icon: string;
+}
+
+// Get suggested next actions based on task type and research
+function getSuggestedActions(task: Task): SuggestedAction[] {
+  const actions: SuggestedAction[] = [];
+  const titleLower = task.title.toLowerCase();
+  const hasOptions = task.research?.options && task.research.options.length > 0;
+  const hasPhone = task.research?.quickInfo?.phone;
+
+  // Flight/travel tasks with options
+  if (hasOptions && (titleLower.includes('flight') || titleLower.includes('hotel') || titleLower.includes('travel'))) {
+    actions.push(
+      { label: 'Help me pick the best option', prompt: 'Help me pick the best option based on price and convenience.', icon: 'thumb_up' },
+      { label: 'Compare by total travel time', prompt: 'Compare these options by total travel time including layovers.', icon: 'schedule' },
+    );
+  }
+
+  // Shopping/comparison tasks
+  if (hasOptions && (titleLower.includes('buy') || titleLower.includes('find') || titleLower.includes('compare'))) {
+    actions.push(
+      { label: 'Which is the best value?', prompt: 'Which option gives me the best value for money?', icon: 'payments' },
+      { label: 'Summarize the trade-offs', prompt: 'Summarize the trade-offs between these options.', icon: 'compare' },
+    );
+  }
+
+  // Call/contact tasks
+  if (hasPhone || titleLower.includes('call') || titleLower.includes('contact')) {
+    actions.push(
+      { label: 'Draft what to say', prompt: 'Draft a script for what I should say when I call.', icon: 'edit_note' },
+      { label: 'What questions should I ask?', prompt: 'What questions should I ask when I call?', icon: 'help' },
+    );
+  }
+
+  // Email/respond tasks
+  if (titleLower.includes('email') || titleLower.includes('respond') || titleLower.includes('reply')) {
+    actions.push(
+      { label: 'Draft a response', prompt: 'Help me draft a response for this.', icon: 'edit' },
+      { label: 'Outline key points', prompt: 'Help me outline the key points I should include in my response.', icon: 'format_list_bulleted' },
+    );
+  }
+
+  // Insurance tasks
+  if (titleLower.includes('insurance') || titleLower.includes('coverage') || titleLower.includes('policy')) {
+    actions.push(
+      { label: 'What should I ask about?', prompt: 'What key questions should I ask about my coverage?', icon: 'help' },
+      { label: 'Explain my options', prompt: 'Explain what options I have and what to consider.', icon: 'lightbulb' },
+    );
+  }
+
+  // Generic fallbacks if no specific matches
+  if (actions.length === 0 && task.research) {
+    actions.push(
+      { label: 'What should I do first?', prompt: 'What\'s the most important first step I should take?', icon: 'start' },
+      { label: 'Break this down for me', prompt: 'Break this task down into simple steps.', icon: 'checklist' },
+    );
+  }
+
+  // Personal tasks without research
+  if (task.status === 'personal') {
+    return [
+      { label: 'Help me think through this', prompt: 'Help me think through this task and what I need to do.', icon: 'psychology' },
+      { label: 'Break it into steps', prompt: 'Help me break this task into manageable steps.', icon: 'checklist' },
+    ];
+  }
+
+  return actions.slice(0, 3); // Max 3 suggestions
+}
+
 interface ConversationPanelProps {
   task: Task;
   onClose: () => void;
@@ -18,11 +90,15 @@ export function ConversationPanel({ task, onClose, onFeedback }: ConversationPan
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [suggestionsUsed, setSuggestionsUsed] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const suggestedActions = getSuggestedActions(task);
 
   // Reset messages when task changes
   useEffect(() => {
     setMessages([]);
+    setSuggestionsUsed(false);
   }, [task.id]);
 
   // Scroll to bottom when messages change
@@ -91,28 +167,69 @@ export function ConversationPanel({ task, onClose, onFeedback }: ConversationPan
     onFeedback(task.id, feedback);
   }, [task, onFeedback]);
 
+  const handleSuggestionClick = useCallback((prompt: string) => {
+    setSuggestionsUsed(true);
+    setInput(prompt);
+    // Trigger send after a short delay to show the input
+    setTimeout(() => {
+      const userMessage: ChatMessage = {
+        id: uuidv4(),
+        role: 'user',
+        content: prompt,
+        timestamp: Date.now(),
+      };
+
+      setMessages(prev => [...prev, userMessage]);
+      setInput('');
+      setIsLoading(true);
+
+      fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskId: task.id,
+          taskTitle: task.title,
+          taskResearch: task.research,
+          message: prompt,
+          history: messages,
+        }),
+      })
+        .then(res => res.json())
+        .then(data => {
+          const assistantMessage: ChatMessage = {
+            id: uuidv4(),
+            role: 'assistant',
+            content: data.reply || 'Sorry, I could not process that request.',
+            timestamp: Date.now(),
+          };
+          setMessages(prev => [...prev, assistantMessage]);
+        })
+        .catch(() => {
+          const errorMessage: ChatMessage = {
+            id: uuidv4(),
+            role: 'assistant',
+            content: 'Sorry, something went wrong. Please try again.',
+            timestamp: Date.now(),
+          };
+          setMessages(prev => [...prev, errorMessage]);
+        })
+        .finally(() => setIsLoading(false));
+    }, 100);
+  }, [task, messages]);
+
   return (
     <div className="h-full flex flex-col bg-surface">
       {/* Header */}
       <div className="flex-shrink-0 px-6 py-4 border-b border-outline-variant">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1 min-w-0">
-            <h2 className="text-headline-small font-display text-on-surface">
-              {task.title}
-            </h2>
-            {task.research?.taskType && (
-              <span className="inline-block mt-2 px-3 py-1 text-label-small font-medium text-on-surface-variant bg-surface-container-high rounded-pill">
-                {task.research.taskType}
-              </span>
-            )}
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-on-surface/8 transition-colors"
-            aria-label="Close"
-          >
-            <MaterialIcon name="close" size={24} />
-          </button>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-headline-small font-display text-on-surface">
+            {task.title}
+          </h2>
+          {task.research?.taskType && (
+            <span className="inline-block mt-2 px-3 py-1 text-label-small font-medium text-on-surface-variant bg-surface-container-high rounded-pill">
+              {task.research.taskType}
+            </span>
+          )}
         </div>
       </div>
 
@@ -181,6 +298,27 @@ export function ConversationPanel({ task, onClose, onFeedback }: ConversationPan
                 <div className="mt-4">
                   <FeedbackWidget feedback={task.feedback} onFeedback={handleFeedback} />
                 </div>
+
+                {/* Suggested next actions */}
+                {!suggestionsUsed && suggestedActions.length > 0 && messages.length === 0 && (
+                  <div className="mt-6 pt-4 border-t border-outline-variant">
+                    <p className="text-label-medium text-on-surface-variant mb-3">
+                      Want me to help with the next step?
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {suggestedActions.map((action, index) => (
+                        <button
+                          key={index}
+                          onClick={() => handleSuggestionClick(action.prompt)}
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-surface-container-high hover:bg-primary-container text-on-surface hover:text-on-primary-container rounded-pill text-label-medium transition-colors"
+                        >
+                          <MaterialIcon name={action.icon} size={18} />
+                          {action.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -211,10 +349,31 @@ export function ConversationPanel({ task, onClose, onFeedback }: ConversationPan
             </div>
             <div className="flex-1">
               <div className="p-4 bg-surface-container rounded-lg">
-                <p className="text-body-medium text-on-surface-variant italic">
-                  This is a personal task - no research needed.
+                <p className="text-body-medium text-on-surface">
+                  This is a personal task. I can still help you think through it or break it into steps.
                 </p>
               </div>
+
+              {/* Suggested actions for personal tasks */}
+              {!suggestionsUsed && suggestedActions.length > 0 && messages.length === 0 && (
+                <div className="mt-4">
+                  <p className="text-label-medium text-on-surface-variant mb-3">
+                    Want me to help?
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestedActions.map((action, index) => (
+                      <button
+                        key={index}
+                        onClick={() => handleSuggestionClick(action.prompt)}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-surface-container-high hover:bg-primary-container text-on-surface hover:text-on-primary-container rounded-pill text-label-medium transition-colors"
+                      >
+                        <MaterialIcon name={action.icon} size={18} />
+                        {action.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
