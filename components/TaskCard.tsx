@@ -134,7 +134,7 @@ export function TaskCard({
   };
 
   return (
-    <div className="relative overflow-hidden rounded-xl">
+    <div className="relative overflow-hidden">
       {/* Swipe action backgrounds (mobile only) */}
       {isMobile && (
         <>
@@ -167,7 +167,7 @@ export function TaskCard({
           `}
           onClick={handleCardClick}
         >
-          <div className="flex items-start gap-3">
+          <div className="flex items-center gap-3">
             {/* Circular Checkbox */}
             <CircularCheckbox
               checked={isCompleted}
@@ -180,7 +180,7 @@ export function TaskCard({
             <div className="flex-1 min-w-0">
               {/* Title row */}
               <div className="flex items-center gap-2">
-                <h3 className={`text-title-medium ${isCompleted ? 'line-through text-on-surface-variant' : 'text-on-surface'}`}>
+                <h3 className={`text-base font-normal leading-snug ${isCompleted ? 'line-through text-on-surface-variant/50' : 'text-on-surface'}`}>
                   {task.title}
                 </h3>
               </div>

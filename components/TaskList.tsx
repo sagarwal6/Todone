@@ -181,7 +181,7 @@ export function TaskList({
         items={tasks.map((t) => t.id)}
         strategy={verticalListSortingStrategy}
       >
-        <div className="space-y-2">
+        <div className="divide-y divide-outline-variant/15">
           {tasks.map((task) => (
             <SortableTask
               key={task.id}

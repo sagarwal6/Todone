@@ -13,9 +13,9 @@ interface CircularCheckboxProps {
 }
 
 const sizeMap = {
-  small: { container: "w-5 h-5", icon: 16 },
-  medium: { container: "w-6 h-6", icon: 20 },
-  large: { container: "w-8 h-8", icon: 24 },
+  small: { container: "w-4 h-4", icon: 12 },
+  medium: { container: "w-5 h-5", icon: 14 },
+  large: { container: "w-6 h-6", icon: 18 },
 };
 
 export function CircularCheckbox({
@@ -40,12 +40,12 @@ export function CircularCheckbox({
         ${container}
         rounded-full
         flex items-center justify-center
-        transition-all duration-200 ease-md-standard
+        transition-all duration-150 ease-out
         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2
         ${
           checked
             ? "bg-primary text-on-primary"
-            : "border-2 border-outline/40 hover:border-primary hover:bg-primary/8"
+            : "border border-outline/30 hover:border-primary/60 hover:bg-primary/5"
         }
         ${disabled ? "opacity-38 cursor-not-allowed" : "cursor-pointer"}
         ${className}
