@@ -234,9 +234,6 @@ export default function Home() {
             </div>
           </div>
 
-          <p className="text-body-small text-on-surface-variant">
-            {remainingRequests} requests remaining
-          </p>
         </div>
       </header>
 

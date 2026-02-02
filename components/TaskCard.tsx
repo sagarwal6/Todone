@@ -46,14 +46,24 @@ export function TaskCard({
     }
   };
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Don't trigger if clicking on interactive elements
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('a') || target.closest('input')) {
+      return;
+    }
+    onShowDetails(task.id);
+  };
+
   return (
     <Card
       variant="elevated"
       className={`
-        task-card overflow-hidden
+        task-card overflow-hidden cursor-pointer
         ${isDragging ? 'dragging' : ''}
         ${isCompleted ? 'opacity-60' : ''}
       `}
+      onClick={handleCardClick}
     >
       <div className="flex items-start gap-3">
         {/* Circular Checkbox */}
@@ -64,8 +74,9 @@ export function TaskCard({
           aria-label={isCompleted ? 'Restore task' : 'Complete task'}
         />
 
-        {/* Content */}
-        <div className="flex-1 min-w-0">
+        {/* Content - with max height for scannability */}
+        <div className="flex-1 min-w-0 relative">
+          <div className="max-h-40 overflow-hidden">
           {/* Title row */}
           <div className="flex items-center gap-2">
             <h3 className={`text-title-medium ${isCompleted ? 'line-through text-on-surface-variant' : 'text-on-surface'}`}>
@@ -185,6 +196,9 @@ export function TaskCard({
               Personal task - no research needed
             </p>
           )}
+          </div>
+          {/* Fade gradient for overflow indication */}
+          <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-surface to-transparent pointer-events-none" />
         </div>
 
         {/* Actions */}

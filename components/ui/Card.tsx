@@ -12,7 +12,7 @@ interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 const variantStyles: Record<CardVariant, string> = {
-  elevated: "bg-surface shadow-elevation-1 hover:shadow-elevation-2",
+  elevated: "bg-surface border border-outline-variant/40 hover:border-outline-variant",
   filled: "bg-surface-container-highest",
   outlined: "bg-surface border border-outline-variant",
 };

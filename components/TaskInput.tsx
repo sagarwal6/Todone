@@ -34,7 +34,7 @@ export function TaskInput({ onAddTask, disabled }: TaskInputProps) {
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="What needs to be done? (e.g., Book dentist appointment)"
+          placeholder="Add a task... e.g., Find flights to NYC next weekend"
           disabled={disabled}
           className="
             w-full px-4 py-3 pr-12
@@ -64,9 +64,6 @@ export function TaskInput({ onAddTask, disabled }: TaskInputProps) {
           <MaterialIcon name="add" size="small" />
         </button>
       </div>
-      <p className="mt-2 text-body-small text-on-surface-variant">
-        Press Enter to add a task. AI will research and provide a briefing.
-      </p>
     </div>
   );
 }

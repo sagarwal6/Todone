@@ -234,7 +234,7 @@ body {
 }
 
 .task-card:hover {
-  @apply shadow-elevation-2;
+  @apply bg-surface-container-low;
 }
 
 /* Drag and drop styles */
