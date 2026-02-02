@@ -55,17 +55,36 @@ export function TaskContextPanel({ task, className = '' }: TaskContextPanelProps
   const research = task.research;
   const quickInfo = research?.quickInfo;
 
-  // Define progress steps based on task status
+  // Define task-specific progress steps
   const getProgressSteps = () => {
+    const taskType = research?.taskType?.toLowerCase() || '';
+    const isResearched = task.status !== 'researching' && task.status !== 'pending';
+    const isCompleted = task.status === 'completed' || task.status === 'archived';
+
+    // Task-specific step labels
+    let stepLabels = ['Research task', 'Review options', 'Take action'];
+
+    if (taskType.includes('travel') || taskType.includes('flight') || taskType.includes('hotel')) {
+      stepLabels = ['Find options', 'Compare prices', 'Book'];
+    } else if (taskType.includes('insurance')) {
+      stepLabels = ['Review coverage', 'Compare policies', 'Contact provider'];
+    } else if (taskType.includes('shopping') || taskType.includes('product')) {
+      stepLabels = ['Find products', 'Compare options', 'Purchase'];
+    } else if (taskType.includes('appointment') || taskType.includes('schedule')) {
+      stepLabels = ['Find availability', 'Choose time', 'Confirm booking'];
+    } else if (taskType.includes('contact') || taskType.includes('call')) {
+      stepLabels = ['Get contact info', 'Review details', 'Make call'];
+    }
+
     const steps = [
-      { label: 'Research task', completed: task.status !== 'researching' && task.status !== 'pending' },
-      { label: 'Review information', completed: task.status === 'completed' || task.status === 'archived' },
-      { label: 'Take action', completed: task.status === 'completed' || task.status === 'archived' },
+      { label: stepLabels[0], completed: isResearched },
+      { label: stepLabels[1], completed: isCompleted },
+      { label: stepLabels[2], completed: isCompleted },
     ];
 
-    // Add current step indicator
+    // Show active state for first step while researching
     if (task.status === 'researching') {
-      steps[0].label = 'Researching...';
+      steps[0].label = `Finding ${taskType || 'information'}...`;
     }
 
     return steps;
@@ -176,63 +195,16 @@ export function TaskContextPanel({ task, className = '' }: TaskContextPanelProps
           </CollapsibleSection>
         )}
 
-        {/* Briefing Section */}
-        {research?.rawMarkdown && (
-          <CollapsibleSection title="Briefing" icon="article" defaultOpen={false}>
-            <div className="prose prose-sm max-w-none text-body-medium text-on-surface-variant whitespace-pre-wrap">
-              {research.rawMarkdown}
-            </div>
-          </CollapsibleSection>
-        )}
-
-        {/* Options Section */}
-        {research?.options && research.options.length > 0 && (
-          <CollapsibleSection
-            title="Options"
-            icon="list"
-            badge={research.options.length}
-            defaultOpen={false}
-          >
-            <div className="space-y-2">
-              {research.options.map((option) => (
-                <div
-                  key={option.id}
-                  className="p-3 bg-surface-container rounded-md"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="text-body-medium font-medium text-on-surface">{option.title}</div>
-                      {option.subtitle && (
-                        <div className="text-body-small text-on-surface-variant">{option.subtitle}</div>
-                      )}
-                    </div>
-                    {option.price && (
-                      <div className="text-body-medium font-medium text-on-surface">{option.price}</div>
-                    )}
-                  </div>
-                  {option.details.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {option.details.map((detail, i) => (
-                        <span key={i} className="text-body-small text-on-surface-variant">
-                          {i > 0 && '·'} {detail}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  <a
-                    href={option.actionUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-2 inline-flex items-center gap-1 text-label-medium text-primary hover:underline"
-                  >
-                    {option.actionLabel}
-                    <MaterialIcon name="open_in_new" size={14} />
-                  </a>
-                </div>
-              ))}
-            </div>
-          </CollapsibleSection>
-        )}
+        {/* Connected Sources - Coming Soon */}
+        <CollapsibleSection
+          icon="hub"
+          title="Connected Sources"
+          defaultOpen={true}
+        >
+          <p className="text-body-small text-on-surface-variant italic">
+            Coming soon - connect your calendar, email, and more for personalized results.
+          </p>
+        </CollapsibleSection>
 
         {/* Personal Task Message */}
         {task.status === 'personal' && (

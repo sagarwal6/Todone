@@ -54,7 +54,7 @@ export function CompactTaskCard({
 
       {/* Title */}
       <span className={`
-        flex-1 text-body-medium truncate
+        flex-1 text-body-medium break-words
         ${isCompleted || isArchived ? 'line-through opacity-60' : ''}
         ${isSelected ? 'text-on-primary-container' : 'text-on-surface'}
       `}>

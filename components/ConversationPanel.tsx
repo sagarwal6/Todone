@@ -5,6 +5,7 @@ import { Task, ChatMessage, Feedback } from '@/lib/types';
 import { FeedbackWidget } from './FeedbackWidget';
 import { MaterialIcon } from './ui/MaterialIcon';
 import { Button } from './ui/Button';
+import { OptionList } from './OptionCard';
 import { v4 as uuidv4 } from 'uuid';
 
 interface ConversationPanelProps {
@@ -163,6 +164,16 @@ export function ConversationPanel({ task, onClose, onFeedback }: ConversationPan
                         {action.label}
                       </a>
                     ))}
+                  </div>
+                )}
+
+                {/* Options displayed inline */}
+                {task.research.options && task.research.options.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-label-medium text-on-surface-variant mb-2">
+                      {task.research.options.length} options found
+                    </p>
+                    <OptionList options={task.research.options} compact={false} />
                   </div>
                 )}
 

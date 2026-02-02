@@ -245,7 +245,7 @@ export default function Home() {
         <div className={`
           flex flex-col bg-surface
           transition-all duration-300 ease-md-standard
-          ${isTaskSelected ? 'w-80 flex-shrink-0 border-r border-outline-variant' : 'flex-1'}
+          ${isTaskSelected ? 'w-96 flex-shrink-0 border-r border-outline-variant' : 'flex-1'}
         `}>
           {/* Task input - only show when no task selected */}
           {!isTaskSelected && (

@@ -132,3 +132,31 @@ export const PROGRESS_STAGES: ProgressStatus[] = [
   { stage: 'synthesizing', message: 'Synthesizing insights...', progress: 75 },
   { stage: 'formatting', message: 'Preparing your briefing...', progress: 95 },
 ];
+
+// Task-specific progress stages for better UX
+export const TASK_PROGRESS_STAGES: Record<string, ProgressStatus[]> = {
+  travel: [
+    { stage: 'analyzing', message: 'Understanding your trip...', progress: 15 },
+    { stage: 'searching', message: 'Searching flights & prices...', progress: 45 },
+    { stage: 'synthesizing', message: 'Comparing options...', progress: 75 },
+    { stage: 'formatting', message: 'Preparing recommendations...', progress: 95 },
+  ],
+  insurance: [
+    { stage: 'analyzing', message: 'Analyzing your coverage needs...', progress: 15 },
+    { stage: 'searching', message: 'Finding policy information...', progress: 45 },
+    { stage: 'synthesizing', message: 'Reviewing coverage details...', progress: 75 },
+    { stage: 'formatting', message: 'Preparing summary...', progress: 95 },
+  ],
+  shopping: [
+    { stage: 'analyzing', message: 'Understanding what you need...', progress: 15 },
+    { stage: 'searching', message: 'Searching products & prices...', progress: 45 },
+    { stage: 'synthesizing', message: 'Comparing options...', progress: 75 },
+    { stage: 'formatting', message: 'Preparing recommendations...', progress: 95 },
+  ],
+  default: [
+    { stage: 'analyzing', message: 'Understanding your request...', progress: 15 },
+    { stage: 'searching', message: 'Searching for information...', progress: 45 },
+    { stage: 'synthesizing', message: 'Analyzing findings...', progress: 75 },
+    { stage: 'formatting', message: 'Preparing results...', progress: 95 },
+  ],
+};

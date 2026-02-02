@@ -1,10 +1,32 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Research, ResearchResponse, ProgressStatus, PROGRESS_STAGES } from '@/lib/types';
+import { Research, ResearchResponse, ProgressStatus, TASK_PROGRESS_STAGES } from '@/lib/types';
 
 // Track progress per task
 type ProgressMap = Record<string, ProgressStatus | null>;
+
+// Detect task type from title keywords
+function detectTaskType(title: string): string {
+  const lowerTitle = title.toLowerCase();
+
+  // Travel-related keywords
+  if (/\b(flight|fly|airline|airport|hotel|booking|trip|travel|vacation|destination)\b/.test(lowerTitle)) {
+    return 'travel';
+  }
+
+  // Insurance-related keywords
+  if (/\b(insurance|policy|coverage|premium|claim|deductible)\b/.test(lowerTitle)) {
+    return 'insurance';
+  }
+
+  // Shopping-related keywords
+  if (/\b(buy|purchase|shop|product|price|deal|sale|order|amazon|store)\b/.test(lowerTitle)) {
+    return 'shopping';
+  }
+
+  return 'default';
+}
 
 interface UseResearchReturn {
   progressMap: ProgressMap;
@@ -30,8 +52,12 @@ export function useResearch(): UseResearchReturn {
   }> => {
     setError(null);
 
+    // Detect task type and get appropriate progress stages
+    const taskType = detectTaskType(taskTitle);
+    const progressStages = TASK_PROGRESS_STAGES[taskType] || TASK_PROGRESS_STAGES.default;
+
     // Set initial progress for this task
-    setProgressMap(prev => ({ ...prev, [taskId]: PROGRESS_STAGES[0] }));
+    setProgressMap(prev => ({ ...prev, [taskId]: progressStages[0] }));
 
     // Simulate progressive stages while waiting for API
     const progressInterval = setInterval(() => {
@@ -39,9 +65,9 @@ export function useResearch(): UseResearchReturn {
         const currentProgress = prev[taskId];
         if (!currentProgress) return prev;
 
-        const currentIndex = PROGRESS_STAGES.findIndex(s => s.stage === currentProgress.stage);
-        const nextIndex = Math.min(currentIndex + 1, PROGRESS_STAGES.length - 1);
-        return { ...prev, [taskId]: PROGRESS_STAGES[nextIndex] };
+        const currentIndex = progressStages.findIndex(s => s.stage === currentProgress.stage);
+        const nextIndex = Math.min(currentIndex + 1, progressStages.length - 1);
+        return { ...prev, [taskId]: progressStages[nextIndex] };
       });
     }, 2000);
 
