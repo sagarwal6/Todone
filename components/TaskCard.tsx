@@ -76,19 +76,26 @@ export function TaskCard({
             )}
           </div>
 
+          {/* Summary */}
+          {isReady && task.research?.summary && (
+            <p className="mt-1 text-body-medium text-on-surface-variant">
+              {task.research.summary}
+            </p>
+          )}
+
           {/* Researching state */}
           {isResearching && (
-            <div className="mt-3">
+            <div className="mt-2">
               <ProgressiveReveal status={progress || null} />
             </div>
           )}
 
           {/* Ready state - minimal info */}
           {isReady && task.research && (
-            <div className="mt-2 space-y-3">
+            <div className="mt-2 space-y-2">
               {/* Options list UI - show compact cards */}
-              {task.research.uiType === 'options_list' && task.research.options && task.research.options.length > 0 ? (
-                <div className="mt-3">
+              {task.research.options && task.research.options.length > 0 ? (
+                <div className="mt-2">
                   <OptionList options={task.research.options} compact maxDisplay={2} />
                   <button
                     onClick={() => onShowDetails(task.id)}
@@ -133,7 +140,7 @@ export function TaskCard({
                   )}
 
                   {/* Action buttons row */}
-                  <div className="flex items-center gap-3 pt-1">
+                  <div className="flex items-center gap-3">
                     {/* Call button */}
                     {(quickInfo?.phone || primaryAction?.type === 'phone') && (
                       <Button
