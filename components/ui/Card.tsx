@@ -12,9 +12,9 @@ interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 const variantStyles: Record<CardVariant, string> = {
-  elevated: "bg-surface border border-outline-variant/40 hover:border-outline-variant",
+  elevated: "bg-surface border border-outline-variant/20 hover:border-outline-variant/40",
   filled: "bg-surface-container-highest",
-  outlined: "bg-surface border border-outline-variant",
+  outlined: "bg-surface border border-outline-variant/30",
 };
 
 export const Card = forwardRef<HTMLDivElement, CardProps>(
@@ -30,7 +30,7 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
     ref
   ) => {
     const baseStyles = `
-      rounded-md p-4
+      rounded-xl p-4
       transition-all duration-200 ease-md-standard
     `;
 

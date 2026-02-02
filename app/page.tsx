@@ -183,7 +183,6 @@ export default function Home() {
             <ConversationPanel
               task={selectedTask}
               onClose={handleClosePanel}
-              onFeedback={handleFeedback}
             />
           )}
         </BottomSheet>
@@ -240,37 +239,29 @@ export default function Home() {
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Task List Panel */}
+        {/* Task List Panel - 35% when detail open, full width otherwise */}
         <div className={`
           flex flex-col bg-surface
           transition-all duration-300 ease-md-standard
-          ${isTaskSelected ? 'w-96 flex-shrink-0 border-r border-outline-variant' : 'flex-1'}
+          ${isTaskSelected ? 'w-[35%] min-w-[320px] flex-shrink-0 border-r border-outline-variant' : 'flex-1'}
         `}>
           {/* Centered content wrapper - constrains width when single-pane */}
           <div className={`
             flex-1 flex flex-col min-h-0
             ${isTaskSelected ? '' : 'max-w-3xl mx-auto w-full'}
           `}>
-            {/* Task input - only show when no task selected */}
-            {!isTaskSelected && (
-              <div className="px-6 py-6 border-b border-outline-variant">
-                <TaskInput onAddTask={handleAddTask} />
-                {error && (
-                  <p className="mt-2 text-body-small text-error">
-                    {error}
-                  </p>
-                )}
-              </div>
-            )}
+            {/* Task input */}
+            <div className={`px-4 py-4 ${!isTaskSelected ? 'px-6 py-6 border-b border-outline-variant' : ''}`}>
+              <TaskInput onAddTask={handleAddTask} />
+              {error && !isTaskSelected && (
+                <p className="mt-2 text-body-small text-error">
+                  {error}
+                </p>
+              )}
+            </div>
 
             {/* Task list */}
-            <div className="flex-1 overflow-y-auto px-4 py-4">
-              {isTaskSelected && (
-                <div className="mb-4">
-                  <TaskInput onAddTask={handleAddTask} />
-                </div>
-              )}
-
+            <div className="flex-1 overflow-y-auto px-4 py-2">
               <TaskList
                 tasks={currentTasks}
                 progressMap={progressMap}
@@ -280,7 +271,6 @@ export default function Home() {
                 onRestore={restoreTask}
                 onShowDetails={handleShowDetails}
                 onReorder={reorderTasks}
-                compact={isTaskSelected}
                 selectedTaskId={selectedTaskId}
               />
 
@@ -301,25 +291,16 @@ export default function Home() {
                 </div>
               )}
             </div>
-
-                      </div>
+          </div>
         </div>
 
-        {/* Conversation Panel (middle) */}
+        {/* Slide-over Detail Panel - 65% width */}
         {isTaskSelected && selectedTask && (
-          <div className="flex-1 min-w-0 border-r border-outline-variant overflow-hidden">
+          <div className="flex-1 min-w-0 overflow-hidden">
             <ConversationPanel
               task={selectedTask}
               onClose={handleClosePanel}
-              onFeedback={handleFeedback}
             />
-          </div>
-        )}
-
-        {/* Context Panel (right) */}
-        {isTaskSelected && selectedTask && (
-          <div className="w-80 flex-shrink-0 overflow-hidden">
-            <TaskContextPanel task={selectedTask} onToggleStep={toggleStep} />
           </div>
         )}
       </div>

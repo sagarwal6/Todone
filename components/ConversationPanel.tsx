@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Task, ChatMessage, Feedback } from '@/lib/types';
-import { FeedbackWidget } from './FeedbackWidget';
+import { Task, ChatMessage } from '@/lib/types';
 import { MaterialIcon } from './ui/MaterialIcon';
 import { Button } from './ui/Button';
 import { OptionList } from './OptionCard';
+import { SourceBadge } from './SourceBadge';
 import { v4 as uuidv4 } from 'uuid';
 
 interface SuggestedAction {
@@ -15,6 +15,7 @@ interface SuggestedAction {
 }
 
 // Get suggested next actions based on task type and research
+// Phrased as "Want me to..." to feel like part of the conversation
 function getSuggestedActions(task: Task): SuggestedAction[] {
   const actions: SuggestedAction[] = [];
   const titleLower = task.title.toLowerCase();
@@ -24,81 +25,80 @@ function getSuggestedActions(task: Task): SuggestedAction[] {
   // Flight/travel tasks with options
   if (hasOptions && (titleLower.includes('flight') || titleLower.includes('hotel') || titleLower.includes('travel'))) {
     actions.push(
-      { label: 'Help me pick the best option', prompt: 'Help me pick the best option based on price and convenience.', icon: 'thumb_up' },
-      { label: 'Compare by total travel time', prompt: 'Compare these options by total travel time including layovers.', icon: 'schedule' },
+      { label: 'help you pick the best option?', prompt: 'Help me pick the best option based on price and convenience.', icon: 'thumb_up' },
+      { label: 'compare them by travel time?', prompt: 'Compare these options by total travel time including layovers.', icon: 'schedule' },
     );
   }
 
   // Shopping/comparison tasks
   if (hasOptions && (titleLower.includes('buy') || titleLower.includes('find') || titleLower.includes('compare'))) {
     actions.push(
-      { label: 'Which is the best value?', prompt: 'Which option gives me the best value for money?', icon: 'payments' },
-      { label: 'Summarize the trade-offs', prompt: 'Summarize the trade-offs between these options.', icon: 'compare' },
+      { label: 'find the best value?', prompt: 'Which option gives me the best value for money?', icon: 'payments' },
+      { label: 'summarize the trade-offs?', prompt: 'Summarize the trade-offs between these options.', icon: 'compare' },
     );
   }
 
   // Call/contact tasks
   if (hasPhone || titleLower.includes('call') || titleLower.includes('contact')) {
     actions.push(
-      { label: 'Draft what to say', prompt: 'Draft a script for what I should say when I call.', icon: 'edit_note' },
-      { label: 'What questions should I ask?', prompt: 'What questions should I ask when I call?', icon: 'help' },
+      { label: 'draft what you should say?', prompt: 'Draft a script for what I should say when I call.', icon: 'edit_note' },
+      { label: 'suggest questions to ask?', prompt: 'What questions should I ask when I call?', icon: 'help' },
     );
   }
 
   // Email/respond tasks
   if (titleLower.includes('email') || titleLower.includes('respond') || titleLower.includes('reply')) {
     actions.push(
-      { label: 'Draft a response', prompt: 'Help me draft a response for this.', icon: 'edit' },
-      { label: 'Outline key points', prompt: 'Help me outline the key points I should include in my response.', icon: 'format_list_bulleted' },
+      { label: 'draft a response?', prompt: 'Help me draft a response for this.', icon: 'edit' },
+      { label: 'outline the key points?', prompt: 'Help me outline the key points I should include in my response.', icon: 'format_list_bulleted' },
     );
   }
 
   // Insurance tasks
   if (titleLower.includes('insurance') || titleLower.includes('coverage') || titleLower.includes('policy')) {
     actions.push(
-      { label: 'What should I ask about?', prompt: 'What key questions should I ask about my coverage?', icon: 'help' },
-      { label: 'Explain my options', prompt: 'Explain what options I have and what to consider.', icon: 'lightbulb' },
+      { label: 'suggest questions to ask?', prompt: 'What key questions should I ask about my coverage?', icon: 'help' },
+      { label: 'explain your options?', prompt: 'Explain what options I have and what to consider.', icon: 'lightbulb' },
     );
   }
 
   // Generic fallbacks if no specific matches
   if (actions.length === 0 && task.research) {
     actions.push(
-      { label: 'What should I do first?', prompt: 'What\'s the most important first step I should take?', icon: 'start' },
-      { label: 'Break this down for me', prompt: 'Break this task down into simple steps.', icon: 'checklist' },
+      { label: 'suggest what to do first?', prompt: 'What\'s the most important first step I should take?', icon: 'start' },
+      { label: 'break this down into steps?', prompt: 'Break this task down into simple steps.', icon: 'checklist' },
     );
   }
 
   // Personal tasks without research
   if (task.status === 'personal') {
     return [
-      { label: 'Help me think through this', prompt: 'Help me think through this task and what I need to do.', icon: 'psychology' },
-      { label: 'Break it into steps', prompt: 'Help me break this task into manageable steps.', icon: 'checklist' },
+      { label: 'help you think through this?', prompt: 'Help me think through this task and what I need to do.', icon: 'psychology' },
+      { label: 'break it into steps?', prompt: 'Help me break this task into manageable steps.', icon: 'checklist' },
     ];
   }
 
-  return actions.slice(0, 3); // Max 3 suggestions
+  return actions.slice(0, 2); // Max 2 suggestions for cleaner UI
 }
 
 interface ConversationPanelProps {
   task: Task;
   onClose: () => void;
-  onFeedback: (taskId: string, feedback: Feedback) => void;
 }
 
-export function ConversationPanel({ task, onClose, onFeedback }: ConversationPanelProps) {
+export function ConversationPanel({ task, onClose }: ConversationPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [suggestionsUsed, setSuggestionsUsed] = useState(false);
+  const [showSources, setShowSources] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const suggestedActions = getSuggestedActions(task);
 
-  // Reset messages when task changes
+  // Reset state when task changes
   useEffect(() => {
     setMessages([]);
-    setSuggestionsUsed(false);
+    setShowSources(false);
   }, [task.id]);
 
   // Scroll to bottom when messages change
@@ -163,73 +163,23 @@ export function ConversationPanel({ task, onClose, onFeedback }: ConversationPan
     }
   };
 
-  const handleFeedback = useCallback((feedback: Feedback) => {
-    onFeedback(task.id, feedback);
-  }, [task, onFeedback]);
-
-  const handleSuggestionClick = useCallback((prompt: string) => {
-    setSuggestionsUsed(true);
-    setInput(prompt);
-    // Trigger send after a short delay to show the input
-    setTimeout(() => {
-      const userMessage: ChatMessage = {
-        id: uuidv4(),
-        role: 'user',
-        content: prompt,
-        timestamp: Date.now(),
-      };
-
-      setMessages(prev => [...prev, userMessage]);
-      setInput('');
-      setIsLoading(true);
-
-      fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          taskId: task.id,
-          taskTitle: task.title,
-          taskResearch: task.research,
-          message: prompt,
-          history: messages,
-        }),
-      })
-        .then(res => res.json())
-        .then(data => {
-          const assistantMessage: ChatMessage = {
-            id: uuidv4(),
-            role: 'assistant',
-            content: data.reply || 'Sorry, I could not process that request.',
-            timestamp: Date.now(),
-          };
-          setMessages(prev => [...prev, assistantMessage]);
-        })
-        .catch(() => {
-          const errorMessage: ChatMessage = {
-            id: uuidv4(),
-            role: 'assistant',
-            content: 'Sorry, something went wrong. Please try again.',
-            timestamp: Date.now(),
-          };
-          setMessages(prev => [...prev, errorMessage]);
-        })
-        .finally(() => setIsLoading(false));
-    }, 100);
-  }, [task, messages]);
-
   return (
     <div className="h-full flex flex-col bg-surface">
       {/* Header */}
       <div className="flex-shrink-0 px-6 py-4 border-b border-outline-variant">
-        <div className="flex-1 min-w-0">
-          <h2 className="text-headline-small font-display text-on-surface">
-            {task.title}
-          </h2>
-          {task.research?.taskType && (
-            <span className="inline-block mt-2 px-3 py-1 text-label-small font-medium text-on-surface-variant bg-surface-container-high rounded-pill">
-              {task.research.taskType}
-            </span>
-          )}
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-headline-small font-display text-on-surface">
+              {task.title}
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 -mr-2 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-on-surface/8 transition-colors"
+            aria-label="Close panel"
+          >
+            <MaterialIcon name="close" size={24} />
+          </button>
         </div>
       </div>
 
@@ -243,80 +193,75 @@ export function ConversationPanel({ task, onClose, onFeedback }: ConversationPan
                 <MaterialIcon name="auto_awesome" size="small" className="text-on-primary-container" />
               </div>
               <div className="flex-1">
-                <div className="text-label-medium text-on-surface-variant mb-1">AI Research</div>
-                <div className="p-4 bg-surface-container rounded-lg">
+                <div className="p-4 bg-surface-container rounded-lg space-y-3">
+                  {/* Main summary with inline actions */}
                   <p className="text-body-medium text-on-surface">
                     {task.research.summary}
+                    {/* Inline action links */}
+                    {task.research.keyActions && task.research.keyActions.length > 0 && (
+                      <>
+                        {' '}
+                        {task.research.keyActions.map((action, index, arr) => (
+                          <span key={index}>
+                            {index > 0 && (index === arr.length - 1 ? ' or ' : ', ')}
+                            <a
+                              href={action.value}
+                              target={action.type === 'link' ? '_blank' : undefined}
+                              rel={action.type === 'link' ? 'noopener noreferrer' : undefined}
+                              className="text-primary hover:underline font-medium"
+                            >
+                              {action.label.toLowerCase()}
+                            </a>
+                          </span>
+                        ))}
+                        .
+                      </>
+                    )}
                   </p>
+
+                  {/* Additional context */}
                   {task.research.quickInfo?.details && (
-                    <p className="mt-2 text-body-medium text-on-surface-variant">
+                    <p className="text-body-medium text-on-surface-variant">
                       {task.research.quickInfo.details}
+                    </p>
+                  )}
+
+                  {/* Options presented conversationally */}
+                  {task.research.options && task.research.options.length > 0 && (
+                    <div>
+                      <p className="text-body-medium text-on-surface-variant mb-2">
+                        I found {task.research.options.length} options that might work:
+                      </p>
+                      <OptionList options={task.research.options} compact={false} />
+                    </div>
+                  )}
+
+                  {/* Suggestions as natural continuation */}
+                  {suggestedActions.length > 0 && messages.length === 0 && (
+                    <p className="text-body-medium text-on-surface-variant">
+                      Would you like me to {suggestedActions.map(a => a.label).join(' or ')}
                     </p>
                   )}
                 </div>
 
-                {/* Key actions */}
-                {task.research.keyActions && task.research.keyActions.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {task.research.keyActions.map((action, index) => (
-                      <a
-                        key={index}
-                        href={action.value}
-                        target={action.type === 'link' ? '_blank' : undefined}
-                        rel={action.type === 'link' ? 'noopener noreferrer' : undefined}
-                        className={`
-                          inline-flex items-center gap-1.5 px-4 py-2
-                          text-label-large font-medium rounded-pill
-                          transition-all duration-200
-                          ${action.isPrimary
-                            ? 'bg-primary text-on-primary hover:shadow-elevation-1'
-                            : 'bg-secondary-container text-on-secondary-container hover:bg-secondary-container/80'
-                          }
-                        `}
-                      >
-                        <MaterialIcon
-                          name={action.type === 'phone' ? 'call' : action.type === 'email' ? 'mail' : 'open_in_new'}
-                          size="small"
-                        />
-                        {action.label}
-                      </a>
-                    ))}
-                  </div>
-                )}
-
-                {/* Options displayed inline */}
-                {task.research.options && task.research.options.length > 0 && (
-                  <div className="mt-4">
-                    <p className="text-label-medium text-on-surface-variant mb-2">
-                      {task.research.options.length} options found
-                    </p>
-                    <OptionList options={task.research.options} compact={false} />
-                  </div>
-                )}
-
-                {/* Feedback */}
-                <div className="mt-4">
-                  <FeedbackWidget feedback={task.feedback} onFeedback={handleFeedback} />
-                </div>
-
-                {/* Suggested next actions */}
-                {!suggestionsUsed && suggestedActions.length > 0 && messages.length === 0 && (
-                  <div className="mt-6 pt-4 border-t border-outline-variant">
-                    <p className="text-label-medium text-on-surface-variant mb-3">
-                      Want me to help with the next step?
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {suggestedActions.map((action, index) => (
-                        <button
-                          key={index}
-                          onClick={() => handleSuggestionClick(action.prompt)}
-                          className="inline-flex items-center gap-2 px-4 py-2 bg-surface-container-high hover:bg-primary-container text-on-surface hover:text-on-primary-container rounded-pill text-label-medium transition-colors"
-                        >
-                          <MaterialIcon name={action.icon} size={18} />
-                          {action.label}
-                        </button>
-                      ))}
-                    </div>
+                {/* Collapsible Sources */}
+                {task.research.sources && task.research.sources.length > 0 && (
+                  <div className="mt-3">
+                    <button
+                      onClick={() => setShowSources(!showSources)}
+                      className="flex items-center gap-2 text-label-medium text-on-surface-variant hover:text-on-surface transition-colors"
+                    >
+                      <MaterialIcon name={showSources ? 'expand_less' : 'expand_more'} size={18} />
+                      <MaterialIcon name="source" size={16} />
+                      <span>{task.research.sources.length} sources</span>
+                    </button>
+                    {showSources && (
+                      <div className="mt-3 space-y-2 animate-fade-in">
+                        {task.research.sources.map((source, index) => (
+                          <SourceBadge key={index} source={source} />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -344,36 +289,15 @@ export function ConversationPanel({ task, onClose, onFeedback }: ConversationPan
         {/* Personal task */}
         {task.status === 'personal' && (
           <div className="flex items-start gap-3 mb-6">
-            <div className="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center flex-shrink-0">
-              <MaterialIcon name="person" size="small" className="text-on-surface-variant" />
+            <div className="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center flex-shrink-0">
+              <MaterialIcon name="auto_awesome" size="small" className="text-on-primary-container" />
             </div>
             <div className="flex-1">
               <div className="p-4 bg-surface-container rounded-lg">
                 <p className="text-body-medium text-on-surface">
-                  This is a personal task. I can still help you think through it or break it into steps.
+                  Happy to help with this! I'll probably need a bit more context though. Want to tell me more about what you're trying to do, or I can help you think through it step by step.
                 </p>
               </div>
-
-              {/* Suggested actions for personal tasks */}
-              {!suggestionsUsed && suggestedActions.length > 0 && messages.length === 0 && (
-                <div className="mt-4">
-                  <p className="text-label-medium text-on-surface-variant mb-3">
-                    Want me to help?
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {suggestedActions.map((action, index) => (
-                      <button
-                        key={index}
-                        onClick={() => handleSuggestionClick(action.prompt)}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-surface-container-high hover:bg-primary-container text-on-surface hover:text-on-primary-container rounded-pill text-label-medium transition-colors"
-                      >
-                        <MaterialIcon name={action.icon} size={18} />
-                        {action.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         )}

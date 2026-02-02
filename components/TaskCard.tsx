@@ -134,7 +134,7 @@ export function TaskCard({
   };
 
   return (
-    <div className="relative overflow-hidden rounded-lg">
+    <div className="relative overflow-hidden rounded-xl">
       {/* Swipe action backgrounds (mobile only) */}
       {isMobile && (
         <>

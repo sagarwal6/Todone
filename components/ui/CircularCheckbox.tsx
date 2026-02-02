@@ -45,7 +45,7 @@ export function CircularCheckbox({
         ${
           checked
             ? "bg-primary text-on-primary"
-            : "border-2 border-on-surface-variant hover:border-primary hover:bg-primary/8"
+            : "border-2 border-outline/40 hover:border-primary hover:bg-primary/8"
         }
         ${disabled ? "opacity-38 cursor-not-allowed" : "cursor-pointer"}
         ${className}

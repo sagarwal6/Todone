@@ -22,36 +22,38 @@ export async function POST(request: NextRequest) {
     }
 
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-pro-preview-05-06',
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 1024,
+        maxOutputTokens: 2048,
       },
     });
 
     // Build context from task and research
-    const context = `You are a helpful assistant answering follow-up questions about a task.
+    const context = `You are a knowledgeable assistant helping someone complete a task. You have already researched this task and have the information below.
 
-Task: "${taskTitle}"
+TASK: "${taskTitle}"
 
 ${taskResearch ? `
-Research Summary: ${taskResearch.summary}
+RESEARCH FINDINGS:
+${taskResearch.summary}
 
-Contact Info:
-- Phone: ${taskResearch.quickInfo?.phoneFormatted || 'Not available'}
-- Hours: ${taskResearch.quickInfo?.hours || 'Not available'}
-- Address: ${taskResearch.quickInfo?.address || 'Not available'}
-- Website: ${taskResearch.quickInfo?.website || 'Not available'}
+${taskResearch.quickInfo?.phoneFormatted ? `Phone: ${taskResearch.quickInfo.phoneFormatted}` : ''}
+${taskResearch.quickInfo?.hours ? `Hours: ${taskResearch.quickInfo.hours}` : ''}
+${taskResearch.quickInfo?.address ? `Address: ${taskResearch.quickInfo.address}` : ''}
+${taskResearch.quickInfo?.website ? `Website: ${taskResearch.quickInfo.website}` : ''}
 
-Full Briefing:
+DETAILED INFORMATION:
 ${taskResearch.rawMarkdown}
 ` : 'No research available for this task.'}
 
-Guidelines:
-- Be concise and helpful
-- Use the research information above to answer questions
-- If you don't know something, say so
-- Keep responses short (2-3 sentences unless more detail is needed)`;
+YOUR ROLE:
+- You are the user's knowledgeable assistant who has already done the research
+- Give specific, actionable advice based on the research above
+- When suggesting questions to ask, make them specific and useful (e.g., "What's the current deductible on my policy?" not generic questions)
+- When drafting scripts, make them natural and include specific details from the research
+- Be direct and helpful, not vague
+- Format responses clearly with bullet points or numbered lists when appropriate`;
 
     // Build conversation history
     const conversationHistory = history.map(msg => ({
