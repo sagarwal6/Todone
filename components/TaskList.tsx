@@ -21,8 +21,8 @@ import { CSS } from '@dnd-kit/utilities';
 import { Task, ProgressStatus } from '@/lib/types';
 import { TaskCard } from './TaskCard';
 import { CompactTaskCard } from './CompactTaskCard';
-import { MaterialIcon } from './ui/MaterialIcon';
 import { useResponsive } from '@/hooks/useResponsive';
+import { useAgentContext } from '@/contexts/AgentContext';
 
 interface SortableTaskProps {
   task: Task;
@@ -32,9 +32,11 @@ interface SortableTaskProps {
   onDelete: (taskId: string) => void;
   onRestore: (taskId: string) => void;
   onShowDetails: (taskId: string) => void;
+  onTogglePin: (taskId: string) => void;
   compact?: boolean;
   isSelected?: boolean;
   isMobile?: boolean;
+  isAgentRunning?: boolean;
 }
 
 function SortableTask({
@@ -45,9 +47,11 @@ function SortableTask({
   onDelete,
   onRestore,
   onShowDetails,
+  onTogglePin,
   compact,
   isSelected,
   isMobile,
+  isAgentRunning,
 }: SortableTaskProps) {
   const {
     attributes,
@@ -65,54 +69,49 @@ function SortableTask({
 
   if (compact) {
     return (
-      <div ref={setNodeRef} style={style} {...attributes}>
-        <div className="flex items-center gap-2">
-          <button
-            {...listeners}
-            className="flex-shrink-0 p-1 text-on-surface-variant hover:text-on-surface cursor-grab active:cursor-grabbing touch-none"
-            aria-label="Drag to reorder"
-          >
-            <MaterialIcon name="drag_indicator" size={16} />
-          </button>
-          <div className="flex-1">
-            <CompactTaskCard
-              task={task}
-              progress={progress}
-              onComplete={onComplete}
-              onShowDetails={onShowDetails}
-              isDragging={isDragging}
-              isSelected={isSelected}
-            />
-          </div>
-        </div>
+      <div
+        ref={setNodeRef}
+        style={style}
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing touch-none"
+      >
+        <CompactTaskCard
+          task={task}
+          progress={progress}
+          onComplete={onComplete}
+          onShowDetails={onShowDetails}
+          isDragging={isDragging}
+          isSelected={isSelected}
+          isAgentRunning={isAgentRunning}
+        />
       </div>
     );
   }
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes}>
-      <div className="flex items-center gap-2">
-        <button
-          {...listeners}
-          className="flex-shrink-0 p-1 text-on-surface-variant hover:text-on-surface cursor-grab active:cursor-grabbing touch-none"
-          aria-label="Drag to reorder"
-        >
-          <MaterialIcon name="drag_indicator" size={18} />
-        </button>
-        <div className="flex-1">
-          <TaskCard
-            task={task}
-            progress={progress}
-            onComplete={onComplete}
-            onArchive={onArchive}
-            onDelete={onDelete}
-            onRestore={onRestore}
-            onShowDetails={onShowDetails}
-            isDragging={isDragging}
-            isMobile={isMobile}
-          />
-        </div>
-      </div>
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="cursor-grab active:cursor-grabbing touch-none"
+    >
+      <TaskCard
+        task={task}
+        progress={progress}
+        onComplete={onComplete}
+        onArchive={onArchive}
+        onDelete={onDelete}
+        onRestore={onRestore}
+        onShowDetails={onShowDetails}
+        onTogglePin={onTogglePin}
+        isDragging={isDragging}
+        isMobile={isMobile}
+        isSelected={isSelected}
+        showHoverActions={true}
+        isAgentRunning={isAgentRunning}
+      />
     </div>
   );
 }
@@ -128,6 +127,7 @@ interface TaskListProps {
   onRestore: (taskId: string) => void;
   onShowDetails: (taskId: string) => void;
   onReorder: (taskIds: string[]) => void;
+  onTogglePin: (taskId: string) => void;
   compact?: boolean;
   selectedTaskId?: string | null;
 }
@@ -141,10 +141,12 @@ export function TaskList({
   onRestore,
   onShowDetails,
   onReorder,
+  onTogglePin,
   compact = false,
   selectedTaskId,
 }: TaskListProps) {
   const { isMobile } = useResponsive();
+  const { isAgentRunning } = useAgentContext();
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -167,9 +169,34 @@ export function TaskList({
     }
   }, [tasks, onReorder]);
 
+  // Separate pinned and unpinned tasks (pinned always at top)
+  const pinnedTasks = tasks.filter(t => t.isPinned);
+  const unpinnedTasks = tasks.filter(t => !t.isPinned);
+
   if (tasks.length === 0) {
     return null;
   }
+
+  const renderTask = (task: Task) => (
+    <SortableTask
+      key={task.id}
+      task={task}
+      progress={progressMap[task.id] || null}
+      onComplete={onComplete}
+      onArchive={onArchive}
+      onDelete={onDelete}
+      onRestore={onRestore}
+      onShowDetails={onShowDetails}
+      onTogglePin={onTogglePin}
+      compact={compact}
+      isSelected={selectedTaskId === task.id}
+      isMobile={isMobile}
+      isAgentRunning={isAgentRunning(task.id)}
+    />
+  );
+
+  // Combine pinned (at top) and unpinned tasks into single list
+  const sortedTasks = [...pinnedTasks, ...unpinnedTasks];
 
   return (
     <DndContext
@@ -178,25 +205,11 @@ export function TaskList({
       onDragEnd={handleDragEnd}
     >
       <SortableContext
-        items={tasks.map((t) => t.id)}
+        items={sortedTasks.map((t) => t.id)}
         strategy={verticalListSortingStrategy}
       >
-        <div className="divide-y divide-outline-variant/15">
-          {tasks.map((task) => (
-            <SortableTask
-              key={task.id}
-              task={task}
-              progress={progressMap[task.id] || null}
-              onComplete={onComplete}
-              onArchive={onArchive}
-              onDelete={onDelete}
-              onRestore={onRestore}
-              onShowDetails={onShowDetails}
-              compact={compact}
-              isSelected={selectedTaskId === task.id}
-              isMobile={isMobile}
-            />
-          ))}
+        <div className="divide-y divide-inbox-divider">
+          {sortedTasks.map(renderTask)}
         </div>
       </SortableContext>
     </DndContext>

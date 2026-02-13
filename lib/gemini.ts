@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { Research, Action, SourceReference, QuickInfo, OptionCard, UIType } from './types';
+import { Research, Action, SourceReference, QuickInfo, OptionCard, UIType, SuggestedFollowUp } from './types';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
@@ -60,9 +60,31 @@ Your response must be valid JSON with this exact structure:
         "snippet": "Relevant quote with specific data"
       }
     ],
-    "rawMarkdown": "Detailed briefing with ALL specific options found"
+    "rawMarkdown": "Detailed briefing with ALL specific options found",
+    "suggestedFollowUps": [
+      {
+        "label": "short action phrase specific to THIS task",
+        "prompt": "full prompt to continue the conversation",
+        "icon": "material icon name"
+      }
+    ]
   }
 }
+
+SUGGESTED FOLLOW-UPS (CRITICAL - make them task-specific):
+Generate 2 follow-up suggestions that are SPECIFIC to the actual content of the research.
+
+BAD examples (too generic):
+- "suggest what to do first?"
+- "break this down into steps?"
+
+GOOD examples based on task content:
+- For "identify 10 verticals for productivity": "generate 5 more verticals?" or "explain why these verticals have strong productivity needs?"
+- For "book flight to SFO": "find cheaper options?" or "compare by travel time?"
+- For "find best CRM software": "compare the top 3 in detail?" or "explain pricing tiers?"
+
+The suggestions should reference the ACTUAL content returned, not generic actions.
+Use appropriate Material Icons: lightbulb, add_circle, compare, info, search, psychology, playlist_add, analytics
 
 URL CONSTRUCTION RULES (CRITICAL):
 You MUST construct working URLs with proper parameters.
@@ -101,10 +123,15 @@ TASK-SPECIFIC REQUIREMENTS:
 FOR FLIGHTS:
 - FIRST: Determine if ONE-WAY or ROUND-TRIP based on dates mentioned in task
 - Return 3-5 flight options in the "options" array
-- Each option: airline name, departure/arrival times, duration, price, number of stops
+- Each option MUST include:
+  * title: "Airline Name" (e.g., "United Airlines", "Delta")
+  * subtitle: Flight class (e.g., "Economy", "Business")
+  * price: "$XXX" format - if price unknown, OMIT the price field entirely (don't write "Unable to find")
+  * details: MUST be array with exactly 3 items: ["Departure - Arrival time", "Duration", "Stops"]
+    - Example: ["6:00 AM - 11:30 AM", "5h 30m", "Nonstop"] or ["8:15 AM - 4:45 PM", "8h 30m", "1 stop"]
+  * provider: Where the booking is from (e.g., "Google Flights", "Trip.com")
 - actionUrl MUST be a working Google Flights URL - include "one+way" for one-way flights!
 - Mark cheapest as "Best Price", fastest as "Fastest"
-- Example option details: ["8:50 AM - 1:39 PM", "4h 49m", "Nonstop"]
 - DOUBLE-CHECK: Does the URL match the user's request (one-way vs round-trip)?
 
 FOR HOTELS:
@@ -210,6 +237,13 @@ Remember: Return isPersonal: true for personal tasks that don't need research.`;
       provider: o.provider,
     }));
 
+    // Parse suggested follow-ups
+    const suggestedFollowUps: SuggestedFollowUp[] = (parsed.research?.suggestedFollowUps || []).map((f: Partial<SuggestedFollowUp>) => ({
+      label: f.label || 'Continue',
+      prompt: f.prompt || f.label || 'Tell me more',
+      icon: f.icon || 'lightbulb',
+    }));
+
     const research: Research = {
       summary: parsed.research?.summary || 'Unable to generate summary',
       taskType: parsed.research?.taskType || 'general',
@@ -232,6 +266,7 @@ Remember: Return isPersonal: true for personal tasks that don't need research.`;
       researchedAt: Date.now(),
       options: options.length > 0 ? options : undefined,
       uiType: parsed.research?.uiType as UIType || 'info_card',
+      suggestedFollowUps: suggestedFollowUps.length > 0 ? suggestedFollowUps : undefined,
     };
 
     return { isPersonal: false, research };
@@ -257,4 +292,43 @@ export function isPersonalTask(title: string): boolean {
   ];
 
   return personalPatterns.some(pattern => pattern.test(title.toLowerCase()));
+}
+
+/**
+ * Detect if a task needs the agentic loop (Gmail, Calendar, Contacts access)
+ * These tasks require OAuth tools and should trigger the agent automatically
+ */
+export function needsAgenticLoop(title: string): boolean {
+  const lowerTitle = title.toLowerCase();
+
+  // Gmail-related patterns
+  const emailPatterns = [
+    /\b(email|emails|mail|inbox|unread)\b/,
+    /\b(send|reply|respond|forward|draft)\b.*\b(email|message)\b/,
+    /\bwhat.*(emails?|messages?)\b/,
+    /\bcheck.*(inbox|email|mail)\b/,
+    /\bfrom\s+\w+.*email\b/,
+    /\bemail.*from\b/,
+    /\breply\s+to\b/,
+  ];
+
+  // Calendar-related patterns
+  const calendarPatterns = [
+    /\b(calendar|schedule|meeting|meetings|appointment|event|events)\b/,
+    /\bwhat.*(meeting|schedule|calendar|on my|happening)\b/,
+    /\b(tomorrow|today|this week|next week).*meeting/,
+    /\bmeeting.*(tomorrow|today|this week|next week)/,
+    /\bschedule\s+(a|an|the)\b/,
+    /\bfree\s+(time|slot)/,
+    /\bwhen\s+(am i|is my)\b/,
+  ];
+
+  // Contact-related patterns
+  const contactPatterns = [
+    /\b(contact|contacts|phone|number)\b.*\b(for|of)\b/,
+    /\bfind.*(contact|email|number)\b/,
+  ];
+
+  const allPatterns = [...emailPatterns, ...calendarPatterns, ...contactPatterns];
+  return allPatterns.some(pattern => pattern.test(lowerTitle));
 }

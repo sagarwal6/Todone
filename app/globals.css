@@ -2,49 +2,80 @@
 @tailwind components;
 @tailwind utilities;
 
-/* MD3 Color Tokens - Light Mode */
+/* Inbox by Gmail inspired color tokens - Light Mode (Default) */
 :root {
-  /* Primary */
+  /* === INBOX BACKGROUNDS (Warmer whites for friendlier feel) === */
+  --inbox-bg-primary: #FAFBFC;
+  --inbox-bg-secondary: #F1F3F4;
+  --inbox-bg-hover: rgba(0, 0, 0, 0.04);
+  --inbox-bg-selected: #E8F0FE;
+  --inbox-bg-input: #F1F3F4;
+
+  /* === INBOX TEXT (Maximum contrast) === */
+  --inbox-text-primary: #000000;         /* Pure black for best readability */
+  --inbox-text-secondary: #1a1a1a;       /* Near black */
+  --inbox-text-tertiary: #404040;        /* Dark gray */
+  --inbox-text-inverse: #FFFFFF;
+
+  /* === INBOX ACCENT === */
+  --inbox-accent: #1A73E8;
+  --inbox-accent-light: #E8F0FE;
+  --inbox-accent-hover: #1557B0;
+
+  /* === INBOX SEMANTIC === */
+  --inbox-success: #1E8E3E;
+  --inbox-error: #D93025;
+  --inbox-warning: #F9AB00;
+
+  /* === INBOX DIVIDERS === */
+  --inbox-divider: rgba(0, 0, 0, 0.08);
+  --inbox-divider-strong: rgba(0, 0, 0, 0.12);
+
+  /* === INBOX SHADOWS === */
+  --inbox-shadow-subtle: 0 1px 2px 0 rgba(60, 64, 67, 0.10), 0 1px 3px 1px rgba(60, 64, 67, 0.08);
+  --inbox-shadow-elevated: 0 1px 3px 0 rgba(60, 64, 67, 0.15), 0 4px 8px 3px rgba(60, 64, 67, 0.10);
+
+  /* MD3 Primary - mapped to Inbox */
   --md-primary: #1A73E8;
   --md-on-primary: #FFFFFF;
-  --md-primary-container: #D3E3FD;
+  --md-primary-container: #E8F0FE;
   --md-on-primary-container: #041E49;
 
-  /* Secondary */
+  /* MD3 Secondary */
   --md-secondary: #5F6368;
   --md-on-secondary: #FFFFFF;
   --md-secondary-container: #E8EAED;
   --md-on-secondary-container: #1F1F1F;
 
-  /* Tertiary */
+  /* MD3 Tertiary */
   --md-tertiary: #1E8E3E;
   --md-on-tertiary: #FFFFFF;
   --md-tertiary-container: #CEEAD6;
   --md-on-tertiary-container: #0D3B1B;
 
-  /* Surface */
-  --md-surface: #FFFFFF;
-  --md-surface-dim: #DDE3EA;
+  /* MD3 Surface - warmer for Inbox style */
+  --md-surface: #FAFBFC;
+  --md-surface-dim: #F1F3F4;
   --md-surface-bright: #FFFFFF;
   --md-surface-container-lowest: #FFFFFF;
-  --md-surface-container-low: #F8F9FA;
+  --md-surface-container-low: #FAFBFC;
   --md-surface-container: #F1F3F4;
   --md-surface-container-high: #E8EAED;
-  --md-surface-container-highest: #DDE3EA;
+  --md-surface-container-highest: #DADCE0;
   --md-on-surface: #202124;
   --md-on-surface-variant: #5F6368;
 
-  /* Outline */
-  --md-outline: #DADCE0;
-  --md-outline-variant: #E8EAED;
+  /* MD3 Outline - more subtle for Inbox */
+  --md-outline: rgba(0, 0, 0, 0.12);
+  --md-outline-variant: rgba(0, 0, 0, 0.08);
 
-  /* Error */
+  /* MD3 Error */
   --md-error: #D93025;
   --md-on-error: #FFFFFF;
   --md-error-container: #F9DEDC;
   --md-on-error-container: #410E0B;
 
-  /* Success */
+  /* MD3 Success */
   --md-success: #1E8E3E;
   --md-on-success: #FFFFFF;
   --md-success-container: #CEEAD6;
@@ -63,50 +94,71 @@
   --foreground: #202124;
 }
 
-/* MD3 Color Tokens - Dark Mode */
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Primary */
-    --md-primary: #A8C7FA;
+/* Inbox by Gmail - Dark Mode (only when explicitly enabled via data-theme) */
+:root[data-theme="dark"] {
+    /* === INBOX BACKGROUNDS (Dark) === */
+    --inbox-bg-primary: #202124;
+    --inbox-bg-secondary: #171717;
+    --inbox-bg-hover: rgba(255, 255, 255, 0.08);
+    --inbox-bg-selected: rgba(138, 180, 248, 0.24);
+    --inbox-bg-input: #303134;
+
+    /* === INBOX TEXT (Dark - High contrast) === */
+    --inbox-text-primary: #F1F3F4;         /* Brighter primary */
+    --inbox-text-secondary: #D2D4D7;       /* Brighter secondary */
+    --inbox-text-tertiary: #BDC1C6;        /* Brighter tertiary */
+    --inbox-text-inverse: #202124;
+
+    /* === INBOX ACCENT (Dark) === */
+    --inbox-accent: #8AB4F8;
+    --inbox-accent-light: rgba(138, 180, 248, 0.24);
+    --inbox-accent-hover: #AECBFA;
+
+    /* === INBOX DIVIDERS (Dark) === */
+    --inbox-divider: rgba(255, 255, 255, 0.08);
+    --inbox-divider-strong: rgba(255, 255, 255, 0.12);
+
+    /* MD3 Primary */
+    --md-primary: #8AB4F8;
     --md-on-primary: #062E6F;
-    --md-primary-container: #0842A0;
+    --md-primary-container: rgba(138, 180, 248, 0.24);
     --md-on-primary-container: #D3E3FD;
 
-    /* Secondary */
-    --md-secondary: #C4C7C5;
+    /* MD3 Secondary */
+    --md-secondary: #9AA0A6;
     --md-on-secondary: #2E312F;
     --md-secondary-container: #444746;
     --md-on-secondary-container: #E0E3E0;
 
-    /* Tertiary */
+    /* MD3 Tertiary */
     --md-tertiary: #81C995;
     --md-on-tertiary: #0D3B1B;
     --md-tertiary-container: #0F5223;
     --md-on-tertiary-container: #CEEAD6;
 
-    /* Surface */
-    --md-surface: #1F1F1F;
-    --md-surface-dim: #131314;
+    /* MD3 Surface */
+    --md-surface: #202124;
+    --md-surface-dim: #171717;
     --md-surface-bright: #39393C;
-    --md-surface-container-lowest: #0E0E0E;
-    --md-surface-container-low: #1F1F1F;
-    --md-surface-container: #242428;
-    --md-surface-container-high: #2E2E32;
+    --md-surface-container-lowest: #171717;
+    --md-surface-container-low: #202124;
+    --md-surface-container: #282A2D;
+    --md-surface-container-high: #303134;
     --md-surface-container-highest: #39393C;
-    --md-on-surface: #E3E3E3;
-    --md-on-surface-variant: #C4C7C5;
+    --md-on-surface: #E8EAED;
+    --md-on-surface-variant: #9AA0A6;
 
-    /* Outline */
-    --md-outline: #5F6368;
-    --md-outline-variant: #444746;
+    /* MD3 Outline */
+    --md-outline: rgba(255, 255, 255, 0.12);
+    --md-outline-variant: rgba(255, 255, 255, 0.08);
 
-    /* Error */
+    /* MD3 Error */
     --md-error: #F28B82;
     --md-on-error: #601410;
     --md-error-container: #8C1D18;
     --md-on-error-container: #F9DEDC;
 
-    /* Success */
+    /* MD3 Success */
     --md-success: #81C995;
     --md-on-success: #0D3B1B;
     --md-success-container: #0F5223;
@@ -121,9 +173,8 @@
     --md-scrim: rgba(0, 0, 0, 0.6);
 
     /* Background (legacy support) */
-    --background: #1F1F1F;
-    --foreground: #E3E3E3;
-  }
+    --background: #202124;
+    --foreground: #E8EAED;
 }
 
 /* Base body styles */
@@ -131,6 +182,10 @@ body {
   color: var(--md-on-surface);
   background: var(--md-surface);
   font-family: "Roboto", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  /* Crisper text rendering */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 /* Safe area insets for mobile */
@@ -181,6 +236,52 @@ body {
   animation: shimmer 1.5s infinite;
 }
 
+/* Fade in animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 150ms ease-out;
+}
+
+/* Slide in from right (for panels/modals) */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 250ms ease-out;
+}
+
+/* Slide in from bottom (for mobile bottom sheets) */
+@keyframes slideInBottom {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-in-bottom {
+  animation: slideInBottom 250ms ease-out;
+}
+
 /* Progress bar animation */
 @keyframes progressFill {
   0% {
@@ -228,13 +329,20 @@ body {
   opacity: 0.12;
 }
 
-/* Task card transitions */
+/* Task card transitions - Inbox style with lift effect */
 .task-card {
-  @apply transition-all duration-200 ease-md-standard;
+  @apply transition-all duration-150;
+  border-radius: 8px;
 }
 
 .task-card:hover {
-  @apply bg-surface-container-low;
+  background-color: var(--inbox-bg-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(60, 64, 67, 0.1);
+}
+
+.task-card:active {
+  transform: translateY(0);
 }
 
 /* Drag and drop styles */
@@ -261,6 +369,140 @@ body {
   to {
     transform: scale(4);
     opacity: 0;
+  }
+}
+
+/* === INBOX-STYLE FUN ANIMATIONS === */
+
+/* Task complete - satisfying sweep away */
+@keyframes taskComplete {
+  0% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(50px);
+    opacity: 0;
+  }
+}
+
+.task-completing {
+  animation: taskComplete 0.3s ease-out forwards;
+}
+
+/* Checkmark pop - satisfying confirmation */
+@keyframes checkPop {
+  0% {
+    transform: scale(0);
+  }
+  50% {
+    transform: scale(1.3);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.check-pop {
+  animation: checkPop 0.25s ease-out;
+}
+
+/* New task entry - bouncy arrival */
+@keyframes slideInBounce {
+  0% {
+    transform: translateY(-15px);
+    opacity: 0;
+  }
+  60% {
+    transform: translateY(3px);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.task-new {
+  animation: slideInBounce 0.3s ease-out;
+}
+
+/* Pin animation - subtle bounce */
+@keyframes pinBounce {
+  0% {
+    transform: scale(1) rotate(0deg);
+  }
+  30% {
+    transform: scale(1.2) rotate(-10deg);
+  }
+  60% {
+    transform: scale(0.95) rotate(5deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.pin-bounce {
+  animation: pinBounce 0.3s ease-out;
+}
+
+/* Celebration pulse for empty state */
+@keyframes celebratePulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.9;
+  }
+}
+
+.celebrate {
+  animation: celebratePulse 2s ease-in-out infinite;
+}
+
+/* Scale in - for card expansion (Inbox style) */
+@keyframes scale-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Typing indicator - three bouncing dots */
+.typing-indicator {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  height: 20px;
+}
+
+.typing-indicator span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--inbox-text-tertiary);
+  animation: typing-bounce 1.4s ease-in-out infinite;
+}
+
+.typing-indicator span:nth-child(1) { animation-delay: 0ms; }
+.typing-indicator span:nth-child(2) { animation-delay: 200ms; }
+.typing-indicator span:nth-child(3) { animation-delay: 400ms; }
+
+@keyframes typing-bounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
   }
 }
 
@@ -304,5 +546,41 @@ body {
 
   .bg-surface-container {
     background-color: var(--md-surface-container);
+  }
+
+  /* Inbox-specific utilities - generous padding for breathing room */
+  .inbox-row {
+    @apply px-5 py-4 transition-all duration-150;
+    background-color: var(--inbox-bg-primary);
+    border-radius: 8px;
+  }
+
+  .inbox-row:hover {
+    background-color: var(--inbox-bg-hover);
+    transform: translateY(-1px);
+  }
+
+  .inbox-row-selected {
+    background-color: var(--inbox-bg-selected) !important;
+  }
+
+  .inbox-divider {
+    border-bottom: 1px solid var(--inbox-divider);
+  }
+
+  .inbox-text-primary {
+    color: var(--inbox-text-primary);
+  }
+
+  .inbox-text-secondary {
+    color: var(--inbox-text-secondary);
+  }
+
+  .inbox-text-tertiary {
+    color: var(--inbox-text-tertiary);
+  }
+
+  .inbox-bg-hover {
+    background-color: var(--inbox-bg-hover);
   }
 }

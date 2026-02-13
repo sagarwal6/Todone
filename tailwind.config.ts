@@ -15,6 +15,34 @@ const config: Config = {
     },
     extend: {
       colors: {
+        // Inbox-specific colors
+        inbox: {
+          bg: {
+            primary: "var(--inbox-bg-primary)",
+            secondary: "var(--inbox-bg-secondary)",
+            hover: "var(--inbox-bg-hover)",
+            selected: "var(--inbox-bg-selected)",
+            input: "var(--inbox-bg-input)",
+          },
+          text: {
+            primary: "var(--inbox-text-primary)",
+            secondary: "var(--inbox-text-secondary)",
+            tertiary: "var(--inbox-text-tertiary)",
+            inverse: "var(--inbox-text-inverse)",
+          },
+          accent: {
+            DEFAULT: "var(--inbox-accent)",
+            light: "var(--inbox-accent-light)",
+            hover: "var(--inbox-accent-hover)",
+          },
+          divider: {
+            DEFAULT: "var(--inbox-divider)",
+            strong: "var(--inbox-divider-strong)",
+          },
+          success: "var(--inbox-success)",
+          error: "var(--inbox-error)",
+          warning: "var(--inbox-warning)",
+        },
         // MD3 Primary
         primary: {
           DEFAULT: "var(--md-primary)",
@@ -102,6 +130,11 @@ const config: Config = {
         sans: ["Roboto", "system-ui", "sans-serif"],
         display: ["Google Sans", "Roboto", "system-ui", "sans-serif"],
       },
+      fontWeight: {
+        light: "300",
+        normal: "400",
+        medium: "500",
+      },
       fontSize: {
         // MD3 Type scale
         "display-large": ["57px", { lineHeight: "64px", letterSpacing: "-0.25px" }],
@@ -119,6 +152,12 @@ const config: Config = {
         "label-large": ["14px", { lineHeight: "20px", letterSpacing: "0.1px", fontWeight: "500" }],
         "label-medium": ["12px", { lineHeight: "16px", letterSpacing: "0.5px", fontWeight: "500" }],
         "label-small": ["11px", { lineHeight: "16px", letterSpacing: "0.5px", fontWeight: "500" }],
+        // Inbox-inspired typography - optimized for readability
+        "inbox-headline": ["22px", { lineHeight: "28px", letterSpacing: "0px", fontWeight: "500" }],
+        "inbox-title": ["16px", { lineHeight: "24px", letterSpacing: "0.1px", fontWeight: "500" }],
+        "inbox-body": ["15px", { lineHeight: "21px", letterSpacing: "0.2px", fontWeight: "400" }],
+        "inbox-body-medium": ["15px", { lineHeight: "21px", letterSpacing: "0.2px", fontWeight: "500" }],
+        "inbox-caption": ["14px", { lineHeight: "18px", letterSpacing: "0.2px", fontWeight: "500" }],
       },
       boxShadow: {
         // MD3 Elevation levels
@@ -128,6 +167,9 @@ const config: Config = {
         "elevation-3": "0px 4px 8px 3px rgba(0, 0, 0, 0.15), 0px 1px 3px 0px rgba(0, 0, 0, 0.3)",
         "elevation-4": "0px 6px 10px 4px rgba(0, 0, 0, 0.15), 0px 2px 3px 0px rgba(0, 0, 0, 0.3)",
         "elevation-5": "0px 8px 12px 6px rgba(0, 0, 0, 0.15), 0px 4px 4px 0px rgba(0, 0, 0, 0.3)",
+        // Inbox-style shadows - more subtle
+        "inbox-subtle": "0 1px 2px 0 rgba(60, 64, 67, 0.10), 0 1px 3px 1px rgba(60, 64, 67, 0.08)",
+        "inbox-elevated": "0 1px 3px 0 rgba(60, 64, 67, 0.15), 0 4px 8px 3px rgba(60, 64, 67, 0.10)",
       },
       spacing: {
         // Base unit: 4px
@@ -174,6 +216,20 @@ const config: Config = {
         ripple: {
           "0%": { transform: "scale(0)", opacity: "0.5" },
           "100%": { transform: "scale(4)", opacity: "0" },
+        },
+        // Insight scan animations
+        "insight-fade-in": {
+          "0%": { opacity: "0" },
+          "100%": { opacity: "1" },
+        },
+        "insight-slide-up": {
+          "0%": { transform: "translateY(100%)" },
+          "100%": { transform: "translateY(0)" },
+        },
+        "insight-progress": {
+          "0%": { width: "0%" },
+          "50%": { width: "70%" },
+          "100%": { width: "100%" },
         },
       },
       transitionTimingFunction: {

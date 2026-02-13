@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Roboto } from "next/font/google";
+import { AuthProvider } from "@/components/AuthProvider";
+import { AgentProvider } from "@/contexts/AgentContext";
 import "./globals.css";
 
 const roboto = Roboto({
@@ -40,6 +42,8 @@ export default function RootLayout({
   return (
     <html lang="en" className={roboto.variable}>
       <head>
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
         {/* Google Sans font for headings */}
         <link
           rel="preconnect"
@@ -61,7 +65,9 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased min-h-screen bg-surface text-on-surface font-sans">
-        {children}
+        <AuthProvider>
+          <AgentProvider>{children}</AgentProvider>
+        </AuthProvider>
       </body>
     </html>
   );

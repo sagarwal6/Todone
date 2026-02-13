@@ -1,21 +1,24 @@
 import { v4 as uuidv4 } from 'uuid';
-import { Task, TaskStatus, Research, Feedback } from './types';
+import { Task, TaskStatus, TaskSource, Research, Feedback, AgentQuickInfo, AgentStepSummary } from './types';
 import { getTasks, saveTasks, addTask, updateTask, deleteTask, reorderTasks } from './storage';
 
-export function createTask(title: string): Task {
+export function createTask(title: string, customPrompt?: string | null, source?: TaskSource): Task {
   const tasks = getTasks();
-  const maxOrder = tasks.length > 0 ? Math.max(...tasks.map(t => t.order)) : -1;
+  // New tasks go to the top - use minimum order minus 1
+  const minOrder = tasks.length > 0 ? Math.min(...tasks.map(t => t.order)) : 1;
 
   const task: Task = {
     id: uuidv4(),
     title: title.trim(),
     status: 'pending',
-    order: maxOrder + 1,
+    order: minOrder - 1,
     research: null,
     feedback: null,
     createdAt: Date.now(),
     updatedAt: Date.now(),
     completedAt: null,
+    customPrompt: customPrompt || null,
+    source: source || 'user',
   };
 
   addTask(task);
@@ -134,4 +137,42 @@ export function toggleTaskStep(taskId: string, stepLabel: string): Task | null {
     : [...completedSteps, stepLabel];
 
   return updateTask(taskId, { completedSteps: newCompletedSteps });
+}
+
+export function pinTask(taskId: string): Task | null {
+  return updateTask(taskId, { isPinned: true });
+}
+
+export function unpinTask(taskId: string): Task | null {
+  return updateTask(taskId, { isPinned: false });
+}
+
+export function togglePinTask(taskId: string): Task | null {
+  const tasks = getTasks();
+  const task = tasks.find(t => t.id === taskId);
+  if (!task) return null;
+  return updateTask(taskId, { isPinned: !task.isPinned });
+}
+
+export function addChatMessage(taskId: string, message: { id: string; role: 'user' | 'assistant'; content: string; timestamp: number }): Task | null {
+  const tasks = getTasks();
+  const task = tasks.find(t => t.id === taskId);
+  if (!task) return null;
+
+  const chatMessages = task.chatMessages || [];
+
+  // Deduplication: check if message with this ID already exists
+  if (chatMessages.some(m => m.id === message.id)) {
+    return task; // Already exists, return without adding
+  }
+
+  return updateTask(taskId, { chatMessages: [...chatMessages, message] });
+}
+
+export function setAgentQuickInfo(taskId: string, agentQuickInfo: AgentQuickInfo): Task | null {
+  return updateTask(taskId, { agentQuickInfo });
+}
+
+export function setAgentSteps(taskId: string, agentSteps: AgentStepSummary[]): Task | null {
+  return updateTask(taskId, { agentSteps });
 }

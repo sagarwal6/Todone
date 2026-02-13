@@ -1,0 +1,351 @@
+'use client';
+
+/**
+ * EmailDraftCard Component - Inbox-style Clean Design
+ *
+ * Displays email draft for review following this hierarchy:
+ * 1. What Claude did (summary)
+ * 2. Original email (collapsible context)
+ * 3. Draft reply (click to edit)
+ * 4. Actions (Reject / Edit / Send)
+ *
+ * Follows Google Inbox principles: content-first, typography-driven hierarchy,
+ * minimal chrome, no unnecessary boxes or borders.
+ */
+
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
+import type { EmailDraft, PendingDraft } from '@/lib/ai/types';
+import { openGmailCompose } from '@/lib/utils/gmail-compose';
+import { openGmailThread } from '@/lib/email/gmail-links';
+
+interface EmailDraftCardProps {
+  draft: PendingDraft;
+  taskId: string;
+  onConfirm: (draftId: string, editedData?: EmailDraft) => Promise<void>;
+  onReject: (draftId: string, feedback?: string) => Promise<void>;
+  isLoading?: boolean;
+  agentSummary?: string;
+  /** Called when user opens the draft in Gmail */
+  onOpenInGmail?: (draftId: string) => void;
+}
+
+export function EmailDraftCard({
+  draft,
+  taskId,
+  onConfirm,
+  onReject,
+  isLoading = false,
+  agentSummary,
+  onOpenInGmail,
+}: EmailDraftCardProps) {
+  const { data: session } = useSession();
+  const emailData = draft.data as EmailDraft;
+  const userEmail = session?.user?.email || undefined;
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedData, setEditedData] = useState<EmailDraft>(emailData);
+  const [showOriginal, setShowOriginal] = useState(false);
+  const [showRejectInput, setShowRejectInput] = useState(false);
+  const [rejectFeedback, setRejectFeedback] = useState('');
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (bodyRef.current && isEditing) {
+      bodyRef.current.style.height = 'auto';
+      bodyRef.current.style.height = bodyRef.current.scrollHeight + 'px';
+    }
+  }, [editedData.body, isEditing]);
+
+  const handleConfirm = useCallback(async () => {
+    await onConfirm(draft.id, isEditing ? editedData : undefined);
+  }, [draft.id, isEditing, editedData, onConfirm]);
+
+  const handleOpenInGmail = useCallback(() => {
+    // If we have a threadId, open the thread directly (user clicks Reply in Gmail)
+    // This is the preferred approach for replies - Gmail handles threading automatically
+    if (emailData.threadId) {
+      openGmailThread(emailData.threadId, userEmail);
+    } else {
+      // No threadId = new email, use compose URL with pre-filled content
+      const draftToOpen = isEditing ? editedData : emailData;
+      openGmailCompose(draftToOpen);
+    }
+    onOpenInGmail?.(draft.id);
+  }, [isEditing, editedData, emailData, userEmail, draft.id, onOpenInGmail]);
+
+  const handleReject = useCallback(async () => {
+    await onReject(draft.id, rejectFeedback || undefined);
+    setShowRejectInput(false);
+    setRejectFeedback('');
+  }, [draft.id, rejectFeedback, onReject]);
+
+  const handleStartEdit = () => {
+    setIsEditing(true);
+    setTimeout(() => bodyRef.current?.focus(), 0);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditedData(emailData);
+  };
+
+  // Generate summary if not provided
+  const summary = agentSummary ||
+    `Drafted a reply to ${emailData.originalEmail?.fromName || emailData.to[0]}`;
+
+  return (
+    <div className="space-y-0">
+      {/* Section 1: What Claude Did */}
+      <div className="flex items-start gap-3 pb-4">
+        <div className="w-8 h-8 rounded-full bg-inbox-accent-light flex items-center justify-center flex-shrink-0">
+          <span className="material-symbols-rounded text-base text-inbox-accent">auto_awesome</span>
+        </div>
+        <div className="flex-1 pt-1">
+          <p className="text-[15px] leading-relaxed text-inbox-text-primary">
+            {summary}
+          </p>
+        </div>
+      </div>
+
+      {/* Section 2: Original Email (Collapsible) */}
+      {emailData.originalEmail && (
+        <div className="border-t border-black/[0.06] py-4">
+          <button
+            onClick={() => setShowOriginal(!showOriginal)}
+            className="w-full flex items-center gap-3 text-left group"
+          >
+            <span className="material-symbols-rounded text-xl text-inbox-text-tertiary transition-transform">
+              {showOriginal ? 'expand_less' : 'expand_more'}
+            </span>
+            <div className="flex-1 min-w-0">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-inbox-text-tertiary">
+                Original email
+              </span>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-[14px] font-medium text-inbox-text-primary truncate">
+                  {emailData.originalEmail.fromName || emailData.originalEmail.from}
+                </span>
+                <span className="text-[13px] text-inbox-text-tertiary truncate">
+                  {emailData.originalEmail.subject}
+                </span>
+              </div>
+            </div>
+            {emailData.originalEmail.date && (
+              <span className="text-[13px] text-inbox-text-tertiary flex-shrink-0">
+                {emailData.originalEmail.date}
+              </span>
+            )}
+          </button>
+
+          {showOriginal && (
+            <div className="mt-4 ml-8 animate-fade-in">
+              <p className="text-[14px] leading-relaxed text-inbox-text-secondary whitespace-pre-wrap">
+                {emailData.originalEmail.body}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Section 3: Draft Reply */}
+      <div className="border-t border-black/[0.06] py-4">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-[11px] font-medium uppercase tracking-wider text-inbox-text-tertiary">
+            Your draft reply
+          </span>
+        </div>
+
+        {/* To field */}
+        <div className="flex items-start gap-2 mb-2">
+          <span className="text-[13px] text-inbox-text-tertiary w-16 pt-0.5 flex-shrink-0">To</span>
+          {isEditing ? (
+            <input
+              type="text"
+              value={editedData.to.join(', ')}
+              onChange={(e) =>
+                setEditedData({
+                  ...editedData,
+                  to: e.target.value.split(',').map((s) => s.trim()),
+                })
+              }
+              className="flex-1 text-[14px] text-inbox-text-primary bg-transparent border-b border-inbox-accent outline-none py-0.5 -my-0.5"
+            />
+          ) : (
+            <span className="text-[14px] text-inbox-text-primary">
+              {emailData.to.join(', ')}
+            </span>
+          )}
+        </div>
+
+        {/* CC field (only show if has values) */}
+        {(emailData.cc?.length ?? 0) > 0 && (
+          <div className="flex items-start gap-2 mb-2">
+            <span className="text-[13px] text-inbox-text-tertiary w-16 pt-0.5 flex-shrink-0">Cc</span>
+            {isEditing ? (
+              <input
+                type="text"
+                value={editedData.cc?.join(', ') || ''}
+                onChange={(e) =>
+                  setEditedData({
+                    ...editedData,
+                    cc: e.target.value.split(',').map((s) => s.trim()),
+                  })
+                }
+                className="flex-1 text-[14px] text-inbox-text-primary bg-transparent border-b border-inbox-accent outline-none py-0.5 -my-0.5"
+              />
+            ) : (
+              <span className="text-[14px] text-inbox-text-primary">
+                {emailData.cc?.join(', ')}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Subject field */}
+        <div className="flex items-start gap-2 mb-4">
+          <span className="text-[13px] text-inbox-text-tertiary w-16 pt-0.5 flex-shrink-0">Subject</span>
+          {isEditing ? (
+            <input
+              type="text"
+              value={editedData.subject}
+              onChange={(e) => setEditedData({ ...editedData, subject: e.target.value })}
+              className="flex-1 text-[14px] font-medium text-inbox-text-primary bg-transparent border-b border-inbox-accent outline-none py-0.5 -my-0.5"
+            />
+          ) : (
+            <span className="text-[14px] font-medium text-inbox-text-primary">
+              {emailData.subject}
+            </span>
+          )}
+        </div>
+
+        {/* Body */}
+        <div className="relative">
+          {isEditing ? (
+            <textarea
+              ref={bodyRef}
+              value={editedData.body}
+              onChange={(e) => setEditedData({ ...editedData, body: e.target.value })}
+              className="
+                w-full text-[15px] leading-relaxed text-inbox-text-primary
+                bg-transparent outline-none resize-none
+                border-l-2 border-inbox-accent pl-4 -ml-4
+                min-h-[120px]
+              "
+            />
+          ) : (
+            <div
+              onClick={handleStartEdit}
+              className="
+                text-[15px] leading-relaxed text-inbox-text-primary
+                whitespace-pre-wrap cursor-text
+                hover:bg-black/[0.02] -mx-3 px-3 py-2 -my-2 rounded
+                transition-colors duration-100
+              "
+            >
+              {emailData.body}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Section 4: Actions */}
+      <div className="border-t border-black/[0.06] pt-4">
+        {showRejectInput ? (
+          <div className="space-y-3 animate-fade-in">
+            <textarea
+              value={rejectFeedback}
+              onChange={(e) => setRejectFeedback(e.target.value)}
+              placeholder="What would you like changed? (optional)"
+              className="
+                w-full text-[14px] text-inbox-text-primary
+                bg-inbox-bg-input rounded-lg
+                px-3 py-2.5 outline-none
+                focus:ring-2 focus:ring-inbox-accent focus:ring-offset-0
+                placeholder:text-inbox-text-tertiary
+                resize-none
+              "
+              rows={2}
+              autoFocus
+            />
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowRejectInput(false)}
+                className="text-[14px] text-inbox-text-secondary hover:text-inbox-text-primary transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReject}
+                disabled={isLoading}
+                className="text-[14px] font-medium text-inbox-error hover:opacity-80 transition-opacity disabled:opacity-50"
+              >
+                Discard draft
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-end gap-3">
+            {isEditing && (
+              <button
+                onClick={handleCancelEdit}
+                className="
+                  px-4 py-2 text-[14px] text-inbox-text-secondary
+                  hover:text-inbox-text-primary hover:bg-inbox-bg-hover
+                  rounded-full transition-colors duration-100
+                "
+              >
+                Cancel
+              </button>
+            )}
+            {!isEditing && (
+              <button
+                onClick={() => setShowRejectInput(true)}
+                disabled={isLoading}
+                className="
+                  px-4 py-2 text-[14px] text-inbox-text-tertiary
+                  hover:text-inbox-error hover:bg-red-50
+                  rounded-full transition-colors duration-100 disabled:opacity-50
+                "
+              >
+                Reject
+              </button>
+            )}
+            <button
+              onClick={handleStartEdit}
+              disabled={isLoading || isEditing}
+              className="
+                px-4 py-2 text-[14px] text-inbox-text-secondary
+                hover:text-inbox-text-primary hover:bg-inbox-bg-hover
+                rounded-full transition-colors duration-100
+                disabled:opacity-50 disabled:pointer-events-none
+              "
+            >
+              Edit
+            </button>
+            <button
+              onClick={handleOpenInGmail}
+              disabled={isLoading}
+              className="
+                flex items-center gap-2
+                px-5 py-2.5 text-[14px] font-medium
+                bg-inbox-accent text-white
+                rounded-full
+                hover:bg-inbox-accent-hover hover:shadow-md
+                active:scale-[0.98]
+                transition-all duration-100
+                disabled:opacity-50 disabled:pointer-events-none
+              "
+            >
+              <span>{emailData.threadId ? 'Reply in Gmail' : 'Compose in Gmail'}</span>
+              <span className="material-symbols-rounded text-lg">open_in_new</span>
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default EmailDraftCard;

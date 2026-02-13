@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Research, ChatMessage } from '@/lib/types';
+import { supabaseAdmin, checkRateLimit } from '@/lib/supabase/server';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
@@ -14,6 +16,42 @@ interface ChatRequest {
 
 export async function POST(request: NextRequest) {
   try {
+    // SECURITY: Require authentication to prevent API abuse
+    const session = await getServerSession();
+    if (!session?.user?.email) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    // Get user profile for rate limiting
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('email', session.user.email)
+      .single();
+
+    if (profile) {
+      // SECURITY: Rate limit chat requests (20/min, 100/hour, 500/day)
+      const rateLimit = await checkRateLimit(profile.id, 'chat', {
+        perMinute: 20,
+        perHour: 100,
+        perDay: 500,
+      });
+
+      if (!rateLimit.allowed) {
+        return NextResponse.json(
+          {
+            error: 'Rate limit exceeded',
+            limitType: rateLimit.limitType,
+            resetAt: rateLimit.resetAt?.toISOString(),
+          },
+          { status: 429 }
+        );
+      }
+    }
+
     const body: ChatRequest = await request.json();
     const { taskTitle, taskResearch, message, history } = body;
 
@@ -22,7 +60,7 @@ export async function POST(request: NextRequest) {
     }
 
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-pro-preview-05-06',
+      model: 'gemini-2.0-flash',
       generationConfig: {
         temperature: 0.7,
         maxOutputTokens: 2048,

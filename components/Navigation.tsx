@@ -2,18 +2,20 @@
 
 import { MaterialIcon } from './ui/MaterialIcon';
 
-type ViewMode = 'active' | 'completed' | 'archived';
+type ViewMode = 'active' | 'completed' | 'archived' | 'insights';
 
 interface NavItem {
   id: ViewMode;
   label: string;
   icon: string;
   iconFilled: string;
+  hideCount?: boolean;
 }
 
+// Note: Insights is now shown via InsightBriefingCard in the task list, not as a tab
 const navItems: NavItem[] = [
   { id: 'active', label: 'Active', icon: 'radio_button_unchecked', iconFilled: 'task_alt' },
-  { id: 'completed', label: 'Completed', icon: 'check_circle', iconFilled: 'check_circle' },
+  { id: 'completed', label: 'Done', icon: 'check_circle', iconFilled: 'check_circle' },
   { id: 'archived', label: 'Archived', icon: 'inventory_2', iconFilled: 'inventory_2' },
 ];
 
@@ -44,6 +46,7 @@ export function Sidebar({ currentView, onViewChange, counts, className = '' }: S
           {navItems.map((item) => {
             const isActive = currentView === item.id;
             const count = counts[item.id];
+            const showCount = !item.hideCount && count > 0;
 
             return (
               <li key={item.id}>
@@ -67,7 +70,7 @@ export function Sidebar({ currentView, onViewChange, counts, className = '' }: S
                     fill={isActive}
                   />
                   <span className="flex-1 text-left">{item.label}</span>
-                  {count > 0 && (
+                  {showCount && (
                     <span className={`
                       px-2 py-0.5 text-label-small rounded-pill
                       ${isActive ? 'bg-on-primary-container/20' : 'bg-surface-container-high'}
@@ -111,6 +114,7 @@ export function BottomNav({ currentView, onViewChange, counts }: BottomNavProps)
         {navItems.map((item) => {
           const isActive = currentView === item.id;
           const count = counts[item.id];
+          const showCount = !item.hideCount && count > 0;
 
           return (
             <li key={item.id} className="flex-1">
@@ -135,7 +139,7 @@ export function BottomNav({ currentView, onViewChange, counts }: BottomNavProps)
                       className={isActive ? 'text-on-primary-container' : 'text-on-surface-variant'}
                     />
                   </div>
-                  {count > 0 && (
+                  {showCount && (
                     <span className="
                       absolute -top-1 -right-1
                       min-w-[18px] h-[18px]

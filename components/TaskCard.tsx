@@ -7,6 +7,18 @@ import { ProgressiveReveal } from './ProgressiveReveal';
 import { Card } from './ui/Card';
 import { CircularCheckbox } from './ui/CircularCheckbox';
 import { MaterialIcon } from './ui/MaterialIcon';
+import { QuickReferenceCard } from './QuickReferenceCard';
+
+// Detect if task is an informational query (questions don't need QuickReferenceCard)
+function isInformationalQuery(title: string): boolean {
+  const lowerTitle = title.toLowerCase().trim();
+  const questionStarters = [
+    'what ', 'who ', 'when ', 'where ', 'how ', 'why ', 'which ',
+    'list ', 'show ', 'tell ', 'summarize ', 'find ', 'search ',
+    'are there', 'is there', 'do i have', 'did i ',
+  ];
+  return questionStarters.some(starter => lowerTitle.startsWith(starter));
+}
 
 interface TaskCardProps {
   task: Task;
@@ -16,8 +28,12 @@ interface TaskCardProps {
   onDelete: (taskId: string) => void;
   onRestore: (taskId: string) => void;
   onShowDetails: (taskId: string) => void;
+  onTogglePin: (taskId: string) => void;
   isDragging?: boolean;
   isMobile?: boolean;
+  isSelected?: boolean;
+  showHoverActions?: boolean;
+  isAgentRunning?: boolean;
 }
 
 // Generate a concise summary for options (e.g., flights)
@@ -54,8 +70,12 @@ export function TaskCard({
   onDelete,
   onRestore,
   onShowDetails,
+  onTogglePin,
   isDragging,
   isMobile = false,
+  isSelected = false,
+  showHoverActions = false,
+  isAgentRunning = false,
 }: TaskCardProps) {
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isSwipeRevealed, setIsSwipeRevealed] = useState<'left' | 'right' | null>(null);
@@ -159,15 +179,17 @@ export function TaskCard({
         style={isMobile ? { transform: `translateX(${swipeOffset}px)`, transition: swipeOffset === 0 ? 'transform 0.2s ease-out' : 'none' } : {}}
       >
         <Card
-          variant="elevated"
+          variant="flat"
           className={`
             task-card cursor-pointer group
             ${isDragging ? 'dragging' : ''}
             ${isCompleted ? 'opacity-60' : ''}
+            ${isSelected ? 'bg-inbox-bg-selected' : ''}
           `}
           onClick={handleCardClick}
         >
-          <div className="flex items-center gap-3">
+          {/* Main content row */}
+          <div className="flex items-center gap-2">
             {/* Circular Checkbox */}
             <CircularCheckbox
               checked={isCompleted}
@@ -180,9 +202,13 @@ export function TaskCard({
             <div className="flex-1 min-w-0">
               {/* Title row */}
               <div className="flex items-center gap-2">
-                <h3 className={`text-base font-normal leading-snug ${isCompleted ? 'line-through text-on-surface-variant/50' : 'text-on-surface'}`}>
+                <h3 className={`text-inbox-body leading-snug ${isCompleted ? 'line-through text-inbox-text-tertiary' : 'text-inbox-text-primary'}`}>
                   {task.title}
                 </h3>
+                {/* Pin icon inline when pinned (only when hover actions hidden) */}
+                {task.isPinned && !isArchived && !isCompleted && !showHoverActions && (
+                  <MaterialIcon name="push_pin" size={14} weight={300} fill={true} className="text-inbox-accent flex-shrink-0" />
+                )}
               </div>
 
               {/* Researching state */}
@@ -196,53 +222,86 @@ export function TaskCard({
               {isReady && task.research && (
                 <div className="mt-1">
                   {hasOptions ? (
-                    <p className="text-body-medium text-on-surface-variant">
+                    <p className="text-inbox-caption text-inbox-text-secondary">
                       {getOptionsSummary(options)}
                     </p>
                   ) : (quickInfo?.phoneFormatted || quickInfo?.hours) ? (
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-body-small text-on-surface-variant">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-inbox-caption text-inbox-text-secondary">
                       {quickInfo?.phoneFormatted && (
                         <span className="flex items-center gap-1.5">
-                          <MaterialIcon name="call" size={16} />
-                          <span className="font-medium text-on-surface">{quickInfo.phoneFormatted}</span>
+                          <MaterialIcon name="call" size={14} className="text-inbox-text-tertiary" />
+                          <span className="text-inbox-text-primary">{quickInfo.phoneFormatted}</span>
                         </span>
                       )}
                       {quickInfo?.hours && (
                         <span className="flex items-center gap-1.5">
-                          <MaterialIcon name="schedule" size={16} />
+                          <MaterialIcon name="schedule" size={14} className="text-inbox-text-tertiary" />
                           {quickInfo.hours}
                         </span>
                       )}
                     </div>
                   ) : quickInfo?.price ? (
-                    <p className="text-body-medium font-medium text-success">
+                    <p className="text-inbox-caption font-medium text-inbox-success">
                       {quickInfo.price}
                     </p>
                   ) : null}
                 </div>
               )}
+
+              {/* Agent quick info - from Claude agent execution (hidden for informational queries) */}
+              {task.agentQuickInfo && !isInformationalQuery(task.title) && (
+                <div className="mt-1">
+                  <QuickReferenceCard quickInfo={task.agentQuickInfo} compact />
+                </div>
+              )}
             </div>
 
-            {/* Actions - hidden by default on desktop, show on hover */}
-            {!isMobile && (
-              <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {/* Agent running indicator */}
+            {isAgentRunning && (
+              <div className="flex-shrink-0 flex items-center gap-2 text-inbox-accent">
+                <MaterialIcon
+                  name="progress_activity"
+                  size={18}
+                  className="animate-spin"
+                />
+                <span className="text-inbox-caption">Working...</span>
+              </div>
+            )}
+
+            {/* Hover actions - only in single-pane view */}
+            {showHoverActions && !isMobile && (
+              <div className="flex-shrink-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                {!isArchived && !isCompleted && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onTogglePin(task.id); }}
+                    className={`p-1.5 rounded-full transition-colors duration-100 ${
+                      task.isPinned
+                        ? 'text-inbox-accent hover:bg-inbox-accent/10'
+                        : 'text-inbox-text-tertiary hover:text-inbox-text-primary hover:bg-inbox-bg-hover'
+                    }`}
+                    aria-label={task.isPinned ? "Unpin" : "Pin to top"}
+                    title={task.isPinned ? "Unpin" : "Pin to top"}
+                  >
+                    <MaterialIcon name="push_pin" size={18} weight={300} fill={task.isPinned} />
+                  </button>
+                )}
                 {!isArchived && (
                   <button
                     onClick={handleArchive}
-                    className="p-2 rounded-full text-on-surface-variant hover:text-on-surface hover:bg-on-surface/8 transition-colors"
+                    className="p-1.5 rounded-full text-inbox-text-tertiary hover:text-inbox-text-primary hover:bg-inbox-bg-hover transition-colors duration-100"
                     aria-label="Archive"
                     title="Archive"
                   >
-                    <MaterialIcon name="inventory_2" size="small" />
+                    <MaterialIcon name="inventory_2" size={18} weight={300} />
                   </button>
                 )}
                 <button
                   onClick={handleDelete}
-                  className="p-2 rounded-full text-on-surface-variant hover:text-error hover:bg-error/8 transition-colors"
+                  className="p-1.5 rounded-full text-inbox-text-tertiary hover:text-inbox-error hover:bg-inbox-error/10 transition-colors duration-100"
                   aria-label="Delete"
                   title="Delete"
                 >
-                  <MaterialIcon name="delete" size="small" />
+                  <MaterialIcon name="delete" size={18} weight={300} />
                 </button>
               </div>
             )}

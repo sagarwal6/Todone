@@ -70,7 +70,7 @@ export function OptionCard({ option, compact = false }: OptionCardProps) {
 
         {/* Right side - price and action */}
         <div className="flex-shrink-0 text-right">
-          {option.price && (
+          {option.price && !option.price.toLowerCase().includes('unable') && (
             <div className={`font-semibold text-on-surface ${compact ? 'text-title-medium' : 'text-title-large'}`}>
               {option.price}
             </div>

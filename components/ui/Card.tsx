@@ -2,7 +2,7 @@
 
 import React, { forwardRef } from "react";
 
-type CardVariant = "elevated" | "filled" | "outlined";
+type CardVariant = "elevated" | "filled" | "outlined" | "flat";
 
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   variant?: CardVariant;
@@ -11,16 +11,22 @@ interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
 }
 
+// Inbox-style card variants - minimal chrome, content-focused
 const variantStyles: Record<CardVariant, string> = {
-  elevated: "bg-transparent hover:bg-surface-container/50",
-  filled: "bg-surface-container-low/40",
-  outlined: "bg-transparent",
+  // Flat row - Inbox default: transparent, hover reveals background
+  flat: "bg-transparent hover:bg-inbox-bg-hover",
+  // Elevated - for panels/modals with subtle shadow
+  elevated: "bg-inbox-bg-primary shadow-inbox-subtle",
+  // Filled - subtle background container
+  filled: "bg-inbox-bg-input",
+  // Outlined - minimal border
+  outlined: "bg-transparent border border-inbox-divider",
 };
 
 export const Card = forwardRef<HTMLDivElement, CardProps>(
   (
     {
-      variant = "elevated",
+      variant = "flat",
       interactive = false,
       selected = false,
       className = "",
@@ -29,17 +35,19 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
     },
     ref
   ) => {
+    // Inbox-style base: minimal padding, quick transitions
     const baseStyles = `
-      rounded-lg px-3 py-3
-      transition-colors duration-150 ease-out
+      px-3 py-3
+      transition-colors duration-100 ease-out
     `;
 
     const interactiveStyles = interactive
-      ? "cursor-pointer state-layer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      ? "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inbox-accent"
       : "";
 
+    // Inbox-style selection - light blue background
     const selectedStyles = selected
-      ? "ring-2 ring-primary bg-primary-container/20"
+      ? "bg-inbox-bg-selected hover:bg-inbox-bg-selected"
       : "";
 
     return (

@@ -34,17 +34,18 @@ export function TaskInput({ onAddTask, disabled }: TaskInputProps) {
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Add a task... e.g., Find flights to NYC next weekend"
+          placeholder="Add a task..."
           disabled={disabled}
           className="
             w-full px-4 py-3 pr-12
-            text-body-large text-on-surface
-            bg-surface-container rounded-sm
+            text-inbox-body text-inbox-text-primary
+            bg-inbox-bg-input rounded-lg
             border-0
-            focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface
+            focus:outline-none focus:ring-2 focus:ring-inbox-accent focus:ring-offset-0
+            focus:bg-inbox-bg-primary
             disabled:opacity-38 disabled:cursor-not-allowed
-            transition-all duration-200 ease-md-standard
-            placeholder:text-on-surface-variant
+            transition-all duration-150
+            placeholder:text-inbox-text-tertiary
           "
         />
         <button
@@ -53,15 +54,15 @@ export function TaskInput({ onAddTask, disabled }: TaskInputProps) {
           className="
             absolute right-2 top-1/2 -translate-y-1/2
             p-2 rounded-full
-            text-on-surface-variant
-            hover:text-primary hover:bg-primary/8
+            text-inbox-text-tertiary
+            hover:text-inbox-accent hover:bg-inbox-accent/10
             disabled:opacity-38 disabled:cursor-not-allowed
-            transition-all duration-200 ease-md-standard
-            focus:outline-none focus:ring-2 focus:ring-primary
+            transition-colors duration-100
+            focus:outline-none focus:ring-2 focus:ring-inbox-accent
           "
           aria-label="Add task"
         >
-          <MaterialIcon name="add" size="small" />
+          <MaterialIcon name="add" size={20} weight={400} />
         </button>
       </div>
     </div>

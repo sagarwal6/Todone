@@ -113,3 +113,73 @@ export function TaskCardSkeleton({ className = "" }: TaskCardSkeletonProps) {
     </div>
   );
 }
+
+interface AgentProgressSkeletonProps {
+  className?: string;
+}
+
+export function AgentProgressSkeleton({ className = "" }: AgentProgressSkeletonProps) {
+  return (
+    <div
+      className={`bg-blue-50 rounded-xl border border-gray-200 p-4 ${className}`}
+    >
+      <div className="flex items-center gap-3 mb-3">
+        <Skeleton variant="circular" width={24} height={24} />
+        <div className="flex-1">
+          <Skeleton width="50%" height={16} className="mb-1" />
+          <Skeleton width="30%" height={12} />
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <Skeleton variant="rounded" width={100} height={28} />
+        <Skeleton variant="rounded" width={100} height={28} />
+        <Skeleton variant="rounded" width={80} height={28} />
+      </div>
+    </div>
+  );
+}
+
+interface DraftCardSkeletonProps {
+  type?: 'email' | 'calendar';
+  className?: string;
+}
+
+export function DraftCardSkeleton({ type = 'email', className = "" }: DraftCardSkeletonProps) {
+  const bgColor = type === 'email' ? 'bg-blue-50' : 'bg-green-50';
+
+  return (
+    <div className={`bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden ${className}`}>
+      {/* Header */}
+      <div className={`${bgColor} px-4 py-3 border-b flex items-center gap-2`}>
+        <Skeleton variant="circular" width={20} height={20} />
+        <Skeleton width={80} height={16} />
+      </div>
+
+      {/* Content */}
+      <div className="p-4 space-y-4">
+        {/* To/Subject */}
+        <div className="flex items-center gap-2">
+          <Skeleton width={40} height={14} />
+          <Skeleton width="60%" height={14} />
+        </div>
+        <div className="flex items-center gap-2">
+          <Skeleton width={40} height={14} />
+          <Skeleton width="80%" height={16} className="font-medium" />
+        </div>
+
+        {/* Body */}
+        <div className="bg-gray-50 rounded-lg p-3">
+          <Skeleton variant="text" lines={4} />
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="px-4 py-3 bg-gray-50 border-t flex items-center gap-2">
+        <Skeleton variant="rounded" width={60} height={32} />
+        <Skeleton variant="rounded" width={50} height={32} />
+        <div className="flex-1" />
+        <Skeleton variant="rounded" width={100} height={32} />
+      </div>
+    </div>
+  );
+}

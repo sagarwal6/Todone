@@ -59,6 +59,13 @@ export type UIType =
   | 'comparison_table' // Side-by-side comparison
   | 'steps_list';      // Step-by-step instructions
 
+// AI-generated suggested follow-up actions
+export interface SuggestedFollowUp {
+  label: string;    // Short action phrase, e.g., "generate more options"
+  prompt: string;   // Full prompt to send if user clicks
+  icon: string;     // Material icon name
+}
+
 export interface Research {
   summary: string;
   taskType: string;
@@ -71,6 +78,7 @@ export interface Research {
   structuredData?: StructuredData;
   options?: OptionCard[];  // Comparable options (flights, hotels, products, etc.)
   uiType?: UIType;         // AI-selected UI type for this task
+  suggestedFollowUps?: SuggestedFollowUp[];  // AI-generated task-specific follow-ups
 }
 
 export interface ChatMessage {
@@ -86,6 +94,30 @@ export interface Feedback {
   createdAt: number;
 }
 
+export interface AgentQuickInfo {
+  phone?: string;
+  phoneFormatted?: string;
+  hours?: string;
+  address?: string;
+  email?: string;
+  website?: string;
+  accountNumber?: string;
+  contactName?: string;
+  contactTitle?: string;
+  deadline?: string;
+  price?: string;
+  summary?: string;
+}
+
+// Persisted agent step for showing what the agent did
+export interface AgentStepSummary {
+  tool: string;           // Tool name (gmail_search, web_search, etc.)
+  detail: string | null;  // Contextual detail (search query, etc.)
+  durationMs?: number;    // How long the step took
+}
+
+export type TaskSource = 'user' | 'insight';
+
 export interface Task {
   id: string;
   title: string;
@@ -97,6 +129,12 @@ export interface Task {
   updatedAt: number;
   completedAt: number | null;
   completedSteps?: string[];
+  isPinned?: boolean;
+  chatMessages?: ChatMessage[];
+  agentQuickInfo?: AgentQuickInfo;  // Key facts from agent execution
+  agentSteps?: AgentStepSummary[];  // Persisted agent steps for display
+  customPrompt?: string | null;     // Custom prompt for insight-driven tasks
+  source?: TaskSource;              // Where task originated: user input or insight scan
 }
 
 export interface ResearchRequest {
@@ -161,3 +199,63 @@ export const TASK_PROGRESS_STAGES: Record<string, ProgressStatus[]> = {
     { stage: 'formatting', message: 'Preparing results...', progress: 95 },
   ],
 };
+
+// =============================================================================
+// Supabase Sync Converters
+// =============================================================================
+
+import type { Database, Json } from '@/lib/supabase/types';
+
+type SupabaseTaskRow = Database['public']['Tables']['tasks']['Row'];
+type SupabaseTaskInsert = Database['public']['Tables']['tasks']['Insert'];
+
+/**
+ * Convert client Task to Supabase row format.
+ * No status mapping needed - migration 008 added client statuses to DB enum.
+ */
+export function toSupabaseTask(task: Task, userId: string): SupabaseTaskInsert {
+  return {
+    id: task.id,
+    user_id: userId,
+    title: task.title,
+    status: task.status, // Direct - no mapping needed
+    order: task.order,
+    is_pinned: task.isPinned ?? false,
+    research: task.research as unknown as Json | null,
+    feedback: task.feedback as unknown as Json | null,
+    chat_messages: (task.chatMessages ?? []) as unknown as Json[],
+    agent_quick_info: task.agentQuickInfo as unknown as Json | null,
+    agent_steps_summary: (task.agentSteps ?? []) as unknown as Json[],
+    custom_prompt: task.customPrompt ?? null,
+    completed_steps: task.completedSteps ?? [],
+    source: task.source ?? 'user',
+    created_at: new Date(task.createdAt).toISOString(),
+    updated_at: new Date(task.updatedAt).toISOString(),
+    completed_at: task.completedAt ? new Date(task.completedAt).toISOString() : null,
+  };
+}
+
+/**
+ * Convert Supabase row to client Task format.
+ * No status mapping needed - migration 008 added client statuses to DB enum.
+ */
+export function fromSupabaseTask(row: SupabaseTaskRow): Task {
+  return {
+    id: row.id,
+    title: row.title,
+    status: row.status as TaskStatus, // Direct - no mapping needed
+    order: row.order,
+    isPinned: row.is_pinned,
+    research: row.research as unknown as Research | null,
+    feedback: row.feedback as unknown as Feedback | null,
+    chatMessages: (row.chat_messages ?? []) as unknown as ChatMessage[],
+    agentQuickInfo: row.agent_quick_info as unknown as AgentQuickInfo | undefined,
+    agentSteps: (row.agent_steps_summary ?? []) as unknown as AgentStepSummary[],
+    customPrompt: row.custom_prompt ?? undefined,
+    source: (row.source ?? 'user') as TaskSource,
+    completedSteps: row.completed_steps ?? [],
+    createdAt: new Date(row.created_at).getTime(),
+    updatedAt: new Date(row.updated_at).getTime(),
+    completedAt: row.completed_at ? new Date(row.completed_at).getTime() : null,
+  };
+}

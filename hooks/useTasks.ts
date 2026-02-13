@@ -1,44 +1,213 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Task, TaskStatus, Research, Feedback } from '@/lib/types';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Task, TaskStatus, TaskSource, Research, Feedback, AgentQuickInfo, AgentStepSummary } from '@/lib/types';
 import * as taskOps from '@/lib/tasks';
+import { saveTasks } from '@/lib/storage';
+
+export type SyncError = {
+  type: 'network' | 'auth' | 'server';
+  message: string;
+  taskId?: string;
+  dismissedAt?: number;
+};
+
+// Fetch tasks from Supabase
+async function fetchTasksFromSupabase(): Promise<{ tasks: Task[] | null; error: SyncError | null }> {
+  try {
+    const response = await fetch('/api/tasks');
+    if (response.status === 401) {
+      return { tasks: null, error: { type: 'auth', message: 'Please sign in to sync tasks' } };
+    }
+    if (!response.ok) {
+      return { tasks: null, error: { type: 'server', message: 'Failed to load tasks from server' } };
+    }
+    const data = await response.json();
+    return { tasks: data.tasks || [], error: null };
+  } catch {
+    return { tasks: null, error: { type: 'network', message: 'Unable to connect to server' } };
+  }
+}
+
+// Sync a task to Supabase with error reporting
+async function syncTaskToSupabase(
+  task: Task,
+  method: 'POST' | 'PUT' = 'POST'
+): Promise<{ success: boolean; error?: SyncError }> {
+  try {
+    const url = method === 'POST' ? '/api/tasks' : `/api/tasks/${task.id}`;
+    const response = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(task),
+    });
+    if (response.status === 401) {
+      return { success: false, error: { type: 'auth', message: 'Session expired', taskId: task.id } };
+    }
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      console.error(`Failed to sync task to Supabase (${method}):`, errData);
+      return { success: false, error: { type: 'server', message: 'Failed to save task', taskId: task.id } };
+    }
+    return { success: true };
+  } catch {
+    return { success: false, error: { type: 'network', message: 'Unable to save task', taskId: task.id } };
+  }
+}
+
+// Delete a task from Supabase (hard delete)
+async function deleteTaskFromSupabase(taskId: string): Promise<{ success: boolean; error?: SyncError }> {
+  try {
+    const response = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+    if (response.status === 401) {
+      return { success: false, error: { type: 'auth', message: 'Session expired', taskId } };
+    }
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      console.error('Failed to delete task from Supabase:', errData);
+      return { success: false, error: { type: 'server', message: 'Failed to delete task', taskId } };
+    }
+    return { success: true };
+  } catch {
+    return { success: false, error: { type: 'network', message: 'Unable to delete task', taskId } };
+  }
+}
+
+// Merge Supabase tasks with localStorage tasks (Supabase wins for conflicts)
+// For cross-device sync: Supabase is source of truth, localStorage is just cache
+function mergeTasks(supabaseTasks: Task[], _localTasks: Task[]): Task[] {
+  // Supabase is the source of truth - just use Supabase tasks
+  // Local-only tasks should have been synced when created
+  return supabaseTasks.sort((a, b) => a.order - b.order);
+}
 
 export function useTasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<SyncError | null>(null);
 
-  // Load tasks from localStorage on mount
-  useEffect(() => {
-    setTasks(taskOps.getAllTasks());
+  // Track tasks that have been synced to avoid duplicate POSTs
+  const syncedTaskIds = useRef<Set<string>>(new Set());
+  // Track if initial fetch from Supabase has been attempted
+  const initialFetchDone = useRef(false);
+  // Store previous state for rollback
+  const previousTasksRef = useRef<Task[]>([]);
+
+  // Dismiss sync error
+  const dismissSyncError = useCallback(() => {
+    setSyncError(prev => prev ? { ...prev, dismissedAt: Date.now() } : null);
+  }, []);
+
+  // Fetch from Supabase and merge with localStorage
+  const loadTasks = useCallback(async (isRefetch = false) => {
+    if (isRefetch) {
+      setIsSyncing(true);
+    }
+
+    // First, load from localStorage for instant display
+    const localTasks = taskOps.getAllTasks();
+    if (!initialFetchDone.current) {
+      setTasks(localTasks);
+    }
+
+    // Then fetch from Supabase
+    const { tasks: supabaseTasks, error } = await fetchTasksFromSupabase();
+
+    if (error) {
+      // If auth error on initial load, just use localStorage
+      if (error.type === 'auth' && !initialFetchDone.current) {
+        setIsLoading(false);
+        initialFetchDone.current = true;
+        setIsSyncing(false);
+        return;
+      }
+      // For other errors, show error but keep current tasks
+      setSyncError(error);
+      setIsLoading(false);
+      setIsSyncing(false);
+      return;
+    }
+
+    if (supabaseTasks) {
+      // Supabase is source of truth
+      const mergedTasks = mergeTasks(supabaseTasks, localTasks);
+
+      // Update React state
+      setTasks(mergedTasks);
+
+      // Update localStorage to match merged state
+      saveTasks(mergedTasks);
+
+      // Mark all Supabase tasks as synced
+      supabaseTasks.forEach(t => syncedTaskIds.current.add(t.id));
+    }
+
     setIsLoading(false);
+    setIsSyncing(false);
+    initialFetchDone.current = true;
   }, []);
 
-  // Refresh tasks from localStorage
+  // Load tasks on mount
+  useEffect(() => {
+    loadTasks();
+  }, [loadTasks]);
+
+  // Refetch on window focus for cross-device sync
+  useEffect(() => {
+    const handleFocus = () => {
+      // Only refetch if initial load is done and not currently syncing
+      if (initialFetchDone.current && !isSyncing) {
+        loadTasks(true);
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [loadTasks, isSyncing]);
+
+  // Refresh tasks from Supabase (triggers cross-device sync)
   const refreshTasks = useCallback(() => {
-    setTasks(taskOps.getAllTasks());
-  }, []);
+    loadTasks(true);
+  }, [loadTasks]);
 
-  // Create a new task with optimistic update
-  const addTask = useCallback((title: string): Task => {
-    const newTask = taskOps.createTask(title);
+  // Create a new task with optimistic update + Supabase sync
+  const addTask = useCallback((title: string, customPrompt?: string | null, source?: TaskSource): Task => {
+    const newTask = taskOps.createTask(title, customPrompt, source);
     setTasks(prev => [...prev, newTask].sort((a, b) => a.order - b.order));
+
+    // Sync to Supabase with error reporting
+    syncTaskToSupabase(newTask, 'POST').then(result => {
+      if (result.success) {
+        syncedTaskIds.current.add(newTask.id);
+      } else if (result.error) {
+        setSyncError(result.error);
+      }
+    });
+
     return newTask;
   }, []);
 
-  // Update task status
+  // Update task status + Supabase sync
   const updateStatus = useCallback((taskId: string, status: TaskStatus): void => {
+    const now = Date.now();
     // Optimistic update
     setTasks(prev => prev.map(t =>
       t.id === taskId
-        ? { ...t, status, updatedAt: Date.now(), completedAt: status === 'completed' ? Date.now() : null }
+        ? { ...t, status, updatedAt: now, completedAt: status === 'completed' ? now : null }
         : t
     ));
 
-    taskOps.setTaskStatus(taskId, status);
+    // Update localStorage and sync to Supabase
+    const task = taskOps.setTaskStatus(taskId, status);
+    if (task) {
+      syncTaskToSupabase(task, 'PUT').then(result => {
+        if (result.error) setSyncError(result.error);
+      });
+    }
   }, []);
 
-  // Set task research
+  // Set task research + Supabase sync
   const setResearch = useCallback((taskId: string, research: Research): void => {
     // Optimistic update
     setTasks(prev => prev.map(t =>
@@ -47,10 +216,16 @@ export function useTasks() {
         : t
     ));
 
-    taskOps.setTaskResearch(taskId, research);
+    // Update localStorage and sync to Supabase
+    const task = taskOps.setTaskResearch(taskId, research);
+    if (task) {
+      syncTaskToSupabase(task, 'PUT').then(result => {
+        if (result.error) setSyncError(result.error);
+      });
+    }
   }, []);
 
-  // Mark task as personal (no research needed)
+  // Mark task as personal (no research needed) + Supabase sync
   const markAsPersonal = useCallback((taskId: string): void => {
     // Optimistic update
     setTasks(prev => prev.map(t =>
@@ -59,10 +234,16 @@ export function useTasks() {
         : t
     ));
 
-    taskOps.setTaskAsPersonal(taskId);
+    // Update localStorage and sync to Supabase
+    const task = taskOps.setTaskAsPersonal(taskId);
+    if (task) {
+      syncTaskToSupabase(task, 'PUT').then(result => {
+        if (result.error) setSyncError(result.error);
+      });
+    }
   }, []);
 
-  // Set task feedback
+  // Set task feedback + Supabase sync
   const setFeedback = useCallback((taskId: string, feedback: Feedback): void => {
     // Optimistic update
     setTasks(prev => prev.map(t =>
@@ -71,7 +252,13 @@ export function useTasks() {
         : t
     ));
 
-    taskOps.setTaskFeedback(taskId, feedback);
+    // Update localStorage and sync to Supabase
+    const task = taskOps.setTaskFeedback(taskId, feedback);
+    if (task) {
+      syncTaskToSupabase(task, 'PUT').then(result => {
+        if (result.error) setSyncError(result.error);
+      });
+    }
   }, []);
 
   // Mark task as researching
@@ -108,15 +295,20 @@ export function useTasks() {
     taskOps.restoreTask(taskId);
   }, []);
 
-  // Delete a task
+  // Delete a task + Supabase sync (hard delete)
   const deleteTask = useCallback((taskId: string): void => {
     // Optimistic update
     setTasks(prev => prev.filter(t => t.id !== taskId));
 
     taskOps.removeTask(taskId);
+
+    // Hard delete from Supabase
+    deleteTaskFromSupabase(taskId).then(result => {
+      if (result.error) setSyncError(result.error);
+    });
   }, []);
 
-  // Update task title
+  // Update task title + Supabase sync
   const updateTitle = useCallback((taskId: string, title: string): void => {
     // Optimistic update
     setTasks(prev => prev.map(t =>
@@ -125,7 +317,13 @@ export function useTasks() {
         : t
     ));
 
-    taskOps.updateTaskTitle(taskId, title);
+    // Update localStorage and sync to Supabase
+    const task = taskOps.updateTaskTitle(taskId, title);
+    if (task) {
+      syncTaskToSupabase(task, 'PUT').then(result => {
+        if (result.error) setSyncError(result.error);
+      });
+    }
   }, []);
 
   // Reorder tasks (for drag and drop)
@@ -162,17 +360,100 @@ export function useTasks() {
     taskOps.toggleTaskStep(taskId, stepLabel);
   }, []);
 
-  // Filter helpers
-  const activeTasks = tasks.filter(t => t.status !== 'completed' && t.status !== 'archived');
-  const completedTasks = tasks.filter(t => t.status === 'completed');
-  const archivedTasks = tasks.filter(t => t.status === 'archived');
+  // Toggle pin status for a task + Supabase sync
+  const togglePin = useCallback((taskId: string): void => {
+    // Optimistic update
+    setTasks(prev => prev.map(t =>
+      t.id === taskId
+        ? { ...t, isPinned: !t.isPinned, updatedAt: Date.now() }
+        : t
+    ));
+
+    // Update localStorage and sync to Supabase
+    const task = taskOps.togglePinTask(taskId);
+    if (task) {
+      syncTaskToSupabase(task, 'PUT').then(result => {
+        if (result.error) setSyncError(result.error);
+      });
+    }
+  }, []);
+
+  // Add a chat message to a task (with deduplication)
+  const addChatMessage = useCallback((taskId: string, message: { id: string; role: 'user' | 'assistant'; content: string; timestamp: number }): void => {
+    // Optimistic update with deduplication check
+    setTasks(prev => prev.map(t => {
+      if (t.id !== taskId) return t;
+
+      // Check for duplicate by ID
+      const existingMessages = t.chatMessages || [];
+      if (existingMessages.some(m => m.id === message.id)) {
+        // Message already exists, don't add duplicate
+        return t;
+      }
+
+      return { ...t, chatMessages: [...existingMessages, message], updatedAt: Date.now() };
+    }));
+
+    taskOps.addChatMessage(taskId, message);
+  }, []);
+
+  // Set agent quick info for a task + Supabase sync
+  const setAgentQuickInfo = useCallback((taskId: string, agentQuickInfo: AgentQuickInfo): void => {
+    // Optimistic update
+    setTasks(prev => prev.map(t =>
+      t.id === taskId
+        ? { ...t, agentQuickInfo, updatedAt: Date.now() }
+        : t
+    ));
+
+    // Update localStorage and sync to Supabase
+    const task = taskOps.setAgentQuickInfo(taskId, agentQuickInfo);
+    if (task) {
+      syncTaskToSupabase(task, 'PUT').then(result => {
+        if (result.error) setSyncError(result.error);
+      });
+    }
+  }, []);
+
+  // Set agent steps for a task (persisted for display) + Supabase sync
+  const setAgentSteps = useCallback((taskId: string, agentSteps: AgentStepSummary[]): void => {
+    // Optimistic update
+    setTasks(prev => prev.map(t =>
+      t.id === taskId
+        ? { ...t, agentSteps, updatedAt: Date.now() }
+        : t
+    ));
+
+    // Update localStorage and sync to Supabase
+    const task = taskOps.setAgentSteps(taskId, agentSteps);
+    if (task) {
+      syncTaskToSupabase(task, 'PUT').then(result => {
+        if (result.error) setSyncError(result.error);
+      });
+    }
+  }, []);
+
+  // Filter helpers - exclude insight-sourced tasks from visible lists
+  const activeTasks = tasks.filter(t => t.status !== 'completed' && t.status !== 'archived' && t.source !== 'insight');
+  const completedTasks = tasks.filter(t => t.status === 'completed' && t.source !== 'insight');
+  const archivedTasks = tasks.filter(t => t.status === 'archived' && t.source !== 'insight');
+  const pinnedTasks = activeTasks.filter(t => t.isPinned);
+  const unpinnedTasks = activeTasks.filter(t => !t.isPinned);
+  // Insight tasks are hidden from main lists but accessible for result tracking
+  const insightTasks = tasks.filter(t => t.source === 'insight');
 
   return {
     tasks,
     activeTasks,
     completedTasks,
     archivedTasks,
+    pinnedTasks,
+    unpinnedTasks,
+    insightTasks,
     isLoading,
+    isSyncing,
+    syncError,
+    dismissSyncError,
     addTask,
     updateStatus,
     setResearch,
@@ -187,5 +468,9 @@ export function useTasks() {
     reorderTasks,
     refreshTasks,
     toggleStep,
+    togglePin,
+    addChatMessage,
+    setAgentQuickInfo,
+    setAgentSteps,
   };
 }
