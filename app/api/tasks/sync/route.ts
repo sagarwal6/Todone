@@ -8,13 +8,14 @@
 
 import { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { toSupabaseTask, fromSupabaseTask } from '@/lib/types';
 import type { Task } from '@/lib/types';
 
 export async function POST(request: NextRequest) {
   // Get session
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
