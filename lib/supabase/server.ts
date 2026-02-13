@@ -6,33 +6,60 @@ import type { Database } from './types';
  * ONLY use in server-side code (API routes, server components)
  * Bypasses RLS for admin operations
  *
- * Note: Using 'any' type for MVP flexibility until schema is fully synced
+ * Note: Using lazy initialization to avoid build-time errors
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const supabaseAdmin: SupabaseClient<any> = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
+let _supabaseAdmin: SupabaseClient<any> | null = null;
+
+export function getSupabaseAdmin(): SupabaseClient<any> {
+  if (!_supabaseAdmin) {
+    _supabaseAdmin = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
   }
-);
+  return _supabaseAdmin;
+}
+
+// For backwards compatibility - lazy getter
+export const supabaseAdmin = new Proxy({} as SupabaseClient<any>, {
+  get(_, prop) {
+    return (getSupabaseAdmin() as any)[prop];
+  },
+});
 
 /**
  * Typed Supabase client - use when schema is properly synced
  */
-export const supabaseTyped = createClient<Database>(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
+let _supabaseTyped: SupabaseClient<Database> | null = null;
+
+export function getSupabaseTyped(): SupabaseClient<Database> {
+  if (!_supabaseTyped) {
+    _supabaseTyped = createClient<Database>(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
   }
-);
+  return _supabaseTyped;
+}
+
+export const supabaseTyped = new Proxy({} as SupabaseClient<Database>, {
+  get(_, prop) {
+    return (getSupabaseTyped() as any)[prop];
+  },
+});
 
 /**
  * Create a Supabase client for a specific user context
