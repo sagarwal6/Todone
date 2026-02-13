@@ -6,14 +6,9 @@ const config: CapacitorConfig = {
   webDir: 'out', // Required but not used when loading from server URL
 
   // Server URL approach: load web app from remote server
-  // For development: uncomment the localhost line
-  // For production: set your deployed URL
   server: {
-    // Development (run `npm run dev` first, use your machine's IP for physical device):
-    // url: 'http://localhost:3000',
-
-    // Production (set your deployed URL):
-    // url: 'https://todone.yourdomain.com',
+    // Production URL (Vercel deployment)
+    url: 'https://todone-dusky.vercel.app',
 
     // Allow navigation to external URLs (for OAuth redirects)
     allowNavigation: [
