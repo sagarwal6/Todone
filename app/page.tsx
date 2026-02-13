@@ -2,6 +2,8 @@
 
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import { useSession, signOut } from 'next-auth/react';
+import { useNativeAuth } from '@/hooks/useNativeAuth';
+import { isNativePlatform } from '@/lib/utils/platform';
 import { TaskInput } from '@/components/TaskInput';
 import { TaskList } from '@/components/TaskList';
 import { ConversationPanel } from '@/components/ConversationPanel';
@@ -57,9 +59,18 @@ function transformPendingDrafts(drafts: AgentPendingDraft[] | undefined): LocalP
 
 export default function Home() {
   const { data: session, status } = useSession();
+  const { mobileUser } = useNativeAuth();
+  const [isNative, setIsNative] = useState(false);
+
+  // Check platform on mount
+  useEffect(() => {
+    setIsNative(isNativePlatform());
+  }, []);
 
   // Show login screen if not authenticated
-  if (status === 'loading') {
+  // For web: check NextAuth session
+  // For native: check mobile session from localStorage
+  if (status === 'loading' && !isNative) {
     return (
       <div className="min-h-screen bg-inbox-bg-primary flex items-center justify-center">
         <div className="animate-pulse text-inbox-text-secondary">Loading...</div>
@@ -67,7 +78,10 @@ export default function Home() {
     );
   }
 
-  if (!session) {
+  // Check if user is authenticated via either method
+  const isAuthenticated = session || mobileUser;
+
+  if (!isAuthenticated) {
     return <LoginScreen />;
   }
 
@@ -75,6 +89,17 @@ export default function Home() {
 }
 
 function AuthenticatedHome() {
+  const { signOutNative } = useNativeAuth();
+
+  const handleSignOut = useCallback(async () => {
+    if (isNativePlatform()) {
+      await signOutNative();
+      window.location.reload();
+    } else {
+      signOut();
+    }
+  }, [signOutNative]);
+
   const {
     tasks,
     activeTasks,
@@ -562,7 +587,7 @@ function AuthenticatedHome() {
 
           {/* Sign out button */}
           <button
-            onClick={() => signOut()}
+            onClick={handleSignOut}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-inbox-caption text-inbox-text-secondary hover:text-inbox-text-primary hover:bg-inbox-bg-hover transition-colors"
           >
             <MaterialIcon name="logout" size={16} weight={300} />

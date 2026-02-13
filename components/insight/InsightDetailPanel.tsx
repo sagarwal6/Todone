@@ -842,7 +842,7 @@ export default function InsightDetailPanel({
                 )}
                 {(replyMode === 'write' || hasDraftGenerated) ? (
                   /* Has draft text - show Copy + Open in Gmail */
-                  <>
+                  <div className={`flex gap-2 ${isEmailCollapsed && hasDraftGenerated ? '' : 'flex-col'}`}>
                     <button
                       onClick={handleCopyDraft}
                       disabled={!draftText.trim()}
@@ -883,7 +883,7 @@ export default function InsightDetailPanel({
                       <span className="material-symbols-rounded text-base">open_in_new</span>
                       Open in Gmail
                     </button>
-                  </>
+                  </div>
                 ) : (
                   /* Draft for me (before generation): Draft button triggers AI */
                   <button
