@@ -113,7 +113,7 @@ export async function POST(
     userId,
     taskId,
     'task_cancelled',
-    null, // Intentionally NOT logging reason to avoid storing user data
+    undefined, // Intentionally NOT logging reason to avoid storing user data
     request.headers.get('x-forwarded-for') || undefined,
     request.headers.get('user-agent') || undefined
   );

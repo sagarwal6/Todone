@@ -334,6 +334,24 @@ export default function InsightDetailPanel({
     }
   }, [isMeeting, isCompleted, actionResult]);
 
+  // Handle agent failure or completion without draft for email actions
+  useEffect(() => {
+    if (isMeeting || !isGeneratingDraft) return;
+
+    // If agent failed, stop generating and show error
+    if (hasFailed) {
+      setIsGeneratingDraft(false);
+      setError(actionResult?.error || 'Failed to generate draft');
+      return;
+    }
+
+    // If agent completed but no draft was created (edge case)
+    if (isCompleted && (!actionResult?.pendingDrafts || actionResult.pendingDrafts.length === 0)) {
+      setIsGeneratingDraft(false);
+      // Don't show error - agent may have provided info in the message instead
+    }
+  }, [isMeeting, isGeneratingDraft, hasFailed, isCompleted, actionResult]);
+
   // Handle meeting prep execution
   const handleExecuteMeeting = useCallback(async () => {
     setIsExecutingMeeting(true);
@@ -362,10 +380,10 @@ export default function InsightDetailPanel({
     onClose();
   }, [action.id, onDismiss, onClose]);
 
-  // Clear draft state when switching modes
+  // Switch modes without clearing draft text
   const handleModeChange = useCallback((mode: 'draft' | 'write') => {
     setReplyMode(mode);
-    setDraftText('');
+    // Don't clear draftText - preserve what user typed
     setHasDraftGenerated(false);
     setError(null);
   }, []);
