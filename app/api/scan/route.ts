@@ -6,8 +6,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { getHybridSession } from '@/lib/auth/getSession';
 import Anthropic from '@anthropic-ai/sdk';
 import { v4 as uuidv4, validate as isValidUUID } from 'uuid';
 import { buildScanContext } from '@/lib/scan/metadata';
@@ -52,38 +51,24 @@ export async function POST(request: NextRequest) {
     // No body or invalid JSON - that's fine, use empty array
   }
 
-  // Get session
-  const session = await getServerSession(authOptions);
+  // Get session (supports both web NextAuth and mobile JWT)
+  const session = await getHybridSession();
   console.log('[SCAN] Session check:', { hasSession: !!session, email: session?.user?.email });
 
-  if (!session?.user?.email) {
+  if (!session) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
     });
   }
 
-  // Get profile and access token
-  // NOTE: location column needs to be added to profiles table via migration
-  const { data: profile, error: profileError } = await supabaseAdmin
-    .from('profiles')
-    .select('id')
-    .eq('email', session.user.email)
-    .single();
+  // Use profile ID from hybrid session
+  const profile = { id: session.user.id };
 
-  console.log('[SCAN] Profile lookup:', {
+  console.log('[SCAN] Profile from session:', {
     email: session.user.email,
-    found: !!profile,
-    profileId: profile?.id,
-    error: profileError?.message
+    profileId: profile.id,
   });
-
-  if (!profile) {
-    return new Response(JSON.stringify({ error: 'Profile not found', details: profileError?.message }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
 
   // Check for cached scan (less than 1 hour old) - skip if force refresh
   const { data: cachedScan } = forceRefresh

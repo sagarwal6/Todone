@@ -11,8 +11,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { getHybridSession } from '@/lib/auth/getSession';
 import { supabaseAdmin, logAuditEvent } from '@/lib/supabase/server';
 import * as gmail from '@/lib/google/gmail';
 import * as calendar from '@/lib/google/calendar';
@@ -31,30 +30,16 @@ export async function POST(
 ) {
   const { taskId } = await params;
 
-  // Get session
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
+  // Get session (supports both web NextAuth and mobile JWT)
+  const session = await getHybridSession();
+  if (!session) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
     });
   }
 
-  // Get user from database
-  const { data: profile } = await supabaseAdmin
-    .from('profiles')
-    .select('id')
-    .eq('email', session.user.email)
-    .single();
-
-  if (!profile) {
-    return new Response(JSON.stringify({ error: 'User not found' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  const userId = profile.id;
+  const userId = session.user.id;
 
   // Parse request body
   let confirmation: DraftConfirmation;

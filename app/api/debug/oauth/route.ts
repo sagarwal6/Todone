@@ -3,37 +3,31 @@
  */
 
 import { NextRequest } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { getHybridSession } from '@/lib/auth/getSession';
 import { supabaseAdmin } from '@/lib/supabase/server';
 
 export async function GET(request: NextRequest) {
-  const session = await getServerSession(authOptions);
+  const session = await getHybridSession();
 
-  if (!session?.user?.email) {
+  if (!session) {
     return Response.json({ error: 'Not authenticated', session: null });
   }
 
-  // Check profile
+  // Get profile info from database
   const { data: profile, error: profileError } = await supabaseAdmin
     .from('profiles')
     .select('id, email, full_name, created_at')
-    .eq('email', session.user.email)
+    .eq('id', session.user.id)
     .single();
 
   // Check OAuth tokens
-  let tokens = null;
-  let tokenError = null;
+  const result = await supabaseAdmin
+    .from('oauth_tokens')
+    .select('id, provider, access_token_expires_at, created_at, updated_at')
+    .eq('user_id', session.user.id);
 
-  if (profile) {
-    const result = await supabaseAdmin
-      .from('oauth_tokens')
-      .select('id, provider, access_token_expires_at, created_at, updated_at')
-      .eq('user_id', profile.id);
-
-    tokens = result.data;
-    tokenError = result.error;
-  }
+  const tokens = result.data;
+  const tokenError = result.error;
 
   // Check if token is expired
   const googleToken = tokens?.find((t: { provider: string }) => t.provider === 'google');

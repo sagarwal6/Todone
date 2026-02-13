@@ -9,8 +9,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { getHybridSession } from '@/lib/auth/getSession';
 import { runAgenticLoop } from '@/lib/ai/anthropic';
 import { supabaseAdmin, checkRateLimit } from '@/lib/supabase/server';
 import { DEFAULT_AGENT_CONFIG } from '@/lib/ai/types';
@@ -26,9 +25,9 @@ export async function POST(
 ) {
   const { taskId } = await params;
 
-  // Get session
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
+  // Get session (supports both web NextAuth and mobile JWT)
+  const session = await getHybridSession();
+  if (!session) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' },
@@ -58,19 +57,10 @@ export async function POST(
     });
   }
 
-  // Try to get profile from Supabase (with location if stored)
-  let profileId: string | null = null;
+  const profileId = session.user.id;
   let accessToken: string | undefined;
 
-  // Query profile
-  // NOTE: location and timezone columns need to be added to profiles table
-  const { data: profile, error: profileError } = await supabaseAdmin
-    .from('profiles')
-    .select('id')
-    .eq('email', session.user.email)
-    .single();
-
-  // Build user profile from session + database
+  // Build user profile from session
   // Note: location/timezone not yet in DB - agent will ask if needed
   const userProfile: UserProfile = {
     name: session.user.name || undefined,
@@ -79,45 +69,35 @@ export async function POST(
     location: undefined, // TODO: Add location column to profiles - agent will ask
   };
 
-  console.log('=== Profile & OAuth Token Check ===');
-  console.log('Profile error:', profileError?.message);
-  console.log('Profile exists:', !!profile);
+  // SECURITY: Rate limit agent executions (3/min, 20/hour, 50/day - expensive operation)
+  const rateLimit = await checkRateLimit(profileId, 'agent_run', {
+    perMinute: 3,
+    perHour: 20,
+    perDay: 50,
+  });
 
-  if (profile) {
-    profileId = profile.id;
+  if (!rateLimit.allowed) {
+    return new Response(
+      JSON.stringify({
+        error: 'Rate limit exceeded',
+        limitType: rateLimit.limitType,
+        resetAt: rateLimit.resetAt?.toISOString(),
+      }),
+      {
+        status: 429,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }
 
-    // SECURITY: Rate limit agent executions (3/min, 20/hour, 50/day - expensive operation)
-    const rateLimit = await checkRateLimit(profile.id, 'agent_run', {
-      perMinute: 3,
-      perHour: 20,
-      perDay: 50,
-    });
+  // Get a valid access token (automatically refreshes if expired)
+  const validToken = await getValidAccessToken(profileId);
 
-    if (!rateLimit.allowed) {
-      return new Response(
-        JSON.stringify({
-          error: 'Rate limit exceeded',
-          limitType: rateLimit.limitType,
-          resetAt: rateLimit.resetAt?.toISOString(),
-        }),
-        {
-          status: 429,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    // Get a valid access token (automatically refreshes if expired)
-    const validToken = await getValidAccessToken(profile.id);
-
-    if (validToken) {
-      accessToken = validToken;
-      console.log('Access token loaded successfully (refreshed if needed)');
-    } else {
-      console.log('No valid access token available - user needs to re-authenticate');
-    }
+  if (validToken) {
+    accessToken = validToken;
+    console.log('Access token loaded successfully (refreshed if needed)');
   } else {
-    console.log('No profile found in Supabase for email:', session.user.email);
+    console.log('No valid access token available - user needs to re-authenticate');
   }
 
   // Create SSE stream
@@ -137,7 +117,7 @@ export async function POST(
         // Run the agentic loop
         // Note: runAgenticLoop emits 'complete' event internally via onProgress
         await runAgenticLoop({
-          userId: profileId || 'anonymous',
+          userId: profileId,
           taskId,
           taskTitle,
           taskResearch,

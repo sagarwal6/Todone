@@ -6,41 +6,25 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { getHybridSession } from '@/lib/auth/getSession';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { toSupabaseTask, fromSupabaseTask } from '@/lib/types';
 import type { Task } from '@/lib/types';
-
-// Helper to get user profile from session
-async function getUserProfile(email: string) {
-  const { data: profile } = await supabaseAdmin
-    .from('profiles')
-    .select('id')
-    .eq('email', email)
-    .single();
-  return profile;
-}
 
 /**
  * GET /api/tasks
  * List all tasks for the authenticated user (excludes soft-deleted tasks)
  */
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
+  const session = await getHybridSession();
+  if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const profile = await getUserProfile(session.user.email);
-  if (!profile) {
-    return NextResponse.json({ error: 'User not found' }, { status: 404 });
   }
 
   const { data: rows, error } = await supabaseAdmin
     .from('tasks')
     .select('*')
-    .eq('user_id', profile.id)
+    .eq('user_id', session.user.id)
     .is('deleted_at', null)
     .order('order', { ascending: true })
     .order('created_at', { ascending: false });
@@ -62,14 +46,9 @@ export async function GET() {
  * Create a new task
  */
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
+  const session = await getHybridSession();
+  if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const profile = await getUserProfile(session.user.email);
-  if (!profile) {
-    return NextResponse.json({ error: 'User not found' }, { status: 404 });
   }
 
   let taskData: Partial<Task>;
@@ -107,7 +86,7 @@ export async function POST(request: NextRequest) {
     completedSteps: taskData.completedSteps ?? [],
   };
 
-  const supabaseTask = toSupabaseTask(fullTask, profile.id);
+  const supabaseTask = toSupabaseTask(fullTask, session.user.id);
 
   const { data: row, error } = await supabaseAdmin
     .from('tasks')

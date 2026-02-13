@@ -31,6 +31,14 @@ const config: CapacitorConfig = {
       resize: 'body',
       resizeOnFullScreen: true,
     },
+    // Social Login for native Google Sign-In
+    SocialLogin: {
+      google: {
+        iOSClientId: '569427904271-0gs6jvpu4hq0plfmn2nqaqv81l3jgfed.apps.googleusercontent.com',
+        // Web client ID - used as serverClientId for ID token verification
+        iOSServerClientId: process.env.GOOGLE_CLIENT_ID,
+      },
+    },
   },
 };
 

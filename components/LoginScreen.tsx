@@ -1,9 +1,27 @@
 'use client';
 
 import { signIn } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
+import { useNativeAuth } from '@/hooks/useNativeAuth';
+import { isNativePlatform } from '@/lib/utils/platform';
 
 export function LoginScreen() {
+  const router = useRouter();
+  const { signInNative, isLoading, error } = useNativeAuth();
+
+  const handleSignIn = async () => {
+    if (isNativePlatform()) {
+      const user = await signInNative();
+      if (user) {
+        router.push('/');
+        router.refresh();
+      }
+    } else {
+      signIn('google', { callbackUrl: '/' });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-inbox-bg-primary flex flex-col items-center justify-center px-6">
       <div className="w-full max-w-sm text-center">
@@ -29,18 +47,32 @@ export function LoginScreen() {
             Sign in to save your tasks and get personalized research
           </p>
 
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              {error}
+            </div>
+          )}
+
           <button
-            onClick={() => signIn('google', { callbackUrl: '/' })}
+            onClick={handleSignIn}
+            disabled={isLoading}
             className="w-full flex items-center justify-center gap-3 px-4 py-3
                        border border-inbox-divider-strong rounded-full
                        bg-white hover:bg-inbox-bg-hover
                        text-inbox-text-primary font-medium
                        transition-all duration-150
                        hover:shadow-[var(--inbox-shadow-subtle)]
-                       active:scale-[0.98]"
+                       active:scale-[0.98]
+                       disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <GoogleIcon />
-            Continue with Google
+            {isLoading ? (
+              <span className="animate-spin">
+                <MaterialIcon name="progress_activity" size={20} />
+              </span>
+            ) : (
+              <GoogleIcon />
+            )}
+            {isLoading ? 'Signing in...' : 'Continue with Google'}
           </button>
         </div>
 

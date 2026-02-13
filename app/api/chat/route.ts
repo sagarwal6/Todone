@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { getHybridSession } from '@/lib/auth/getSession';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Research, ChatMessage } from '@/lib/types';
 import { supabaseAdmin, checkRateLimit } from '@/lib/supabase/server';
@@ -17,40 +16,31 @@ interface ChatRequest {
 
 export async function POST(request: NextRequest) {
   try {
-    // SECURITY: Require authentication to prevent API abuse
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
+    // SECURITY: Require authentication to prevent API abuse (supports both web and mobile)
+    const session = await getHybridSession();
+    if (!session) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    // Get user profile for rate limiting
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('id')
-      .eq('email', session.user.email)
-      .single();
+    // SECURITY: Rate limit chat requests (20/min, 100/hour, 500/day)
+    const rateLimit = await checkRateLimit(session.user.id, 'chat', {
+      perMinute: 20,
+      perHour: 100,
+      perDay: 500,
+    });
 
-    if (profile) {
-      // SECURITY: Rate limit chat requests (20/min, 100/hour, 500/day)
-      const rateLimit = await checkRateLimit(profile.id, 'chat', {
-        perMinute: 20,
-        perHour: 100,
-        perDay: 500,
-      });
-
-      if (!rateLimit.allowed) {
-        return NextResponse.json(
-          {
-            error: 'Rate limit exceeded',
-            limitType: rateLimit.limitType,
-            resetAt: rateLimit.resetAt?.toISOString(),
-          },
-          { status: 429 }
-        );
-      }
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          error: 'Rate limit exceeded',
+          limitType: rateLimit.limitType,
+          resetAt: rateLimit.resetAt?.toISOString(),
+        },
+        { status: 429 }
+      );
     }
 
     const body: ChatRequest = await request.json();

@@ -47,5 +47,21 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.569427904271-0gs6jvpu4hq0plfmn2nqaqv81l3jgfed</string>
+			</array>
+		</dict>
+	</array>
+	<key>GIDClientID</key>
+	<string>569427904271-0gs6jvpu4hq0plfmn2nqaqv81l3jgfed.apps.googleusercontent.com</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>googlechrome</string>
+		<string>googlegmail</string>
+	</array>
 </dict>
 </plist>

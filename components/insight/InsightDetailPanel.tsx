@@ -12,12 +12,14 @@
  * Both flows end the same way: opening Gmail to send. No jarring UI transitions.
  */
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import type { InsightAction, DraftResponseContext, MeetingPrepContext } from '@/lib/scan/types';
 import type { LocalActionState } from '@/hooks/useInsightScan';
 import { QuickReferenceCard } from '@/components/QuickReferenceCard';
 import { openGmailThread } from '@/lib/email/gmail-links';
+import { useAgentContext } from '@/contexts/AgentContext';
+import { AgentProgress } from '@/components/AgentProgress';
 
 interface InsightDetailPanelProps {
   action: InsightAction;
@@ -186,6 +188,7 @@ export default function InsightDetailPanel({
   const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
   const [hasDraftGenerated, setHasDraftGenerated] = useState(false); // True after AI generates
   const [copied, setCopied] = useState(false); // For copy feedback
+  const [isEmailCollapsed, setIsEmailCollapsed] = useState(false); // Collapse email when draft ready
 
   // Meeting prep state (separate from email)
   const [meetingInput, setMeetingInput] = useState('');
@@ -211,12 +214,32 @@ export default function InsightDetailPanel({
   const hasFailed = actionState?.status === 'failed';
   const actionResult = actionState?.result;
 
+  // Get agent context for progress tracking
+  const agent = useAgentContext();
+  const taskId = actionState?.taskId;
+  const agentState = taskId ? agent.getAgentState(taskId) : null;
+  const agentProgress = useMemo(() => agentState?.progress || [], [agentState?.progress]);
+  const isAgentRunning = agentState?.isRunning || false;
+
   // Reset meeting executing state when external state changes
   useEffect(() => {
     if (isCompleted || hasFailed) {
       setIsExecutingMeeting(false);
     }
   }, [isCompleted, hasFailed]);
+
+  // Reset all email-specific state when switching to a different action
+  useEffect(() => {
+    setDraftText('');
+    setHasDraftGenerated(false);
+    setIsGeneratingDraft(false);
+    setIsEmailCollapsed(false);
+    setError(null);
+    setCopied(false);
+    setEmailContent(null);
+    setMeetingInput('');
+    setIsExecutingMeeting(false);
+  }, [action.id]);
 
   // Load email content on mount
   useEffect(() => {
@@ -322,7 +345,7 @@ export default function InsightDetailPanel({
     }
   }, [action.id, draftText, onExecute]);
 
-  // When AI draft is ready, update the textarea
+  // When AI draft is ready, update the textarea and collapse email
   useEffect(() => {
     if (!isMeeting && isCompleted && actionResult?.pendingDrafts && actionResult.pendingDrafts.length > 0) {
       const emailDraft = actionResult.pendingDrafts.find(d => d.type === 'email');
@@ -330,6 +353,7 @@ export default function InsightDetailPanel({
         setDraftText(emailDraft.content);
         setHasDraftGenerated(true);
         setIsGeneratingDraft(false);
+        setIsEmailCollapsed(true); // Collapse email to focus on draft
       }
     }
   }, [isMeeting, isCompleted, actionResult]);
@@ -542,9 +566,41 @@ export default function InsightDetailPanel({
                 <span className="text-[14px]">Loading email...</span>
               </div>
             ) : emailContent ? (
-              <div className="text-[14px] text-gray-700 leading-relaxed whitespace-pre-wrap max-w-[600px]">
-                {processEmailBody(emailContent.body)}
-              </div>
+              <>
+                {/* Collapsed email summary when draft is ready */}
+                {isEmailCollapsed && hasDraftGenerated ? (
+                  <button
+                    onClick={() => setIsEmailCollapsed(false)}
+                    className="w-full text-left bg-gray-100 hover:bg-gray-200 rounded-lg px-4 py-3 transition-colors group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-rounded text-gray-400 group-hover:text-gray-600 transition-colors">
+                        expand_more
+                      </span>
+                      <span className="text-[13px] font-medium text-gray-600">Original email</span>
+                      <span className="text-[13px] text-gray-400 truncate flex-1">
+                        {emailContent.body.slice(0, 60).replace(/\n/g, ' ')}...
+                      </span>
+                    </div>
+                  </button>
+                ) : (
+                  /* Full email body */
+                  <>
+                    {hasDraftGenerated && (
+                      <button
+                        onClick={() => setIsEmailCollapsed(true)}
+                        className="flex items-center gap-1 text-[12px] text-gray-400 hover:text-gray-600 mb-3 transition-colors"
+                      >
+                        <span className="material-symbols-rounded text-sm">expand_less</span>
+                        Collapse
+                      </button>
+                    )}
+                    <div className="text-[14px] text-gray-700 leading-relaxed whitespace-pre-wrap max-w-[600px]">
+                      {processEmailBody(emailContent.body)}
+                    </div>
+                  </>
+                )}
+              </>
             ) : error && !draftText ? (
               <div className="py-12 text-center">
                 <span className="material-symbols-rounded text-3xl text-red-400 mb-3">error</span>
@@ -556,21 +612,36 @@ export default function InsightDetailPanel({
       </div>
 
       {/* Footer - Email reply input OR Meeting prep state */}
-      <div className="flex-shrink-0 px-6 py-4 border-t border-gray-100 bg-gray-50">
+      {/* Footer expands when email is collapsed and draft is ready */}
+      <div className={`
+        px-6 py-4 border-t border-gray-100 bg-gray-50
+        transition-all duration-200 ease-out
+        ${isEmailCollapsed && hasDraftGenerated && !isMeeting
+          ? 'flex-1 flex flex-col min-h-0'
+          : 'flex-shrink-0'
+        }
+      `}>
         {isMeeting ? (
           /* Meeting prep footer */
           <>
             {(isInProgress || isExecutingMeeting) && (
-              <div className="flex flex-col items-center justify-center py-4">
-                <span className="material-symbols-rounded text-3xl text-inbox-accent animate-spin mb-2">
-                  progress_activity
-                </span>
-                <p className="text-[14px] text-gray-700 font-medium">
-                  Preparing meeting notes...
-                </p>
-                <p className="text-[12px] text-gray-500 mt-1">
-                  This usually takes 10-30 seconds
-                </p>
+              <div className="py-2">
+                {agentProgress.length > 0 || isAgentRunning ? (
+                  <AgentProgress
+                    events={agentProgress}
+                    isRunning={isAgentRunning}
+                    currentStep={agentState?.currentStep || null}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-4">
+                    <span className="material-symbols-rounded text-3xl text-inbox-accent animate-spin mb-2">
+                      progress_activity
+                    </span>
+                    <p className="text-[14px] text-gray-700 font-medium">
+                      Starting...
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -676,19 +747,35 @@ export default function InsightDetailPanel({
               </button>
             </div>
 
-            {/* Helper text */}
-            <p className="text-[12px] text-gray-500 mb-3">
-              {replyMode === 'draft'
-                ? hasDraftGenerated
-                  ? "Here's your draft. Edit if needed, then copy and reply in Gmail."
-                  : "Give me direction and I'll draft a reply for you."
-                : "Type your reply below. Copy it, then reply in Gmail."
-              }
-            </p>
+            {/* Draft ready header */}
+            {hasDraftGenerated && (
+              <div className="flex items-center gap-2 mb-2">
+                <span className="material-symbols-rounded text-inbox-accent text-lg">edit_note</span>
+                <span className="text-[11px] font-semibold text-inbox-accent uppercase tracking-wide">
+                  Your draft reply
+                </span>
+              </div>
+            )}
 
-            {/* Textarea + Button */}
-            <div className="flex gap-3">
-              <div className="flex-1 relative">
+            {/* Helper text */}
+            {!hasDraftGenerated && (
+              <p className="text-[12px] text-gray-500 mb-3">
+                {replyMode === 'draft'
+                  ? "Give me direction and I'll draft a reply for you."
+                  : "Type your reply below. Copy it, then reply in Gmail."
+                }
+              </p>
+            )}
+
+            {/* Textarea + Button - column layout when draft fills space */}
+            <div className={`
+              ${isEmailCollapsed && hasDraftGenerated ? 'flex-1 flex flex-col min-h-0' : 'flex gap-3'}
+            `}>
+              <div className={`
+                relative
+                ${isEmailCollapsed && hasDraftGenerated ? 'flex-1 min-h-0' : 'flex-1'}
+                ${hasDraftGenerated ? 'ring-2 ring-inbox-accent/20 rounded-xl' : ''}
+              `}>
                 <textarea
                   ref={inputRef}
                   value={draftText}
@@ -701,36 +788,58 @@ export default function InsightDetailPanel({
                         : (suggestion || "e.g., Confirm I'm available and suggest next steps")
                       : "Type your reply..."
                   }
-                  rows={replyMode === 'write' || hasDraftGenerated ? 5 : 2}
-                  className="
+                  className={`
                     w-full px-4 py-3
                     text-[14px] text-gray-900
-                    bg-white border border-gray-200 rounded-xl
+                    bg-white border rounded-xl
                     resize-none
                     focus:outline-none focus:ring-2 focus:ring-inbox-accent/20 focus:border-inbox-accent
                     placeholder:text-gray-400
                     transition-all
                     disabled:opacity-50
-                  "
+                    ${hasDraftGenerated ? 'border-inbox-accent/30' : 'border-gray-200'}
+                    ${isEmailCollapsed && hasDraftGenerated ? 'h-full' : ''}
+                  `}
                   disabled={isLoadingEmail || isGeneratingDraft}
-                  style={{ minHeight: replyMode === 'write' || hasDraftGenerated ? '140px' : '72px' }}
+                  style={{ minHeight: isEmailCollapsed && hasDraftGenerated ? undefined : (hasDraftGenerated ? '200px' : '140px') }}
                 />
 
-                {/* Generating indicator inside textarea */}
+                {/* Generating indicator - show progress steps when available */}
                 {isGeneratingDraft && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-xl">
-                    <div className="flex flex-col items-center">
-                      <span className="material-symbols-rounded text-2xl text-inbox-accent animate-spin mb-2">
-                        progress_activity
-                      </span>
-                      <span className="text-[13px] text-gray-600">Drafting reply...</span>
-                    </div>
+                  <div className="absolute inset-0 flex items-center justify-center bg-white/90 rounded-xl p-3">
+                    {agentProgress.length > 0 || isAgentRunning ? (
+                      <div className="w-full max-w-sm">
+                        <AgentProgress
+                          events={agentProgress}
+                          isRunning={isAgentRunning}
+                          currentStep={agentState?.currentStep || null}
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center">
+                        <span className="material-symbols-rounded text-2xl text-inbox-accent animate-spin mb-2">
+                          progress_activity
+                        </span>
+                        <span className="text-[13px] text-gray-600">Starting...</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
 
-              {/* Action buttons */}
-              <div className="flex flex-col justify-end gap-2">
+              {/* Action buttons - row when expanded, column when compact */}
+              <div className={`
+                ${isEmailCollapsed && hasDraftGenerated
+                  ? 'flex items-center justify-between mt-3 flex-shrink-0'
+                  : 'flex flex-col justify-end gap-2'
+                }
+              `}>
+                {/* Helper text - only show when expanded */}
+                {isEmailCollapsed && hasDraftGenerated && (
+                  <p className="text-[11px] text-gray-400">
+                    Edit if needed, then copy and paste in Gmail
+                  </p>
+                )}
                 {(replyMode === 'write' || hasDraftGenerated) ? (
                   /* Has draft text - show Copy + Open in Gmail */
                   <>
@@ -772,7 +881,7 @@ export default function InsightDetailPanel({
                       "
                     >
                       <span className="material-symbols-rounded text-base">open_in_new</span>
-                      Reply in Gmail
+                      Open in Gmail
                     </button>
                   </>
                 ) : (
