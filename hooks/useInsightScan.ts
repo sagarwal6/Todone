@@ -24,6 +24,7 @@ import type {
 } from '@/lib/scan/types';
 
 import type { AgentQuickInfo } from '@/lib/types';
+import { apiFetch, getAuthHeaders } from '@/lib/utils/api';
 
 // Email content cache
 export interface EmailContent {
@@ -79,7 +80,7 @@ async function syncActionStateToDatabase(
   result?: LocalActionState['result']
 ): Promise<boolean> {
   try {
-    const response = await fetch(`/api/scan/actions/${actionId}/execute`, {
+    const response = await apiFetch(`/api/scan/actions/${actionId}/execute`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status, result }),
@@ -165,7 +166,7 @@ export function useInsightScan() {
       if (!ctx?.messageId) return null;
 
       try {
-        const response = await fetch(`/api/scan/email/${ctx.messageId}`);
+        const response = await apiFetch(`/api/scan/email/${ctx.messageId}`);
         if (!response.ok) return null;
         const data = await response.json();
         return { messageId: ctx.messageId, email: data.email as EmailContent };
@@ -226,7 +227,7 @@ export function useInsightScan() {
 
     try {
       const url = force ? '/api/scan?force=true' : '/api/scan';
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -383,7 +384,7 @@ export function useInsightScan() {
     }));
 
     try {
-      const response = await fetch(`/api/scan/actions/${actionId}/execute`, {
+      const response = await apiFetch(`/api/scan/actions/${actionId}/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userInput, replyMode }),
@@ -450,7 +451,7 @@ export function useInsightScan() {
    */
   const dismissAction = useCallback(async (actionId: string): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/scan/actions/${actionId}/execute`, {
+      const response = await apiFetch(`/api/scan/actions/${actionId}/execute`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'dismissed' }),
@@ -487,7 +488,7 @@ export function useInsightScan() {
     error?: string;
   }> => {
     try {
-      const response = await fetch(`/api/scan/actions/${actionId}/execute`, {
+      const response = await apiFetch(`/api/scan/actions/${actionId}/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ addToTasksOnly: true }),

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Task, TaskStatus, TaskSource, Research, Feedback, AgentQuickInfo, AgentStepSummary } from '@/lib/types';
 import * as taskOps from '@/lib/tasks';
 import { saveTasks } from '@/lib/storage';
+import { apiFetch } from '@/lib/utils/api';
 
 export type SyncError = {
   type: 'network' | 'auth' | 'server';
@@ -15,7 +16,7 @@ export type SyncError = {
 // Fetch tasks from Supabase
 async function fetchTasksFromSupabase(): Promise<{ tasks: Task[] | null; error: SyncError | null }> {
   try {
-    const response = await fetch('/api/tasks');
+    const response = await apiFetch('/api/tasks');
     if (response.status === 401) {
       return { tasks: null, error: { type: 'auth', message: 'Please sign in to sync tasks' } };
     }
@@ -36,7 +37,7 @@ async function syncTaskToSupabase(
 ): Promise<{ success: boolean; error?: SyncError }> {
   try {
     const url = method === 'POST' ? '/api/tasks' : `/api/tasks/${task.id}`;
-    const response = await fetch(url, {
+    const response = await apiFetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(task),
@@ -58,7 +59,7 @@ async function syncTaskToSupabase(
 // Delete a task from Supabase (hard delete)
 async function deleteTaskFromSupabase(taskId: string): Promise<{ success: boolean; error?: SyncError }> {
   try {
-    const response = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+    const response = await apiFetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
     if (response.status === 401) {
       return { success: false, error: { type: 'auth', message: 'Session expired', taskId } };
     }

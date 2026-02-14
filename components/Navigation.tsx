@@ -170,9 +170,10 @@ export function BottomNav({ currentView, onViewChange, counts }: BottomNavProps)
 
 interface MobileHeaderProps {
   title?: string;
+  onSignOut?: () => void;
 }
 
-export function MobileHeader({ title = 'Todone' }: MobileHeaderProps) {
+export function MobileHeader({ title = 'Todone', onSignOut }: MobileHeaderProps) {
   return (
     <header className="
       sticky top-0 z-30
@@ -181,10 +182,21 @@ export function MobileHeader({ title = 'Todone' }: MobileHeaderProps) {
       px-4 py-3
       pt-safe-top
     ">
-      <h1 className="text-title-large font-display text-on-surface flex items-center gap-2">
-        <MaterialIcon name="task_alt" size={24} className="text-primary" fill />
-        {title}
-      </h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-title-large font-display text-on-surface flex items-center gap-2">
+          <MaterialIcon name="task_alt" size={24} className="text-primary" fill />
+          {title}
+        </h1>
+        {onSignOut && (
+          <button
+            onClick={onSignOut}
+            className="p-2 rounded-full text-on-surface-variant hover:bg-on-surface/8 transition-colors"
+            aria-label="Sign out"
+          >
+            <MaterialIcon name="logout" size={20} weight={300} />
+          </button>
+        )}
+      </div>
     </header>
   );
 }

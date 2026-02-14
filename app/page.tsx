@@ -423,7 +423,7 @@ function AuthenticatedHome() {
     if (viewMode === 'insights') {
       return (
         <div className="min-h-screen bg-inbox-bg-primary pb-20 flex flex-col">
-          <MobileHeader />
+          <MobileHeader onSignOut={handleSignOut} />
           <div className="flex-1 overflow-hidden">
             <InsightView
               onClose={() => setViewMode('active')}
@@ -463,7 +463,7 @@ function AuthenticatedHome() {
 
     return (
       <div className="min-h-screen bg-inbox-bg-primary pb-20">
-        <MobileHeader />
+        <MobileHeader onSignOut={handleSignOut} />
 
         <main className="px-4 py-4">
           {/* Insight Briefing Card - lives at top of task list */}
