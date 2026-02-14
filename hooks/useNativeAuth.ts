@@ -59,19 +59,14 @@ export function useNativeAuth() {
       // Dynamic import to avoid SSR issues
       const { SocialLogin } = await import('@capgo/capacitor-social-login');
 
-      // Check if already initialized, if not initialize
-      // Note: isLoggedIn will fail if not initialized, which we catch below
-      try {
-        await SocialLogin.isLoggedIn({ provider: 'google' });
-      } catch {
-        // Not initialized yet, initialize now
-        await SocialLogin.initialize({
-          google: {
-            iOSClientId: IOS_CLIENT_ID,
-            iOSServerClientId: IOS_CLIENT_ID,
-          },
-        });
-      }
+      // Always initialize before login - this is idempotent and guarantees
+      // the plugin is ready regardless of AuthProvider timing (race condition fix)
+      await SocialLogin.initialize({
+        google: {
+          iOSClientId: IOS_CLIENT_ID,
+          iOSServerClientId: IOS_CLIENT_ID,
+        },
+      });
 
       const result = await SocialLogin.login({
         provider: 'google',

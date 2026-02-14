@@ -13,13 +13,13 @@ import type { Tool } from '@anthropic-ai/sdk/resources/messages';
  */
 export const gmailSearchTool: Tool = {
   name: 'gmail_search',
-  description: `Search Gmail. Supports: from:, to:, subject:, is:unread, is:starred, has:attachment, after:, before:, newer_than:. Results are pre-scored by priority: HIGH tier = direct 1:1 emails (prioritize these first), MEDIUM = relevant but not urgent, LOW/skipped = bulk mail/newsletters. Always mention HIGH tier emails prominently.`,
+  description: `Search Gmail. Supports: from:, to:, subject:, in:inbox, is:unread, is:starred, has:attachment, after:, before:, newer_than:. Use "in:inbox" to search only inbox (excludes sent/trash/spam). Results are pre-scored by priority: HIGH tier = direct 1:1 emails (prioritize these first), MEDIUM = relevant but not urgent, LOW/skipped = bulk mail/newsletters. Always mention HIGH tier emails prominently.`,
   input_schema: {
     type: 'object' as const,
     properties: {
       query: {
         type: 'string',
-        description: 'Gmail search query using Gmail operators. Example: "from:boss@company.com" or "subject:invoice newer_than:7d". Do NOT add is:unread unless specifically asked - search all emails by default.',
+        description: 'Gmail search query using Gmail operators. Examples: "from:boss@company.com", "subject:invoice newer_than:7d", "in:inbox from:garrick". Use "in:inbox" when searching received emails. Do NOT add is:unread unless specifically asked - search all emails (read and unread) by default.',
       },
       max_results: {
         type: 'number',
