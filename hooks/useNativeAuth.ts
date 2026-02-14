@@ -54,6 +54,14 @@ export function useNativeAuth() {
       // Dynamic import to avoid SSR issues
       const { SocialLogin } = await import('@capgo/capacitor-social-login');
 
+      // Re-initialize before login to ensure clean state after logout
+      await SocialLogin.initialize({
+        google: {
+          iOSClientId: process.env.NEXT_PUBLIC_IOS_GOOGLE_CLIENT_ID,
+          iOSServerClientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
+        },
+      });
+
       const result = await SocialLogin.login({
         provider: 'google',
         options: {
@@ -120,19 +128,28 @@ export function useNativeAuth() {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const session: MobileSession = JSON.parse(saved);
-        await fetch('/api/auth/mobile/logout', {
+        // Fire and forget - don't wait for server logout
+        fetch('/api/auth/mobile/logout', {
           method: 'POST',
           headers: { Authorization: `Bearer ${session.token}` },
-        });
+        }).catch(() => {});
       }
 
-      const { SocialLogin } = await import('@capgo/capacitor-social-login');
-      await SocialLogin.logout({ provider: 'google' });
+      // Clear local state first
       localStorage.removeItem(STORAGE_KEY);
       setMobileUser(null);
+
+      // Then logout from Google SDK
+      const { SocialLogin } = await import('@capgo/capacitor-social-login');
+      try {
+        await SocialLogin.logout({ provider: 'google' });
+      } catch (logoutErr) {
+        // Google logout can fail if not signed in, ignore
+        console.log('Google logout:', logoutErr);
+      }
     } catch (err) {
       console.error('Native sign-out error:', err);
-      // Still clear local state even if API call fails
+      // Still clear local state even if anything fails
       localStorage.removeItem(STORAGE_KEY);
       setMobileUser(null);
     }
