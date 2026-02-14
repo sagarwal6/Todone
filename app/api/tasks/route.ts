@@ -6,7 +6,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getHybridSession } from '@/lib/auth/getSession';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { toSupabaseTask, fromSupabaseTask } from '@/lib/types';
 import type { Task } from '@/lib/types';
@@ -16,7 +17,7 @@ import type { Task } from '@/lib/types';
  * List all tasks for the authenticated user (excludes soft-deleted tasks)
  */
 export async function GET() {
-  const session = await getHybridSession();
+  const session = await getServerSession(authOptions);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -46,7 +47,7 @@ export async function GET() {
  * Create a new task
  */
 export async function POST(request: NextRequest) {
-  const session = await getHybridSession();
+  const session = await getServerSession(authOptions);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

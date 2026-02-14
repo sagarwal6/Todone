@@ -11,7 +11,6 @@
 
 import { createContext, useContext, useCallback, useRef, useState, ReactNode } from 'react';
 import type { AgentProgressEvent, AgentResult } from '@/lib/ai/types';
-import { apiFetch, getAuthHeaders } from '@/lib/utils/api';
 
 interface AgentState {
   isRunning: boolean;
@@ -111,10 +110,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     try {
       const response = await fetch(`/api/tasks/${taskId}/run`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           taskTitle: taskTitle || 'Task',
           taskResearch: taskResearch || null,
@@ -281,10 +277,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     try {
       await fetch(`/api/tasks/${taskId}/cancel`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: 'User cancelled' }),
       });
     } catch (e) {

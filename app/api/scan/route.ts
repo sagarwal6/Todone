@@ -6,7 +6,8 @@
  */
 
 import { NextRequest } from 'next/server';
-import { getHybridSession } from '@/lib/auth/getSession';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import Anthropic from '@anthropic-ai/sdk';
 import { v4 as uuidv4, validate as isValidUUID } from 'uuid';
 import { buildScanContext } from '@/lib/scan/metadata';
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Get session (supports both web NextAuth and mobile JWT)
-  const session = await getHybridSession();
+  const session = await getServerSession(authOptions);
   console.log('[SCAN] Session check:', { hasSession: !!session, email: session?.user?.email });
 
   if (!session) {

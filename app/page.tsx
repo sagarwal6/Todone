@@ -2,8 +2,6 @@
 
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import { useSession, signOut } from 'next-auth/react';
-import { useNativeAuth } from '@/hooks/useNativeAuth';
-import { isNativePlatform } from '@/lib/utils/platform';
 import { TaskInput } from '@/components/TaskInput';
 import { TaskList } from '@/components/TaskList';
 import { ConversationPanel } from '@/components/ConversationPanel';
@@ -59,18 +57,8 @@ function transformPendingDrafts(drafts: AgentPendingDraft[] | undefined): LocalP
 
 export default function Home() {
   const { data: session, status } = useSession();
-  const { mobileUser } = useNativeAuth();
-  const [isNative, setIsNative] = useState(false);
 
-  // Check platform on mount
-  useEffect(() => {
-    setIsNative(isNativePlatform());
-  }, []);
-
-  // Show login screen if not authenticated
-  // For web: check NextAuth session
-  // For native: check mobile session from localStorage
-  if (status === 'loading' && !isNative) {
+  if (status === 'loading') {
     return (
       <div className="min-h-screen bg-inbox-bg-primary flex items-center justify-center">
         <div className="animate-pulse text-inbox-text-secondary">Loading...</div>
@@ -78,10 +66,7 @@ export default function Home() {
     );
   }
 
-  // Check if user is authenticated via either method
-  const isAuthenticated = session || mobileUser;
-
-  if (!isAuthenticated) {
+  if (!session) {
     return <LoginScreen />;
   }
 
@@ -89,16 +74,9 @@ export default function Home() {
 }
 
 function AuthenticatedHome() {
-  const { signOutNative } = useNativeAuth();
-
-  const handleSignOut = useCallback(async () => {
-    if (isNativePlatform()) {
-      await signOutNative();
-      window.location.reload();
-    } else {
-      signOut();
-    }
-  }, [signOutNative]);
+  const handleSignOut = useCallback(() => {
+    signOut();
+  }, []);
 
   const {
     tasks,
@@ -423,7 +401,7 @@ function AuthenticatedHome() {
     if (viewMode === 'insights') {
       return (
         <div className="min-h-screen bg-inbox-bg-primary pb-20 flex flex-col">
-          <MobileHeader onSignOut={handleSignOut} />
+          <MobileHeader />
           <div className="flex-1 overflow-hidden">
             <InsightView
               onClose={() => setViewMode('active')}
@@ -463,7 +441,7 @@ function AuthenticatedHome() {
 
     return (
       <div className="min-h-screen bg-inbox-bg-primary pb-20">
-        <MobileHeader onSignOut={handleSignOut} />
+        <MobileHeader />
 
         <main className="px-4 py-4">
           {/* Insight Briefing Card - lives at top of task list */}

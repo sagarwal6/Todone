@@ -3,11 +3,12 @@
  */
 
 import { NextRequest } from 'next/server';
-import { getHybridSession } from '@/lib/auth/getSession';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { supabaseAdmin } from '@/lib/supabase/server';
 
 export async function GET(request: NextRequest) {
-  const session = await getHybridSession();
+  const session = await getServerSession(authOptions);
 
   if (!session) {
     return Response.json({ error: 'Not authenticated', session: null });

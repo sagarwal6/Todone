@@ -6,7 +6,8 @@
  */
 
 import { NextRequest } from 'next/server';
-import { getHybridSession } from '@/lib/auth/getSession';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { v4 as uuidv4 } from 'uuid';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { getActionExecutionPrompt } from '@/lib/scan/prompts';
@@ -35,7 +36,7 @@ export async function POST(
   }
 
   // Get session (supports both web NextAuth and mobile JWT)
-  const session = await getHybridSession();
+  const session = await getServerSession(authOptions);
   if (!session) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
@@ -204,7 +205,7 @@ export async function PATCH(
   const { actionId } = await params;
 
   // Get session (supports both web NextAuth and mobile JWT)
-  const session = await getHybridSession();
+  const session = await getServerSession(authOptions);
   if (!session) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,

@@ -2,25 +2,10 @@
 
 import { signIn } from 'next-auth/react';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
-import { useNativeAuth } from '@/hooks/useNativeAuth';
-import { isNativePlatform } from '@/lib/utils/platform';
 
 export function LoginScreen() {
-  const { signInNative, isLoading, error } = useNativeAuth();
-
-  const handleSignIn = async () => {
-    if (isNativePlatform()) {
-      const user = await signInNative();
-      if (user) {
-        // Full page reload to ensure Home component re-mounts and reads
-        // the fresh session from localStorage. Using router.push/refresh
-        // doesn't work because Home's useNativeAuth hook instance has
-        // separate state from LoginScreen's instance.
-        window.location.reload();
-      }
-    } else {
-      signIn('google', { callbackUrl: '/' });
-    }
+  const handleSignIn = () => {
+    signIn('google', { callbackUrl: '/' });
   };
 
   return (
@@ -48,32 +33,18 @@ export function LoginScreen() {
             Sign in to save your tasks and get personalized research
           </p>
 
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-              {error}
-            </div>
-          )}
-
           <button
             onClick={handleSignIn}
-            disabled={isLoading}
             className="w-full flex items-center justify-center gap-3 px-4 py-3
                        border border-inbox-divider-strong rounded-full
                        bg-white hover:bg-inbox-bg-hover
                        text-inbox-text-primary font-medium
                        transition-all duration-150
                        hover:shadow-[var(--inbox-shadow-subtle)]
-                       active:scale-[0.98]
-                       disabled:opacity-50 disabled:cursor-not-allowed"
+                       active:scale-[0.98]"
           >
-            {isLoading ? (
-              <span className="animate-spin">
-                <MaterialIcon name="progress_activity" size={20} />
-              </span>
-            ) : (
-              <GoogleIcon />
-            )}
-            {isLoading ? 'Signing in...' : 'Continue with Google'}
+            <GoogleIcon />
+            Continue with Google
           </button>
         </div>
 

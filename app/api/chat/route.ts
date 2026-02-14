@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getHybridSession } from '@/lib/auth/getSession';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Research, ChatMessage } from '@/lib/types';
 import { supabaseAdmin, checkRateLimit } from '@/lib/supabase/server';
@@ -17,7 +18,7 @@ interface ChatRequest {
 export async function POST(request: NextRequest) {
   try {
     // SECURITY: Require authentication to prevent API abuse (supports both web and mobile)
-    const session = await getHybridSession();
+    const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json(
         { error: 'Unauthorized' },

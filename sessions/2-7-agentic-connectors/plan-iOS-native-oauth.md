@@ -9,43 +9,46 @@
 
 ---
 
-## Phase 1: Revert Capacitor/iOS Native OAuth
+## Phase 1: Revert Capacitor/iOS Native OAuth ✅
 
 > Remove all Capacitor and native OAuth code. Return the app to pure NextAuth web auth.
 
-### 1.0 Delete files created for Capacitor/native auth
-- `lib/utils/jwt.ts` — JWT signing/verification for mobile sessions
-- `lib/utils/platform.ts` — Platform detection (native vs web)
-- `lib/utils/api.ts` — API fetch wrapper with auth headers
-- `lib/auth/getSession.ts` — Hybrid session helper (NextAuth + JWT)
-- `app/api/auth/mobile/route.ts` — Mobile sign-in endpoint
-- `app/api/auth/mobile/refresh/route.ts` — Token refresh endpoint
-- `app/api/auth/mobile/logout/route.ts` — Mobile logout endpoint
-- `hooks/useNativeAuth.ts` — Native auth hook for iOS
-- `capacitor.config.ts` — Capacitor configuration
-- `ios/` — Entire iOS native project directory
+### 1.0 Delete files created for Capacitor/native auth ✅
+- [x] `lib/utils/jwt.ts` — JWT signing/verification for mobile sessions
+- [x] `lib/utils/platform.ts` — Platform detection (native vs web)
+- [x] `lib/utils/api.ts` — API fetch wrapper with auth headers
+- [x] `lib/auth/getSession.ts` — Hybrid session helper (NextAuth + JWT)
+- [x] `app/api/auth/mobile/route.ts` — Mobile sign-in endpoint
+- [x] `app/api/auth/mobile/refresh/route.ts` — Token refresh endpoint
+- [x] `app/api/auth/mobile/logout/route.ts` — Mobile logout endpoint
+- [x] `hooks/useNativeAuth.ts` — Native auth hook for iOS
+- [x] `capacitor.config.ts` — Capacitor configuration
+- [x] `ios/` — Entire iOS native project directory
 
-### 1.1 Remove Capacitor dependencies
-- `@capacitor/browser`, `@capacitor/core`, `@capacitor/ios`, `@capacitor/cli`
-- `@capgo/capacitor-social-login`
-- `google-auth-library`, `jsonwebtoken`, `@types/jsonwebtoken`
+### 1.1 Remove Capacitor dependencies ✅
+- [x] `@capacitor/browser`, `@capacitor/core`, `@capacitor/ios`, `@capacitor/cli`
+- [x] `@capgo/capacitor-social-login`
+- [x] `google-auth-library`, `jsonwebtoken`, `@types/jsonwebtoken`
 
-### 1.2 Revert modified files to pre-Capacitor state
-- `components/AuthProvider.tsx` — removed SocialLogin initialization
-- `components/LoginScreen.tsx` — removed native auth branching
-- `components/Navigation.tsx` — removed native sign-out prop
-- `app/page.tsx` — removed mobileUser/isNative state
-- `hooks/useInsightScan.ts` — reverted `apiFetch()` → `fetch()`
-- `hooks/useTasks.ts` — reverted `apiFetch()` → `fetch()`
-- `contexts/AgentContext.tsx` — removed `getAuthHeaders()` from fetch calls
-- All API routes — reverted `getHybridSession()` → `getServerSession(authOptions)`
+### 1.2 Revert modified files to pre-Capacitor state ✅
+- [x] `components/AuthProvider.tsx` — removed SocialLogin initialization
+- [x] `components/LoginScreen.tsx` — removed native auth branching
+- [x] `components/Navigation.tsx` — removed native sign-out prop
+- [x] `app/page.tsx` — removed mobileUser/isNative state
+- [x] `hooks/useInsightScan.ts` — reverted `apiFetch()` → `fetch()`
+- [x] `hooks/useTasks.ts` — reverted `apiFetch()` → `fetch()`
+- [x] `contexts/AgentContext.tsx` — removed `getAuthHeaders()` from fetch calls
+- [x] All API routes — reverted `getHybridSession()` → `getServerSession(authOptions)`
+- [x] Created `types/next-auth.d.ts` — NextAuth session type augmentation (adds `user.id`)
 
 ### 1.3 Remove environment variable (manual)
 - [ ] Remove `IOS_GOOGLE_CLIENT_ID` from Vercel dashboard
 
-### 1.4 Testing
+### 1.4 Verification ✅
+- [x] `npm run lint` — 0 errors (55 pre-existing warnings)
+- [x] `npm run typecheck` — clean
+- [x] `npm run build` — clean
 - [ ] App loads, Google sign-in works in browser
-- [ ] No imports referencing deleted files
 - [ ] Tasks load and display correctly
 - [ ] Insight scan works
 - [ ] Agent runs and streams progress (SSE regression check)
@@ -208,9 +211,9 @@ Already in place (no changes needed):
 
 ## Phase 6: Lint Cleanup
 
-> Fix all 62 pre-existing ESLint warnings across the codebase. These are not from our PWA changes — they existed before ESLint was properly configured.
+> Fix all 55 pre-existing ESLint warnings across the codebase. These are not from our PWA changes — they existed before ESLint was properly configured.
 
-### Categories of warnings (62 total):
+### Categories of warnings (55 total):
 - `@typescript-eslint/no-explicit-any` — replace `any` with proper types
 - `@typescript-eslint/no-unused-vars` — remove unused imports/variables
 - `@typescript-eslint/no-empty-object-type` — use `Record<string, never>` or proper type
@@ -218,7 +221,7 @@ Already in place (no changes needed):
 - `react-hooks/preserve-manual-memoization` — fix memoization patterns
 
 ### Goal:
-- [ ] Fix all 62 warnings so `npm run lint` produces 0 problems
+- [ ] Fix all 55 warnings so `npm run lint` produces 0 problems
 - [ ] Promote warning rules to errors in `eslint.config.mjs` to prevent regressions
 
 ---
@@ -241,8 +244,9 @@ Already in place (no changes needed):
 
 | File | Purpose |
 |------|---------|
-| `app/sw.ts` | Service worker entry point |
-| `app/share/page.tsx` | Share target handler page |
+| `types/next-auth.d.ts` | NextAuth session type augmentation (Phase 1) ✅ |
+| `app/sw.ts` | Service worker entry point (Phase 2) |
+| `app/share/page.tsx` | Share target handler page (Phase 4) |
 
 ## Files to Modify
 
