@@ -106,8 +106,10 @@ export function KeyFactsLine({ quickInfo }: KeyFactsLineProps) {
           <MaterialIcon name="language" size={16} weight={300} className="text-inbox-text-tertiary flex-shrink-0" />
           <a
             href={quickInfo.website}
-            target="_blank"
-            rel="noopener noreferrer"
+            onClick={(e) => {
+              e.preventDefault();
+              window.open(quickInfo.website!, '_blank', 'noopener,noreferrer');
+            }}
             className="text-inbox-accent hover:underline truncate"
           >
             {quickInfo.website.replace(/^https?:\/\//, '')}

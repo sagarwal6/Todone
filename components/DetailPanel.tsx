@@ -169,7 +169,14 @@ export function DetailPanel({ task, isOpen, onClose, onFeedback, embedded = fals
                   {quickInfo?.website && (
                     <div className="flex items-center gap-2">
                       <MaterialIcon name="language" size="small" className="text-primary" />
-                      <a href={quickInfo.website} target="_blank" rel="noopener noreferrer" className="text-body-medium text-primary hover:underline truncate">
+                      <a
+                        href={quickInfo.website}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          window.open(quickInfo.website!, '_blank', 'noopener,noreferrer');
+                        }}
+                        className="text-body-medium text-primary hover:underline truncate"
+                      >
                         {quickInfo.website.replace(/^https?:\/\//, '')}
                       </a>
                     </div>

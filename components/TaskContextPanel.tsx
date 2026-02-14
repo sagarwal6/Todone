@@ -196,8 +196,10 @@ export function TaskContextPanel({ task, className = '', onToggleStep }: TaskCon
               {quickInfo.website && (
                 <a
                   href={quickInfo.website}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.open(quickInfo.website!, '_blank', 'noopener,noreferrer');
+                  }}
                   className="flex items-center gap-3 text-primary hover:underline"
                 >
                   <MaterialIcon name="language" size="small" />

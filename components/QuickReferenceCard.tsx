@@ -169,8 +169,10 @@ export function QuickReferenceCard({ quickInfo, compact = false }: QuickReferenc
             <div className="flex items-center min-w-0">
               <a
                 href={quickInfo.website}
-                target="_blank"
-                rel="noopener noreferrer"
+                onClick={(e) => {
+                  e.preventDefault();
+                  window.open(quickInfo.website!, '_blank', 'noopener,noreferrer');
+                }}
                 className="text-inbox-body text-inbox-accent hover:underline truncate"
               >
                 {quickInfo.website.replace(/^https?:\/\//, '')}

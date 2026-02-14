@@ -65,12 +65,14 @@ export function Markdown({ content, className = '' }: MarkdownProps) {
             {children}
           </em>
         ),
-        // Links
+        // Links - use window.open() to prevent PWA standalone mode from navigating away
         a: ({ href, children }) => (
           <a
             href={href}
-            target="_blank"
-            rel="noopener noreferrer"
+            onClick={(e) => {
+              e.preventDefault();
+              if (href) window.open(href, '_blank', 'noopener,noreferrer');
+            }}
             className="text-inbox-accent hover:underline"
           >
             {children}

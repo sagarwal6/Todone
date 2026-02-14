@@ -3,6 +3,7 @@
   "short_name": "Todone",
   "description": "AI-powered task assistant that helps you get things done",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#FFFFFF",
   "theme_color": "#6750A4",

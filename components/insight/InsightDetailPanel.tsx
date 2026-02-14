@@ -69,12 +69,16 @@ function processEmailBody(body: string): React.ReactNode[] {
     const url = urlInBrackets || standaloneUrl;
     const displayText = textBefore || url;
 
+    const linkKey = `link-${keyIndex++}`;
+    const linkUrl = url;
     parts.push(
       <a
-        key={`link-${keyIndex++}`}
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
+        key={linkKey}
+        href={linkUrl}
+        onClick={(e) => {
+          e.preventDefault();
+          window.open(linkUrl, '_blank', 'noopener,noreferrer');
+        }}
         className="text-inbox-accent hover:underline break-all"
       >
         {displayText}

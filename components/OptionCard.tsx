@@ -77,8 +77,10 @@ export function OptionCard({ option, compact = false }: OptionCardProps) {
           )}
           <a
             href={option.actionUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+            onClick={(e) => {
+              e.preventDefault();
+              window.open(option.actionUrl, '_blank', 'noopener,noreferrer');
+            }}
             className={`
               inline-flex items-center justify-center gap-1.5
               font-medium

@@ -177,6 +177,11 @@
     --foreground: #E8EAED;
 }
 
+/* Prevent overscroll bounce in PWA standalone mode */
+html, body {
+  overscroll-behavior: none;
+}
+
 /* Base body styles */
 body {
   color: var(--md-on-surface);

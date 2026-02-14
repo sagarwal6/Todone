@@ -60,8 +60,10 @@ function LinkifiedText({ text, className }: { text: string; className?: string }
             <a
               key={i}
               href={part.content}
-              target="_blank"
-              rel="noopener noreferrer"
+              onClick={(e) => {
+                e.preventDefault();
+                window.open(part.content, '_blank', 'noopener,noreferrer');
+              }}
               className="text-inherit underline decoration-inbox-text-tertiary/40 hover:decoration-inbox-accent transition-colors break-all"
             >
               {part.content}

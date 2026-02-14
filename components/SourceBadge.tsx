@@ -24,8 +24,10 @@ export function SourceBadge({ source }: SourceBadgeProps) {
           {source.url ? (
             <a
               href={source.url}
-              target="_blank"
-              rel="noopener noreferrer"
+              onClick={(e) => {
+                e.preventDefault();
+                window.open(source.url!, '_blank', 'noopener,noreferrer');
+              }}
               className="text-label-large font-medium text-primary hover:text-primary/80 truncate transition-colors"
             >
               {source.title}
@@ -45,8 +47,10 @@ export function SourceBadge({ source }: SourceBadgeProps) {
       {source.url && (
         <a
           href={source.url}
-          target="_blank"
-          rel="noopener noreferrer"
+          onClick={(e) => {
+            e.preventDefault();
+            window.open(source.url!, '_blank', 'noopener,noreferrer');
+          }}
           className="
             flex-shrink-0
             inline-flex items-center gap-1
