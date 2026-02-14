@@ -72,12 +72,41 @@ No half-done work. Every feature must be:
 - **Agent personality**: Elite executive assistant, facts first, no hand-holding
 - **Data sources**: When user says "check my emails", MUST search emails - never guess
 
+## Git Workflow
+
+### Branching
+- Work on feature branches: `feature/<name>`, `fix/<name>`
+- Commit by phase/logical unit — not giant monolithic commits
+- Merge to `master` via PR once the feature is complete and tested
+
+### Pre-Commit Checks
+Run all three before every commit — all must pass:
+```bash
+npm run lint         # ESLint
+npm run typecheck    # TypeScript strict
+npm run build        # Production build
+```
+
+### Commit Messages
+- Short, descriptive subject line (imperative mood)
+- No "Co-Authored-By" lines
+- No test plans or verification steps in commit messages
+- Body (optional) explains *why*, not *what*
+
+### Planning
+All plans (in `sessions/`) must include a **Testing** section per phase with:
+- Feature-specific verification steps (does the feature work as intended?)
+- Manual verification for UI/UX changes
+- Regression checks for existing functionality
+- Note: lint, typecheck, and build are already enforced before every commit (see Pre-Commit Checks) — don't duplicate them in test plans
+
 ## Commands
 
 ```bash
-npm run dev      # Dev server (localhost:3000)
-npm run build    # Production build
-npm run lint     # Linter
+npm run dev          # Dev server (localhost:3000)
+npm run build        # Production build
+npm run lint         # Linter
+npm run typecheck    # TypeScript type checking
 ```
 
 ## Environment Variables

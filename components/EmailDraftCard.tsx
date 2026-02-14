@@ -20,23 +20,27 @@ import { openGmailCompose } from '@/lib/utils/gmail-compose';
 import { openGmailThread } from '@/lib/email/gmail-links';
 
 /**
- * Renders text with URLs converted to clickable links
+ * Renders text with URLs and emails converted to subtle clickable links
  */
 function LinkifiedText({ text, className }: { text: string; className?: string }) {
   const parts = useMemo(() => {
-    // URL regex that matches http(s) URLs
-    const urlRegex = /(https?:\/\/[^\s<]+[^\s<.,;:!?'"\])>])/g;
-    const segments: { type: 'text' | 'link'; content: string }[] = [];
+    // Combined regex for URLs and emails - subtle, non-intrusive styling
+    const linkRegex = /(https?:\/\/[^\s<]+[^\s<.,;:!?'"\])>])|([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
+    const segments: { type: 'text' | 'url' | 'email'; content: string }[] = [];
     let lastIndex = 0;
     let match;
 
-    while ((match = urlRegex.exec(text)) !== null) {
-      // Add text before the URL
+    while ((match = linkRegex.exec(text)) !== null) {
+      // Add text before the match
       if (match.index > lastIndex) {
         segments.push({ type: 'text', content: text.slice(lastIndex, match.index) });
       }
-      // Add the URL
-      segments.push({ type: 'link', content: match[1] });
+      // Determine if URL or email
+      if (match[1]) {
+        segments.push({ type: 'url', content: match[1] });
+      } else if (match[2]) {
+        segments.push({ type: 'email', content: match[2] });
+      }
       lastIndex = match.index + match[0].length;
     }
 
@@ -50,21 +54,33 @@ function LinkifiedText({ text, className }: { text: string; className?: string }
 
   return (
     <p className={className}>
-      {parts.map((part, i) =>
-        part.type === 'link' ? (
-          <a
-            key={i}
-            href={part.content}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-inbox-accent hover:underline break-all"
-          >
-            {part.content}
-          </a>
-        ) : (
-          <span key={i}>{part.content}</span>
-        )
-      )}
+      {parts.map((part, i) => {
+        if (part.type === 'url') {
+          return (
+            <a
+              key={i}
+              href={part.content}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-inherit underline decoration-inbox-text-tertiary/40 hover:decoration-inbox-accent transition-colors break-all"
+            >
+              {part.content}
+            </a>
+          );
+        }
+        if (part.type === 'email') {
+          return (
+            <a
+              key={i}
+              href={`mailto:${part.content}`}
+              className="text-inherit hover:text-inbox-accent transition-colors"
+            >
+              {part.content}
+            </a>
+          );
+        }
+        return <span key={i}>{part.content}</span>;
+      })}
     </p>
   );
 }
@@ -191,9 +207,10 @@ export function EmailDraftCard({
 
           {showOriginal && (
             <div className="mt-4 ml-8 animate-fade-in">
-              <p className="text-[14px] leading-relaxed text-inbox-text-secondary whitespace-pre-wrap">
-                {emailData.originalEmail.body}
-              </p>
+              <LinkifiedText
+                text={emailData.originalEmail.body}
+                className="text-[14px] leading-relaxed text-inbox-text-secondary whitespace-pre-wrap"
+              />
             </div>
           )}
         </div>

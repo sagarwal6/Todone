@@ -1,710 +1,259 @@
-# iOS Native OAuth Implementation Plan
+# Mobile App Plan: Capacitor → PWA
 
-Implement native Google Sign-In for the Todone iOS app using `@codetrix-studio/capacitor-google-auth`. This bypasses the `403: disallowed_useragent` error when running OAuth in Capacitor WebView.
+> **Direction Change:** Originally implemented native iOS OAuth via Capacitor to bypass WebView OAuth restrictions. Decided to switch to a Progressive Web App (PWA) instead — users install via Safari's "Add to Home Screen", OAuth works natively in Safari (no WebView), no App Store needed.
 
-**Key Architecture Decisions:**
-- Mobile auth uses **JWT tokens** (7-day expiry with refresh)
-- API routes validate both NextAuth sessions (web) and JWT (mobile)
-- Reuses `NEXTAUTH_SECRET` for JWT signing
-
----
-
-## Phase 0: Prerequisites (Manual - User Must Do)
-
-### Google Cloud Console Setup
-
-- [ ] Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
-- [ ] Select project: **daily-news-digest-476918** (existing project)
-- [ ] Click **+ CREATE CREDENTIALS** → **OAuth client ID**
-- [ ] Select Application type: **iOS**
-- [ ] Configure:
-  - Name: `Todone iOS`
-  - Bundle ID: `com.todone.app`
-- [ ] Click **CREATE**
-- [ ] **Save the iOS Client ID**: `_______________________________________`
-- [ ] **Derive Reversed Client ID**: `com.googleusercontent.apps.{ID_WITHOUT_SUFFIX}`
-
-### Environment Variables
-
-- [ ] Add to Vercel: `IOS_GOOGLE_CLIENT_ID=your-ios-client-id.apps.googleusercontent.com`
-
-### Values for Implementation
-
-```
-iOS Client ID:      _______________________________________________
-Reversed Client ID: com.googleusercontent.apps.___________________
-```
+**Key Architecture Decision:**
+- PWAs run in Safari, not a WebView → standard NextAuth Google OAuth works as-is
+- No need for JWT mobile auth, hybrid sessions, or native plugins
+- Service worker enables offline caching, installability, and share target
 
 ---
 
-## Phase 1: Dependencies & Core Utilities
+## Phase 1: Revert Capacitor/iOS Native OAuth
 
-### 1.1 Install Dependencies
+> Remove all Capacitor and native OAuth code. Return the app to pure NextAuth web auth.
 
-- [ ] Run: `npm install @codetrix-studio/capacitor-google-auth google-auth-library jsonwebtoken @types/jsonwebtoken`
-- [ ] Run: `npx cap sync ios`
+### 1.0 Delete files created for Capacitor/native auth
+- `lib/utils/jwt.ts` — JWT signing/verification for mobile sessions
+- `lib/utils/platform.ts` — Platform detection (native vs web)
+- `lib/utils/api.ts` — API fetch wrapper with auth headers
+- `lib/auth/getSession.ts` — Hybrid session helper (NextAuth + JWT)
+- `app/api/auth/mobile/route.ts` — Mobile sign-in endpoint
+- `app/api/auth/mobile/refresh/route.ts` — Token refresh endpoint
+- `app/api/auth/mobile/logout/route.ts` — Mobile logout endpoint
+- `hooks/useNativeAuth.ts` — Native auth hook for iOS
+- `capacitor.config.ts` — Capacitor configuration
+- `ios/` — Entire iOS native project directory
 
-### 1.2 Create JWT Utilities
+### 1.1 Remove Capacitor dependencies
+- `@capacitor/browser`, `@capacitor/core`, `@capacitor/ios`, `@capacitor/cli`
+- `@capgo/capacitor-social-login`
+- `google-auth-library`, `jsonwebtoken`, `@types/jsonwebtoken`
 
-- [ ] Create `lib/utils/jwt.ts`
+### 1.2 Revert modified files to pre-Capacitor state
+- `components/AuthProvider.tsx` — removed SocialLogin initialization
+- `components/LoginScreen.tsx` — removed native auth branching
+- `components/Navigation.tsx` — removed native sign-out prop
+- `app/page.tsx` — removed mobileUser/isNative state
+- `hooks/useInsightScan.ts` — reverted `apiFetch()` → `fetch()`
+- `hooks/useTasks.ts` — reverted `apiFetch()` → `fetch()`
+- `contexts/AgentContext.tsx` — removed `getAuthHeaders()` from fetch calls
+- All API routes — reverted `getHybridSession()` → `getServerSession(authOptions)`
 
-```typescript
-import jwt from 'jsonwebtoken';
+### 1.3 Remove environment variable (manual)
+- [ ] Remove `IOS_GOOGLE_CLIENT_ID` from Vercel dashboard
 
-const JWT_SECRET = process.env.NEXTAUTH_SECRET!;
-const JWT_EXPIRES_IN = '7d';
-
-export interface MobileSessionPayload {
-  userId: string;
-  email: string;
-  name: string;
-  image?: string;
-  iat?: number;
-  exp?: number;
-}
-
-export function signMobileSession(payload: Omit<MobileSessionPayload, 'iat' | 'exp'>): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-}
-
-export function verifyMobileSession(token: string): MobileSessionPayload | null {
-  try {
-    return jwt.verify(token, JWT_SECRET) as MobileSessionPayload;
-  } catch {
-    return null;
-  }
-}
-```
-
-### 1.3 Create Platform Detection Utility
-
-- [ ] Create `lib/utils/platform.ts`
-
-```typescript
-'use client';
-
-export function isNativePlatform(): boolean {
-  if (typeof window === 'undefined') return false;
-  return (window as any).Capacitor?.isNativePlatform?.() ?? false;
-}
-
-export function getPlatform(): 'ios' | 'android' | 'web' {
-  if (typeof window === 'undefined') return 'web';
-  return (window as any).Capacitor?.getPlatform?.() ?? 'web';
-}
-```
+### 1.4 Testing
+- [ ] App loads, Google sign-in works in browser
+- [ ] No imports referencing deleted files
+- [ ] Tasks load and display correctly
+- [ ] Insight scan works
+- [ ] Agent runs and streams progress (SSE regression check)
 
 ---
 
-## Phase 2: Backend API Endpoints
+## Phase 2: Service Worker & Installability
 
-### 2.1 Create Hybrid Auth Helper
+> Make the app installable on iOS (Add to Home Screen) and Android (PWA install prompt). The app already has `manifest.json`, icons, and `appleWebApp` metadata in `layout.tsx`.
 
-- [ ] Create `lib/auth/getSession.ts`
+### 2.1 Install service worker tooling
 
-```typescript
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { verifyMobileSession, MobileSessionPayload } from '@/lib/utils/jwt';
-import { headers } from 'next/headers';
+- [ ] `npm install @serwist/next serwist`
+  > `@serwist/next` is the modern replacement for `next-pwa`, with Next.js 14+ support
 
-export interface HybridSession {
-  user: {
-    id: string;
-    email: string;
-    name?: string;
-    image?: string;
-  };
-  source: 'nextauth' | 'mobile';
-}
+### 2.2 Create service worker entry point
 
-export async function getHybridSession(): Promise<HybridSession | null> {
-  // First try NextAuth session (web users)
-  const nextAuthSession = await getServerSession(authOptions);
-  if (nextAuthSession?.user?.email) {
-    return {
-      user: {
-        id: (nextAuthSession.user as any).id,
-        email: nextAuthSession.user.email,
-        name: nextAuthSession.user.name || undefined,
-        image: nextAuthSession.user.image || undefined,
-      },
-      source: 'nextauth',
-    };
-  }
+- [ ] Create `app/sw.ts`
+  - Precache app shell and static assets
+  - Runtime caching: StaleWhileRevalidate for pages/static assets
+  - **Critical: `NetworkOnly` for `/api/*` routes** — the app uses SSE streaming for agent execution (`/api/tasks/[taskId]/run`). If the service worker caches or intercepts these, streaming will break.
+  - Skip waiting + claim clients for instant activation
 
-  // Fall back to JWT token (mobile users)
-  const headersList = await headers();
-  const authHeader = headersList.get('authorization');
-  if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.slice(7);
-    const payload = verifyMobileSession(token);
-    if (payload) {
-      return {
-        user: {
-          id: payload.userId,
-          email: payload.email,
-          name: payload.name,
-          image: payload.image,
-        },
-        source: 'mobile',
-      };
-    }
-  }
+### 2.3 Update Next.js config
 
-  return null;
-}
-```
+- [ ] Update `next.config.mjs`
+  - Wrap existing config with `withSerwist()` to generate service worker at build time
+  - Disable service worker in dev mode to avoid caching issues
 
-### 2.2 Create Mobile Sign-In Endpoint
+### 2.4 Update .gitignore
 
-- [ ] Create `app/api/auth/mobile/route.ts`
+- [ ] Add service worker build artifacts:
+  ```
+  # PWA Service Worker (generated at build time)
+  public/sw.js
+  public/swe-worker-*.js
+  public/workbox-*.js
+  ```
 
-```typescript
-import { NextRequest, NextResponse } from 'next/server';
-import { OAuth2Client } from 'google-auth-library';
-import { v4 as uuidv4 } from 'uuid';
-import { supabaseAdmin } from '@/lib/supabase';
-import { encrypt } from '@/lib/utils/encryption';
-import { signMobileSession } from '@/lib/utils/jwt';
+### 2.5 Verify existing PWA infrastructure
 
-const client = new OAuth2Client();
+Already in place (no changes needed):
+- `public/manifest.json` — name, icons (192px, 512px, SVG), `display: standalone`
+- `app/layout.tsx` — `manifest` link, `appleWebApp` metadata
+- `public/icons/` — apple-touch-icon.png, icon-192.png, icon-512.png, icon.svg
 
-export async function POST(request: NextRequest) {
-  try {
-    const { idToken, accessToken, refreshToken } = await request.json();
-
-    if (!idToken || !accessToken) {
-      return NextResponse.json({ error: 'Missing tokens' }, { status: 400 });
-    }
-
-    // Verify ID token with Google (accept both web and iOS client IDs)
-    const ticket = await client.verifyIdToken({
-      idToken,
-      audience: [
-        process.env.GOOGLE_CLIENT_ID!,
-        process.env.IOS_GOOGLE_CLIENT_ID!,
-      ],
-    });
-
-    const payload = ticket.getPayload();
-    if (!payload?.email) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-    }
-
-    const { email, name, picture } = payload;
-
-    // Upsert profile
-    const { data: existingProfile } = await supabaseAdmin
-      .from('profiles')
-      .select('id')
-      .eq('email', email)
-      .single();
-
-    let profileId: string;
-    if (existingProfile) {
-      profileId = existingProfile.id;
-      await supabaseAdmin
-        .from('profiles')
-        .update({ full_name: name, avatar_url: picture, updated_at: new Date().toISOString() })
-        .eq('id', profileId);
-    } else {
-      profileId = uuidv4();
-      await supabaseAdmin.from('profiles').insert({
-        id: profileId,
-        email,
-        full_name: name,
-        avatar_url: picture,
-      });
-    }
-
-    // Store encrypted OAuth tokens
-    const encryptedAccessToken = await encrypt(accessToken);
-    const encryptedRefreshToken = refreshToken ? await encrypt(refreshToken) : null;
-
-    await supabaseAdmin.from('oauth_tokens').upsert({
-      user_id: profileId,
-      provider: 'google',
-      access_token: encryptedAccessToken,
-      refresh_token: encryptedRefreshToken,
-      access_token_expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
-      scopes: ['email', 'profile', 'gmail.readonly', 'calendar.readonly', 'contacts.readonly'],
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id,provider' });
-
-    // Issue JWT for mobile session (7-day expiry)
-    const sessionToken = signMobileSession({
-      userId: profileId,
-      email,
-      name: name || '',
-      image: picture,
-    });
-
-    return NextResponse.json({
-      success: true,
-      token: sessionToken,
-      user: { id: profileId, email, name, image: picture },
-    });
-  } catch (error) {
-    console.error('Mobile auth error:', error);
-    return NextResponse.json({ error: 'Authentication failed' }, { status: 401 });
-  }
-}
-```
-
-### 2.3 Create Token Refresh Endpoint
-
-- [ ] Create `app/api/auth/mobile/refresh/route.ts`
-
-```typescript
-import { NextRequest, NextResponse } from 'next/server';
-import { verifyMobileSession, signMobileSession } from '@/lib/utils/jwt';
-import { supabaseAdmin } from '@/lib/supabase';
-import { encrypt } from '@/lib/utils/encryption';
-
-export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'Missing token' }, { status: 401 });
-  }
-
-  const currentToken = authHeader.slice(7);
-  const payload = verifyMobileSession(currentToken);
-  if (!payload) {
-    return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
-  }
-
-  // Optionally update Google OAuth tokens if provided
-  const body = await request.json().catch(() => ({}));
-  if (body.accessToken) {
-    const encryptedAccessToken = await encrypt(body.accessToken);
-    await supabaseAdmin.from('oauth_tokens').update({
-      access_token: encryptedAccessToken,
-      access_token_expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
-      updated_at: new Date().toISOString(),
-    }).eq('user_id', payload.userId).eq('provider', 'google');
-  }
-
-  // Issue new JWT
-  const newToken = signMobileSession({
-    userId: payload.userId,
-    email: payload.email,
-    name: payload.name,
-    image: payload.image,
-  });
-
-  return NextResponse.json({ token: newToken });
-}
-```
-
-### 2.4 Create Logout Endpoint
-
-- [ ] Create `app/api/auth/mobile/logout/route.ts`
-
-```typescript
-import { NextRequest, NextResponse } from 'next/server';
-import { verifyMobileSession } from '@/lib/utils/jwt';
-import { supabaseAdmin } from '@/lib/supabase';
-
-export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'Missing token' }, { status: 401 });
-  }
-
-  const payload = verifyMobileSession(authHeader.slice(7));
-  if (payload) {
-    // Clear OAuth tokens for user
-    await supabaseAdmin
-      .from('oauth_tokens')
-      .delete()
-      .eq('user_id', payload.userId)
-      .eq('provider', 'google');
-  }
-
-  return NextResponse.json({ success: true });
-}
-```
+### 2.6 Testing
+- [ ] Chrome DevTools → Application → Manifest → no warnings
+- [ ] Chrome DevTools → Application → Service Workers → registered
+- [ ] Chrome shows install prompt (address bar icon)
+- [ ] iPhone Safari → Share → "Add to Home Screen" → opens in standalone mode
+- [ ] Google OAuth sign-in works in standalone PWA mode
+- [ ] Agent SSE streaming still works (run a task, verify progress updates)
 
 ---
 
-## Phase 3: Update Protected API Routes
+## Phase 3: Native Feel Enhancements
 
-Update all protected routes to use `getHybridSession()` instead of `getServerSession()`.
+> Make the PWA feel like a native app, not a website in disguise.
 
-**Pattern to apply:**
-```typescript
-// Before:
-const session = await getServerSession(authOptions);
-if (!session?.user?.email) { ... }
+### 3.1 Disable overscroll bounce
 
-// After:
-import { getHybridSession } from '@/lib/auth/getSession';
-const session = await getHybridSession();
-if (!session) {
-  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-}
-const userId = session.user.id;
-```
-
-### Routes to Update
-
-- [ ] `app/api/tasks/route.ts`
-- [ ] `app/api/tasks/[taskId]/route.ts`
-- [ ] `app/api/tasks/[taskId]/run/route.ts`
-- [ ] `app/api/tasks/[taskId]/confirm/route.ts`
-- [ ] `app/api/scan/route.ts`
-- [ ] `app/api/scan/[scanId]/route.ts`
-- [ ] `app/api/scan/[scanId]/actions/[actionId]/route.ts`
-- [ ] `app/api/chat/route.ts`
-- [ ] `app/api/debug/oauth/route.ts`
-
----
-
-## Phase 4: Client-Side Implementation
-
-### 4.1 Create Native Auth Hook
-
-- [ ] Create `hooks/useNativeAuth.ts`
-
-```typescript
-'use client';
-
-import { useState, useCallback, useEffect } from 'react';
-import { isNativePlatform } from '@/lib/utils/platform';
-
-interface NativeUser {
-  id: string;
-  email: string;
-  name: string;
-  image?: string;
-}
-
-interface MobileSession {
-  token: string;
-  user: NativeUser;
-  expiresAt: number;
-}
-
-const STORAGE_KEY = 'mobileSession';
-
-export function useNativeAuth() {
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [mobileUser, setMobileUser] = useState<NativeUser | null>(null);
-
-  // Load saved session on mount
-  useEffect(() => {
-    if (!isNativePlatform()) return;
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const session: MobileSession = JSON.parse(saved);
-      if (session.expiresAt > Date.now()) {
-        setMobileUser(session.user);
-      } else {
-        localStorage.removeItem(STORAGE_KEY);
-      }
-    }
-  }, []);
-
-  const signInNative = useCallback(async (): Promise<NativeUser | null> => {
-    if (!isNativePlatform()) {
-      setError('Native sign-in only available on mobile');
-      return null;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      // Dynamic import to avoid SSR issues
-      const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
-
-      const result = await GoogleAuth.signIn();
-
-      if (!result.authentication?.idToken) {
-        throw new Error('No ID token received');
-      }
-
-      const response = await fetch('/api/auth/mobile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          idToken: result.authentication.idToken,
-          accessToken: result.authentication.accessToken,
-          refreshToken: result.authentication.refreshToken,
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Authentication failed');
-      }
-
-      const data = await response.json();
-
-      // Store session with 7-day expiry
-      const session: MobileSession = {
-        token: data.token,
-        user: data.user,
-        expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-      setMobileUser(data.user);
-
-      return data.user;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Sign-in failed';
-      setError(message);
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const signOutNative = useCallback(async () => {
-    if (!isNativePlatform()) return;
-
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const session: MobileSession = JSON.parse(saved);
-        await fetch('/api/auth/mobile/logout', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${session.token}` },
-        });
-      }
-
-      const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
-      await GoogleAuth.signOut();
-      localStorage.removeItem(STORAGE_KEY);
-      setMobileUser(null);
-    } catch (err) {
-      console.error('Native sign-out error:', err);
-    }
-  }, []);
-
-  const getAuthHeader = useCallback((): Record<string, string> => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const session: MobileSession = JSON.parse(saved);
-      return { Authorization: `Bearer ${session.token}` };
-    }
-    return {};
-  }, []);
-
-  return { signInNative, signOutNative, getAuthHeader, mobileUser, isLoading, error };
-}
-```
-
-### 4.2 Update AuthProvider
-
-- [ ] Update `components/AuthProvider.tsx`
-
-```typescript
-'use client';
-
-import { SessionProvider } from 'next-auth/react';
-import { useEffect } from 'react';
-import { isNativePlatform } from '@/lib/utils/platform';
-
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // Initialize Google Auth plugin on native platforms
-  useEffect(() => {
-    if (isNativePlatform()) {
-      import('@codetrix-studio/capacitor-google-auth').then(({ GoogleAuth }) => {
-        GoogleAuth.initialize();
-      });
-    }
-  }, []);
-
-  return <SessionProvider>{children}</SessionProvider>;
-}
-```
-
-### 4.3 Update LoginScreen
-
-- [ ] Update `components/LoginScreen.tsx` to use hybrid auth
-
-Add imports:
-```typescript
-import { useNativeAuth } from '@/hooks/useNativeAuth';
-import { isNativePlatform } from '@/lib/utils/platform';
-```
-
-Update sign-in handler:
-```typescript
-const { signInNative, isLoading, error } = useNativeAuth();
-
-const handleSignIn = async () => {
-  if (isNativePlatform()) {
-    const user = await signInNative();
-    if (user) {
-      router.push('/');
-      router.refresh();
-    }
-  } else {
-    signIn('google', { callbackUrl: '/' });
+- [ ] Add to `globals.css`:
+  ```css
+  html, body {
+    overscroll-behavior: none;
   }
-};
-```
+  ```
+  Prevents the rubber-band bounce when scrolling past edges.
 
-Add error display and loading state to button.
+### 3.2 Apple splash screens
 
----
+- [ ] Add `apple-touch-startup-image` link tags to `app/layout.tsx`
+  - Generate splash images for key device sizes (iPhone 15 Pro Max, 15/14, SE, iPad)
+  - Uses app icon + theme color to prevent white flash on launch
 
-## Phase 5: Capacitor & iOS Configuration
+### 3.3 Standalone navigation handling
 
-### 5.1 Update Capacitor Config
+- [ ] Add `scope` to `manifest.json` to prevent accidental navigation out of app
+- [ ] Convert external `<a target="_blank">` links to `window.open()` for standalone PWA mode:
+  - `components/EmailDraftCard.tsx` — URLs in email body
+  - `components/ui/Markdown.tsx` — markdown links
+  - `components/insight/InsightDetailPanel.tsx` — email URLs
+  - `components/SourceBadge.tsx` — source verification links
+  - Already correct (no changes needed): `CalendarDraftCard.tsx`, `ActionButton.tsx`, `lib/utils/gmail-compose.ts`, `lib/email/gmail-links.ts`
+- [ ] Audit remaining components for `<a>` tags with external URLs: `KeyFactsLine.tsx`, `QuickReferenceCard.tsx`, `OptionCard.tsx`, `TaskContextPanel.tsx`, `DetailPanel.tsx`
 
-- [ ] Update `capacitor.config.ts`
-
-```typescript
-import type { CapacitorConfig } from '@capacitor/cli';
-
-const config: CapacitorConfig = {
-  appId: 'com.todone.app',
-  appName: 'Todone',
-  webDir: 'out',
-
-  server: {
-    url: 'https://todone-dusky.vercel.app',
-    allowNavigation: ['accounts.google.com', '*.google.com'],
-  },
-
-  plugins: {
-    GoogleAuth: {
-      scopes: [
-        'email',
-        'profile',
-        'https://www.googleapis.com/auth/gmail.readonly',
-        'https://www.googleapis.com/auth/calendar.readonly',
-        'https://www.googleapis.com/auth/contacts.readonly',
-      ],
-      iosClientId: 'YOUR_IOS_CLIENT_ID.apps.googleusercontent.com',  // <-- REPLACE
-      serverClientId: 'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com', // <-- REPLACE (existing GOOGLE_CLIENT_ID)
-      forceCodeForRefreshToken: true,
-    },
-    Keyboard: {
-      resize: 'body',
-      resizeOnFullScreen: true,
-    },
-  },
-
-  ios: {
-    contentInset: 'automatic',
-    allowsLinkPreview: false,
-    scrollEnabled: true,
-  },
-};
-
-export default config;
-```
-
-### 5.2 Update iOS Info.plist
-
-- [ ] Update `ios/App/App/Info.plist` - add inside `<dict>`:
-
-```xml
-<key>CFBundleURLTypes</key>
-<array>
-  <dict>
-    <key>CFBundleURLSchemes</key>
-    <array>
-      <string>com.googleusercontent.apps.YOUR_REVERSED_CLIENT_ID</string>
-    </array>
-  </dict>
-</array>
-
-<key>GIDClientID</key>
-<string>YOUR_IOS_CLIENT_ID.apps.googleusercontent.com</string>
-
-<key>LSApplicationQueriesSchemes</key>
-<array>
-  <string>googlechrome</string>
-  <string>googlegmail</string>
-</array>
-```
-
-### 5.3 Sync iOS Project
-
-- [ ] Run: `npx cap sync ios`
-- [ ] Run: `npx cap open ios`
+### 3.4 Testing
+- [ ] No overscroll bounce when scrolling past content
+- [ ] App shows splash screen on launch (no white flash)
+- [ ] Tapping internal links stays within the PWA
+- [ ] Tapping "Reply in Gmail" / "Create in Calendar" opens Safari overlay
+- [ ] Back navigation works within the app
+- [ ] Existing features still work (tasks, scan, agent)
 
 ---
 
-## Phase 6: Testing & Verification
+## Phase 4: Share Target ("Save to Todone")
 
-### 6.1 Deploy & Build
+> Let users share URLs/text from any app (Safari, Mail, etc.) into Todone as a new task.
 
-- [ ] Deploy to Vercel (API endpoints)
-- [ ] Build iOS app in Xcode
+### 4.1 Add share_target to manifest
 
-### 6.2 Test Native Sign-In Flow
+- [ ] Update `public/manifest.json`:
+  ```json
+  "share_target": {
+    "action": "/share",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
+  ```
 
-- [ ] Tap "Continue with Google" on iOS
-- [ ] Verify native Google Sign-In sheet appears
-- [ ] Complete sign-in
-- [ ] Verify redirect to home page
-- [ ] Verify profile created/updated in Supabase `profiles` table
-- [ ] Verify tokens stored in Supabase `oauth_tokens` table
+### 4.2 Create share target page
 
-### 6.3 Test API Authentication
+- [ ] Create `app/share/page.tsx`
+  - Reads `title`, `text`, `url` from search params
+  - User must be signed in (redirect to login if not)
+  - Creates a new task pre-populated with the shared content
+  - Shows the task inline or redirects to home after creation
 
-- [ ] Load tasks list (verify no 401 errors)
-- [ ] Create a new task
-- [ ] Run agent on a task
-- [ ] Access Gmail/Calendar data through agent
-
-### 6.4 Test Sign-Out
-
-- [ ] Sign out
-- [ ] Verify localStorage cleared
-- [ ] Verify OAuth tokens deleted from Supabase
-
-### 6.5 Test Web Flow (Regression)
-
-- [ ] Sign in on web browser
-- [ ] Verify NextAuth flow still works
-- [ ] Verify tasks load correctly
-
----
-
-## Files Summary
-
-| File | Action | Phase |
-|------|--------|-------|
-| `lib/utils/jwt.ts` | Create | 1 |
-| `lib/utils/platform.ts` | Create | 1 |
-| `lib/auth/getSession.ts` | Create | 2 |
-| `app/api/auth/mobile/route.ts` | Create | 2 |
-| `app/api/auth/mobile/refresh/route.ts` | Create | 2 |
-| `app/api/auth/mobile/logout/route.ts` | Create | 2 |
-| `app/api/tasks/route.ts` | Modify | 3 |
-| `app/api/tasks/[taskId]/route.ts` | Modify | 3 |
-| `app/api/tasks/[taskId]/run/route.ts` | Modify | 3 |
-| `app/api/tasks/[taskId]/confirm/route.ts` | Modify | 3 |
-| `app/api/scan/route.ts` | Modify | 3 |
-| `app/api/scan/[scanId]/route.ts` | Modify | 3 |
-| `app/api/scan/[scanId]/actions/[actionId]/route.ts` | Modify | 3 |
-| `app/api/chat/route.ts` | Modify | 3 |
-| `app/api/debug/oauth/route.ts` | Modify | 3 |
-| `hooks/useNativeAuth.ts` | Create | 4 |
-| `components/AuthProvider.tsx` | Modify | 4 |
-| `components/LoginScreen.tsx` | Modify | 4 |
-| `capacitor.config.ts` | Modify | 5 |
-| `ios/App/App/Info.plist` | Modify | 5 |
+### 4.3 Testing
+- [ ] Install PWA on iPhone
+- [ ] Open Safari → navigate to any webpage → Share → "Todone" appears in sheet
+- [ ] Select Todone → app opens with URL/title pre-populated as new task
+- [ ] From Mail app → share an email link → same flow works
+- [ ] Share while not signed in → redirects to login → then creates task
 
 ---
 
-## Environment Variables
+## Phase 5: Verification & Regression Testing
 
-**New (add to Vercel):**
-```
-IOS_GOOGLE_CLIENT_ID=your-ios-client-id.apps.googleusercontent.com
-```
+### 5.1 Web flow (regression)
 
-**Existing (no changes needed):**
-- `GOOGLE_CLIENT_ID` - web client ID
-- `GOOGLE_CLIENT_SECRET` - web client secret
-- `NEXTAUTH_SECRET` - reused for JWT signing
+- [ ] Sign in on desktop browser — NextAuth flow works
+- [ ] Tasks load correctly
+- [ ] Insight scan works
+- [ ] Agent runs work
+- [ ] Gmail/Calendar data accessible through agent
+
+### 5.2 PWA flow (iPhone Safari)
+
+- [ ] Add to Home Screen → standalone mode
+- [ ] Sign in with Google OAuth → works (no WebView issues)
+- [ ] Tasks load, create, run agent
+- [ ] Insight scan works
+- [ ] Share from other apps works
+- [ ] Sign out and sign back in
+
+### 5.3 Deploy
+
+- [ ] Deploy to Vercel
+- [ ] Verify service worker serves correctly in production
+- [ ] Test PWA install from production URL
+
+---
+
+## Phase 6: Lint Cleanup
+
+> Fix all 62 pre-existing ESLint warnings across the codebase. These are not from our PWA changes — they existed before ESLint was properly configured.
+
+### Categories of warnings (62 total):
+- `@typescript-eslint/no-explicit-any` — replace `any` with proper types
+- `@typescript-eslint/no-unused-vars` — remove unused imports/variables
+- `@typescript-eslint/no-empty-object-type` — use `Record<string, never>` or proper type
+- `react-hooks/set-state-in-effect` — refactor setState calls in effects
+- `react-hooks/preserve-manual-memoization` — fix memoization patterns
+
+### Goal:
+- [ ] Fix all 62 warnings so `npm run lint` produces 0 problems
+- [ ] Promote warning rules to errors in `eslint.config.mjs` to prevent regressions
+
+---
+
+## Architecture Comparison
+
+| | Capacitor (old) | PWA (new) |
+|---|---|---|
+| **Distribution** | Xcode build → TestFlight/App Store | Safari → Add to Home Screen |
+| **OAuth** | Native plugin + JWT + hybrid sessions | Standard NextAuth (works in Safari) |
+| **Offline** | WebView cache | Service worker cache |
+| **Updates** | Rebuild + redeploy native app | Instant (service worker update) |
+| **Share target** | Not implemented | Web Share Target API |
+| **Complexity** | High (native code, dual auth, Xcode) | Low (web-only, single auth path) |
+| **App Store** | Possible | Not available |
+
+---
+
+## Files to Create (New)
+
+| File | Purpose |
+|------|---------|
+| `app/sw.ts` | Service worker entry point |
+| `app/share/page.tsx` | Share target handler page |
+
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `next.config.mjs` | Wrap with `withSerwist()` |
+| `public/manifest.json` | Add `share_target` and `scope` |
+| `app/globals.css` | Add `overscroll-behavior: none` |
+| `app/layout.tsx` | Add apple splash screen link tags |
+| `.gitignore` | Add SW build artifacts |
+| `components/EmailDraftCard.tsx` | `<a>` → `window.open()` |
+| `components/ui/Markdown.tsx` | `<a>` → `window.open()` |
+| `components/insight/InsightDetailPanel.tsx` | `<a>` → `window.open()` |
+| `components/SourceBadge.tsx` | `<a>` → `window.open()` |
