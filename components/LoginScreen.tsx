@@ -1,21 +1,22 @@
 'use client';
 
 import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { useNativeAuth } from '@/hooks/useNativeAuth';
 import { isNativePlatform } from '@/lib/utils/platform';
 
 export function LoginScreen() {
-  const router = useRouter();
   const { signInNative, isLoading, error } = useNativeAuth();
 
   const handleSignIn = async () => {
     if (isNativePlatform()) {
       const user = await signInNative();
       if (user) {
-        router.push('/');
-        router.refresh();
+        // Full page reload to ensure Home component re-mounts and reads
+        // the fresh session from localStorage. Using router.push/refresh
+        // doesn't work because Home's useNativeAuth hook instance has
+        // separate state from LoginScreen's instance.
+        window.location.reload();
       }
     } else {
       signIn('google', { callbackUrl: '/' });

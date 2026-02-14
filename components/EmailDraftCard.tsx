@@ -13,11 +13,61 @@
  * minimal chrome, no unnecessary boxes or borders.
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import type { EmailDraft, PendingDraft } from '@/lib/ai/types';
 import { openGmailCompose } from '@/lib/utils/gmail-compose';
 import { openGmailThread } from '@/lib/email/gmail-links';
+
+/**
+ * Renders text with URLs converted to clickable links
+ */
+function LinkifiedText({ text, className }: { text: string; className?: string }) {
+  const parts = useMemo(() => {
+    // URL regex that matches http(s) URLs
+    const urlRegex = /(https?:\/\/[^\s<]+[^\s<.,;:!?'"\])>])/g;
+    const segments: { type: 'text' | 'link'; content: string }[] = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = urlRegex.exec(text)) !== null) {
+      // Add text before the URL
+      if (match.index > lastIndex) {
+        segments.push({ type: 'text', content: text.slice(lastIndex, match.index) });
+      }
+      // Add the URL
+      segments.push({ type: 'link', content: match[1] });
+      lastIndex = match.index + match[0].length;
+    }
+
+    // Add remaining text
+    if (lastIndex < text.length) {
+      segments.push({ type: 'text', content: text.slice(lastIndex) });
+    }
+
+    return segments;
+  }, [text]);
+
+  return (
+    <p className={className}>
+      {parts.map((part, i) =>
+        part.type === 'link' ? (
+          <a
+            key={i}
+            href={part.content}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-inbox-accent hover:underline break-all"
+          >
+            {part.content}
+          </a>
+        ) : (
+          <span key={i}>{part.content}</span>
+        )
+      )}
+    </p>
+  );
+}
 
 interface EmailDraftCardProps {
   draft: PendingDraft;
