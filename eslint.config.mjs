@@ -12,6 +12,7 @@ export default tseslint.config(
       "scripts/",
       "public/sw.js",
       "public/workbox-*.js",
+      "next.config.mjs",
     ],
   },
   js.configs.recommended,

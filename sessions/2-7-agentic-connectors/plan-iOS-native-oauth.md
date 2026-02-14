@@ -55,47 +55,44 @@
 
 ---
 
-## Phase 2: Service Worker & Installability
+## Phase 2: Service Worker & Installability ✅
 
 > Make the app installable on iOS (Add to Home Screen) and Android (PWA install prompt). The app already has `manifest.json`, icons, and `appleWebApp` metadata in `layout.tsx`.
 
-### 2.1 Install service worker tooling
+### 2.1 Install service worker tooling ✅
 
-- [ ] `npm install @serwist/next serwist`
-  > `@serwist/next` is the modern replacement for `next-pwa`, with Next.js 14+ support
+- [x] `npm install @serwist/next serwist`
 
-### 2.2 Create service worker entry point
+### 2.2 Create service worker entry point ✅
 
-- [ ] Create `app/sw.ts`
+- [x] Created `app/sw.ts`
   - Precache app shell and static assets
-  - Runtime caching: StaleWhileRevalidate for pages/static assets
-  - **Critical: `NetworkOnly` for `/api/*` routes** — the app uses SSE streaming for agent execution (`/api/tasks/[taskId]/run`). If the service worker caches or intercepts these, streaming will break.
+  - **`NetworkOnly` for `/api/*` routes** — protects SSE streaming
+  - Default caching for pages/static assets
   - Skip waiting + claim clients for instant activation
 
-### 2.3 Update Next.js config
+### 2.3 Update Next.js config ✅
 
-- [ ] Update `next.config.mjs`
-  - Wrap existing config with `withSerwist()` to generate service worker at build time
-  - Disable service worker in dev mode to avoid caching issues
+- [x] Updated `next.config.mjs` — wrapped with `withSerwist()`
+- [x] Disabled SW in dev mode
+- [x] Build uses `--webpack` flag (serwist's Turbopack support is experimental)
+- [x] Added `"webworker"` lib and `@serwist/next/typings` to `tsconfig.json`
 
-### 2.4 Update .gitignore
+### 2.4 Update .gitignore ✅
 
-- [ ] Add service worker build artifacts:
-  ```
-  # PWA Service Worker (generated at build time)
-  public/sw.js
-  public/swe-worker-*.js
-  public/workbox-*.js
-  ```
+- [x] Added `public/sw.js`, `public/swe-worker-*.js`, `public/workbox-*.js`
 
-### 2.5 Verify existing PWA infrastructure
+### 2.5 Verify existing PWA infrastructure ✅
 
 Already in place (no changes needed):
 - `public/manifest.json` — name, icons (192px, 512px, SVG), `display: standalone`
 - `app/layout.tsx` — `manifest` link, `appleWebApp` metadata
 - `public/icons/` — apple-touch-icon.png, icon-192.png, icon-512.png, icon.svg
 
-### 2.6 Testing
+### 2.6 Verification ✅
+- [x] `npm run lint` — 0 errors (55 pre-existing warnings)
+- [x] `npm run typecheck` — clean
+- [x] `npm run build` — clean, SW bundled at `/sw.js`
 - [ ] Chrome DevTools → Application → Manifest → no warnings
 - [ ] Chrome DevTools → Application → Service Workers → registered
 - [ ] Chrome shows install prompt (address bar icon)
