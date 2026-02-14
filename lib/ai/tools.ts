@@ -19,7 +19,7 @@ export const gmailSearchTool: Tool = {
     properties: {
       query: {
         type: 'string',
-        description: 'Gmail search query using Gmail operators. Example: "from:boss@company.com is:unread"',
+        description: 'Gmail search query using Gmail operators. Example: "from:boss@company.com" or "subject:invoice newer_than:7d". Do NOT add is:unread unless specifically asked - search all emails by default.',
       },
       max_results: {
         type: 'number',

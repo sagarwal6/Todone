@@ -3,6 +3,11 @@
 import { useState, useCallback, useEffect } from 'react';
 import { isNativePlatform } from '@/lib/utils/platform';
 
+// iOS OAuth Client ID (public, not a secret)
+// This is used for both native sign-in and as the server client ID
+// The backend verifies tokens against this audience in /api/auth/mobile
+const IOS_CLIENT_ID = '569427904271-0gs6jvpu4hq0plfmn2nqaqv81l3jgfed.apps.googleusercontent.com';
+
 interface NativeUser {
   id: string;
   email: string;
@@ -57,8 +62,8 @@ export function useNativeAuth() {
       // Re-initialize before login to ensure clean state after logout
       await SocialLogin.initialize({
         google: {
-          iOSClientId: process.env.NEXT_PUBLIC_IOS_GOOGLE_CLIENT_ID,
-          iOSServerClientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
+          iOSClientId: IOS_CLIENT_ID,
+          iOSServerClientId: IOS_CLIENT_ID,
         },
       });
 
