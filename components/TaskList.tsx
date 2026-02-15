@@ -154,22 +154,28 @@ export function TaskList({
 }: TaskListProps) {
   const { isMobile } = useResponsive();
   const { isAgentRunning } = useAgentContext();
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    }),
+
+  // Mobile: TouchSensor only (250ms long-press to drag, avoids conflict with swipe/scroll)
+  // Desktop: PointerSensor (8px distance) + KeyboardSensor
+  const mobileSensors = useSensors(
     useSensor(TouchSensor, {
       activationConstraint: {
         delay: 250,
         tolerance: 5,
+      },
+    })
+  );
+  const desktopSensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
       },
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+  const sensors = isMobile ? mobileSensors : desktopSensors;
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
