@@ -132,8 +132,10 @@ export default function PrivacyPage() {
             <h2 className="text-xl font-medium text-on-surface mb-3">Children&apos;s Privacy</h2>
             <p>
               Todone is not directed at children under the age of 13. We do not knowingly collect
-              personal information from children under 13. If you believe a child under 13 has
-              provided us with personal information, please contact us at{' '}
+              personal information from children under 13. Because Todone requires a Google account
+              to sign in, and Google requires users to be at least 13 years old to create an account,
+              this age requirement is enforced at the authentication level. If you believe a child
+              under 13 has provided us with personal information, please contact us at{' '}
               <a href="mailto:privacy@todone.app" className="text-primary underline">privacy@todone.app</a>{' '}
               and we will delete it promptly.
             </p>
