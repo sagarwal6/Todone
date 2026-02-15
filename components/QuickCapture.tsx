@@ -110,92 +110,31 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
   const [speechSupported, setSpeechSupported] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
 
-  // Voice state machine: idle → permission → listening → done → idle
-  type VoiceState = 'idle' | 'permission' | 'listening' | 'done';
+  // Voice state machine: idle → listening → done → idle
+  // (permission prompt removed — browser handles its own prompt on first use,
+  //  and we handle the denied case in onerror)
+  type VoiceState = 'idle' | 'listening' | 'done';
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
   const [finalTranscript, setFinalTranscript] = useState('');
   const [interimTranscript, setInterimTranscript] = useState('');
 
-  // Mic permission tracking
-  const [micPermission, setMicPermission] = useState<'unknown' | 'granted' | 'prompt' | 'denied'>('unknown');
-  const hasEverListenedRef = useRef(false);
-
   const isVoiceActive = voiceState !== 'idle';
 
-  // Mount portal + check speech support + query mic permission
+  // Mount portal + check speech support
   useEffect(() => {
     setMounted(true);
     setSpeechSupported(hasSpeechRecognition());
-    if (typeof navigator !== 'undefined' && navigator.permissions) {
-      navigator.permissions.query({ name: 'microphone' as PermissionName })
-        .then((status) => {
-          setMicPermission(status.state as 'granted' | 'prompt' | 'denied');
-          status.onchange = () => {
-            setMicPermission(status.state as 'granted' | 'prompt' | 'denied');
-          };
-        })
-        .catch(() => {
-          // Permissions API not supported for mic (e.g. Safari)
-        });
-    }
   }, []);
 
-  // Auto-focus input when opening (only if not starting with voice)
-  // Delay cleanup when closing so the slide-down animation (300ms) completes
-  // before DOM changes (voice zone unmount, input clearing) that would cause reflow.
-  useEffect(() => {
-    if (isOpen && !startWithVoice) {
-      const timer = setTimeout(() => {
-        inputRef.current?.focus();
-      }, 100);
-      return () => clearTimeout(timer);
-    } else if (!isOpen) {
-      const timer = setTimeout(() => {
-        setValue('');
-        setVoiceState('idle');
-        setFinalTranscript('');
-        setInterimTranscript('');
-      }, 350);
-      return () => clearTimeout(timer);
-    }
-  }, [isOpen, startWithVoice]);
-
-  // Lock body scroll while open
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      return () => { document.body.style.overflow = ''; };
-    }
-  }, [isOpen]);
-
-  const handleSave = useCallback(() => {
-    const trimmed = value.trim();
-    if (trimmed) {
-      onSave(trimmed);
-      onClose();
-    }
-  }, [value, onSave, onClose]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') { e.preventDefault(); handleSave(); }
-    if (e.key === 'Escape') { onClose(); }
-  }, [handleSave, onClose]);
-
-  // Stop recognition when closing (but don't reset state — the delayed
-  // cleanup in the isOpen effect handles that after the slide-down animation)
-  useEffect(() => {
-    if (!isOpen && recognitionRef.current) {
-      recognitionRef.current.abort();
-      recognitionRef.current = null;
-    }
-  }, [isOpen]);
-
-  // Use a ref to track final transcript in speech callbacks (closures)
-  const finalTranscriptRef = useRef('');
-
+  // ── Single entry point for ALL voice activation ──
+  // Every mic tap, FAB press, and auto-start goes through this one function.
+  // No duplicate logic, no divergent code paths.
   const startListening = useCallback(() => {
     const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognitionAPI) return;
+
+    // If already listening, ignore (prevents double-start)
+    if (recognitionRef.current) return;
 
     // Reset transcript state
     finalTranscriptRef.current = '';
@@ -206,11 +145,6 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
     recognition.continuous = false;
     recognition.interimResults = true;
     recognition.lang = 'en-US';
-
-    recognition.onstart = () => {
-      hasEverListenedRef.current = true;
-      setMicPermission('granted');
-    };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let final = '';
@@ -235,15 +169,13 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
         setValue(text);
         setVoiceState('done');
       } else {
+        // No text captured — return to idle
         setVoiceState('idle');
       }
     };
 
-    recognition.onerror = (event: Event) => {
-      const errorEvent = event as Event & { error?: string };
-      if (errorEvent.error === 'not-allowed') {
-        setMicPermission('denied');
-      }
+    recognition.onerror = () => {
+      // All errors (not-allowed, network, etc.) → return to idle
       setVoiceState('idle');
       recognitionRef.current = null;
     };
@@ -253,26 +185,82 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
     setVoiceState('listening');
   }, []);
 
+  // Use a ref to track final transcript in speech callbacks (closures)
+  const finalTranscriptRef = useRef('');
+
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
       recognitionRef.current.stop();
+      // onend callback will handle state transition to done or idle
     }
   }, []);
 
+  // ── Single handler for all mic interactions ──
   const handleMicTap = useCallback(() => {
     if (voiceState === 'listening') {
       stopListening();
-    } else if (voiceState === 'done') {
+    } else {
+      // From idle or done — always start fresh
       setValue('');
       startListening();
-    } else if (micPermission === 'denied') {
-      return;
-    } else if (micPermission === 'granted' || hasEverListenedRef.current) {
-      startListening();
-    } else {
-      setVoiceState('permission');
     }
-  }, [voiceState, micPermission, startListening, stopListening]);
+  }, [voiceState, startListening, stopListening]);
+
+  // ── Open/close lifecycle ──
+
+  // When opening: focus input OR auto-start voice (single path)
+  // When closing: delayed cleanup so slide-down animation completes
+  useEffect(() => {
+    if (isOpen) {
+      if (startWithVoice && speechSupported) {
+        // Voice path: start listening after slide-up animation
+        const timer = setTimeout(() => startListening(), 350);
+        return () => clearTimeout(timer);
+      } else {
+        // Text path: focus the input
+        const timer = setTimeout(() => inputRef.current?.focus(), 100);
+        return () => clearTimeout(timer);
+      }
+    } else {
+      // Closing: delay state reset until after 300ms slide-down animation
+      const timer = setTimeout(() => {
+        setValue('');
+        setVoiceState('idle');
+        setFinalTranscript('');
+        setInterimTranscript('');
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, startWithVoice, speechSupported, startListening]);
+
+  // Stop recognition when closing
+  useEffect(() => {
+    if (!isOpen && recognitionRef.current) {
+      recognitionRef.current.abort();
+      recognitionRef.current = null;
+    }
+  }, [isOpen]);
+
+  // Lock body scroll while open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = ''; };
+    }
+  }, [isOpen]);
+
+  const handleSave = useCallback(() => {
+    const trimmed = value.trim();
+    if (trimmed) {
+      onSave(trimmed);
+      onClose();
+    }
+  }, [value, onSave, onClose]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') { e.preventDefault(); handleSave(); }
+    if (e.key === 'Escape') { onClose(); }
+  }, [handleSave, onClose]);
 
   // Auto-resize textarea in done state
   const autoResizeTextarea = useCallback(() => {
@@ -288,26 +276,6 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
       autoResizeTextarea();
     }
   }, [voiceState, value, autoResizeTextarea]);
-
-  // Auto-start voice when opened with startWithVoice
-  const hasTriggeredVoiceRef = useRef(false);
-
-  useEffect(() => {
-    if (isOpen && startWithVoice && speechSupported && !hasTriggeredVoiceRef.current) {
-      hasTriggeredVoiceRef.current = true;
-      const timer = setTimeout(() => {
-        if (micPermission === 'granted' || hasEverListenedRef.current) {
-          startListening();
-        } else {
-          setVoiceState('permission');
-        }
-      }, 350);
-      return () => clearTimeout(timer);
-    }
-    if (!isOpen) {
-      hasTriggeredVoiceRef.current = false;
-    }
-  }, [isOpen, startWithVoice, speechSupported, startListening, micPermission]);
 
   if (!mounted) return null;
 
@@ -414,53 +382,6 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
           role="region"
           aria-label="Voice input"
         >
-          {/* Permission pre-prompt */}
-          {voiceState === 'permission' && (
-            <div className="px-6 pt-8 pb-6 flex flex-col items-center animate-fade-in">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                <MaterialIcon
-                  name={micPermission === 'denied' ? 'mic_off' : 'mic'}
-                  size={32}
-                  className={micPermission === 'denied' ? 'text-inbox-error' : 'text-primary'}
-                />
-              </div>
-
-              <p className="text-base font-medium text-inbox-text-primary text-center max-w-[260px] mt-4">
-                {micPermission === 'denied'
-                  ? 'Microphone access was blocked. You can enable it in your browser settings.'
-                  : 'Todone needs your microphone to capture tasks by voice'}
-              </p>
-
-              <button
-                onClick={() => {
-                  if (micPermission === 'denied') {
-                    setVoiceState('idle');
-                  } else {
-                    startListening();
-                  }
-                }}
-                className="
-                  w-full max-w-[240px] h-12 mt-5
-                  rounded-full
-                  bg-primary text-on-primary
-                  text-base font-medium
-                  active:scale-[0.98] transition-transform duration-100
-                "
-              >
-                {micPermission === 'denied' ? 'Got it' : 'Enable microphone'}
-              </button>
-
-              {micPermission !== 'denied' && (
-                <button
-                  onClick={() => setVoiceState('idle')}
-                  className="text-xs text-inbox-text-tertiary/50 mt-3 py-1"
-                >
-                  You can also just type above
-                </button>
-              )}
-            </div>
-          )}
-
           {/* Listening state */}
           {voiceState === 'listening' && (
             <div className="px-6 pt-6 pb-4 flex flex-col items-center">
@@ -556,7 +477,7 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
               {/* Re-record option */}
               <div className="flex items-center justify-center mt-3">
                 <button
-                  onClick={() => { setValue(''); startListening(); }}
+                  onClick={handleMicTap}
                   className="flex items-center gap-2 py-1 active:scale-95 transition-transform duration-100"
                   aria-label="Record again"
                 >
@@ -571,8 +492,8 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
         </div>
       )}
 
-      {/* Mic FAB — only shown when voice is idle and mic not denied */}
-      {speechSupported && !isVoiceActive && micPermission !== 'denied' && (
+      {/* Mic FAB — only shown when voice is idle */}
+      {speechSupported && !isVoiceActive && (
         <div
           className="px-6 pb-6 flex justify-end"
           style={{ paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }}
