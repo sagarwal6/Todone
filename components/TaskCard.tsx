@@ -185,7 +185,7 @@ export function TaskCard({
             ${isDragging ? 'dragging' : ''}
             ${isCompleted ? 'opacity-60' : ''}
             ${isSelected ? 'bg-inbox-bg-selected' : ''}
-            ${isMobile ? 'bg-[var(--inbox-bg-primary)]' : ''}
+            ${isMobile ? '!bg-[var(--inbox-bg-primary)]' : ''}
           `}
           onClick={handleCardClick}
         >
