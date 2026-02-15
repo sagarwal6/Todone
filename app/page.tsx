@@ -6,8 +6,8 @@ import { TaskInput } from '@/components/TaskInput';
 import { TaskList } from '@/components/TaskList';
 import { ConversationPanel } from '@/components/ConversationPanel';
 import { BottomNav, MobileHeader } from '@/components/Navigation';
-import { FAB } from '@/components/ui/FAB';
 import { BottomSheet } from '@/components/ui/Modal';
+import { QuickCaptureBar, FullScreenCapture } from '@/components/QuickCapture';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { EmptyState } from '@/components/EmptyState';
 import { LoginScreen } from '@/components/LoginScreen';
@@ -200,7 +200,7 @@ function AuthenticatedHome() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [insightSelected, setInsightSelected] = useState(false);
   const [selectedInsightActionId, setSelectedInsightActionId] = useState<string | null>(null);
-  const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+  const [showCapture, setShowCapture] = useState(false);
   const [autoStartAgentTaskId, setAutoStartAgentTaskId] = useState<string | null>(null);
 
   const selectedTask = selectedTaskId ? tasks.find(t => t.id === selectedTaskId) || null : null;
@@ -345,7 +345,7 @@ function AuthenticatedHome() {
 
   const handleAddTask = useCallback(async (title: string) => {
     const newTask = addTask(title);
-    setShowAddTaskModal(false);
+    setShowCapture(false);
 
     // ALL tasks go to Claude Opus agent
     // The agent will handle everything: research, email, calendar, web search, etc.
@@ -400,7 +400,7 @@ function AuthenticatedHome() {
     // Show full-screen InsightView when insights tab is selected
     if (viewMode === 'insights') {
       return (
-        <div className="min-h-screen bg-inbox-bg-primary pb-20 flex flex-col">
+        <div className="min-h-screen bg-inbox-bg-primary pb-32 flex flex-col">
           <MobileHeader />
           <div className="flex-1 overflow-hidden">
             <InsightView
@@ -430,17 +430,23 @@ function AuthenticatedHome() {
               tasks={tasks}
             />
           </div>
+          <QuickCaptureBar onTap={() => setShowCapture(true)} />
           <BottomNav
             currentView={viewMode}
             onViewChange={setViewMode}
             counts={counts}
+          />
+          <FullScreenCapture
+            isOpen={showCapture}
+            onClose={() => setShowCapture(false)}
+            onSave={handleAddTask}
           />
         </div>
       );
     }
 
     return (
-      <div className="min-h-screen bg-inbox-bg-primary pb-20">
+      <div className="min-h-screen bg-inbox-bg-primary pb-32">
         <MobileHeader />
 
         <main className="px-4 py-4">
@@ -469,29 +475,19 @@ function AuthenticatedHome() {
           )}
         </main>
 
+        <QuickCaptureBar onTap={() => setShowCapture(true)} />
+
         <BottomNav
           currentView={viewMode}
           onViewChange={setViewMode}
           counts={counts}
         />
 
-        <div className="fixed right-4 bottom-20 z-50 pb-safe-bottom">
-          <FAB
-            icon="add"
-            variant="primary"
-            size="medium"
-            onClick={() => setShowAddTaskModal(true)}
-            aria-label="Add task"
-          />
-        </div>
-
-        <BottomSheet
-          isOpen={showAddTaskModal}
-          onClose={() => setShowAddTaskModal(false)}
-          title="Add Task"
-        >
-          <TaskInput onAddTask={handleAddTask} />
-        </BottomSheet>
+        <FullScreenCapture
+          isOpen={showCapture}
+          onClose={() => setShowCapture(false)}
+          onSave={handleAddTask}
+        />
 
         <BottomSheet
           isOpen={isTaskSelected}

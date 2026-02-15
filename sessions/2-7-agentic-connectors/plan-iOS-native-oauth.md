@@ -42,16 +42,16 @@
 - [x] Created `types/next-auth.d.ts` — NextAuth session type augmentation (adds `user.id`)
 
 ### 1.3 Remove environment variable (manual)
-- [ ] Remove `IOS_GOOGLE_CLIENT_ID` from Vercel dashboard
+- [x] Remove `IOS_GOOGLE_CLIENT_ID` from Vercel dashboard
 
 ### 1.4 Verification ✅
 - [x] `npm run lint` — 0 errors (55 pre-existing warnings)
 - [x] `npm run typecheck` — clean
 - [x] `npm run build` — clean
-- [ ] App loads, Google sign-in works in browser
-- [ ] Tasks load and display correctly
-- [ ] Insight scan works
-- [ ] Agent runs and streams progress (SSE regression check)
+- [x] App loads, Google sign-in works in browser
+- [x] Tasks load and display correctly
+- [x] Insight scan works
+- [x] Agent runs and streams progress (SSE regression check)
 
 ---
 
@@ -102,86 +102,142 @@ Already in place (no changes needed):
 
 ---
 
-## Phase 3: Native Feel Enhancements
+## Phase 3: Native Feel Enhancements ✅
 
 > Make the PWA feel like a native app, not a website in disguise.
 
-### 3.1 Disable overscroll bounce
+### 3.1 Disable overscroll bounce ✅
 
-- [ ] Add to `globals.css`:
-  ```css
-  html, body {
-    overscroll-behavior: none;
-  }
-  ```
-  Prevents the rubber-band bounce when scrolling past edges.
+- [x] Added `overscroll-behavior: none` to `globals.css`
 
 ### 3.2 Apple splash screens
 
 - [ ] Add `apple-touch-startup-image` link tags to `app/layout.tsx`
   - Generate splash images for key device sizes (iPhone 15 Pro Max, 15/14, SE, iPad)
   - Uses app icon + theme color to prevent white flash on launch
+  - *Deferred — low priority, can add later*
 
-### 3.3 Standalone navigation handling
+### 3.3 Standalone navigation handling ✅
 
-- [ ] Add `scope` to `manifest.json` to prevent accidental navigation out of app
-- [ ] Convert external `<a target="_blank">` links to `window.open()` for standalone PWA mode:
+- [x] Added `scope` to `manifest.json` to prevent accidental navigation out of app
+- [x] Converted all `<a target="_blank">` links to `window.open()` for standalone PWA mode:
   - `components/EmailDraftCard.tsx` — URLs in email body
   - `components/ui/Markdown.tsx` — markdown links
   - `components/insight/InsightDetailPanel.tsx` — email URLs
   - `components/SourceBadge.tsx` — source verification links
+  - `components/QuickReferenceCard.tsx` — website links
+  - `components/KeyFactsLine.tsx` — website links
+  - `components/DetailPanel.tsx` — website links
+  - `components/TaskContextPanel.tsx` — website links
+  - `components/OptionCard.tsx` — action URLs
   - Already correct (no changes needed): `CalendarDraftCard.tsx`, `ActionButton.tsx`, `lib/utils/gmail-compose.ts`, `lib/email/gmail-links.ts`
-- [ ] Audit remaining components for `<a>` tags with external URLs: `KeyFactsLine.tsx`, `QuickReferenceCard.tsx`, `OptionCard.tsx`, `TaskContextPanel.tsx`, `DetailPanel.tsx`
+- [x] Zero `target="_blank"` remaining in any component
 
 ### 3.4 Testing
 - [ ] No overscroll bounce when scrolling past content
-- [ ] App shows splash screen on launch (no white flash)
 - [ ] Tapping internal links stays within the PWA
-- [ ] Tapping "Reply in Gmail" / "Create in Calendar" opens Safari overlay
+- [ ] Tapping "Reply in Gmail" / "Create in Calendar" opens native app (via Universal Links) or Safari
 - [ ] Back navigation works within the app
 - [ ] Existing features still work (tasks, scan, agent)
 
 ---
 
-## Phase 4: Share Target ("Save to Todone")
+## Phase 4: Share Target ("Save to Todone") ✅
 
 > Let users share URLs/text from any app (Safari, Mail, etc.) into Todone as a new task.
 
-### 4.1 Add share_target to manifest
+### 4.1 Add share_target to manifest ✅
 
-- [ ] Update `public/manifest.json`:
-  ```json
-  "share_target": {
-    "action": "/share",
-    "method": "GET",
-    "params": {
-      "title": "title",
-      "text": "text",
-      "url": "url"
-    }
-  }
-  ```
+- [x] Updated `public/manifest.json` with `share_target` config
 
-### 4.2 Create share target page
+### 4.2 Create share target page ✅
 
-- [ ] Create `app/share/page.tsx`
+- [x] Created `app/share/page.tsx`
   - Reads `title`, `text`, `url` from search params
-  - User must be signed in (redirect to login if not)
-  - Creates a new task pre-populated with the shared content
-  - Shows the task inline or redirects to home after creation
+  - Redirects to Google sign-in if not authenticated (preserves share params)
+  - Shows source URL preview with clickable link back to source
+  - Editable task title composed from shared content (preserves URL)
+  - Creates task via API, shows success animation, redirects to home
+  - Wrapped in Suspense for Next.js static rendering compatibility
 
 ### 4.3 Testing
 - [ ] Install PWA on iPhone
 - [ ] Open Safari → navigate to any webpage → Share → "Todone" appears in sheet
 - [ ] Select Todone → app opens with URL/title pre-populated as new task
+- [ ] Source URL is clickable in the share page UI
 - [ ] From Mail app → share an email link → same flow works
 - [ ] Share while not signed in → redirects to login → then creates task
 
 ---
 
-## Phase 5: Verification & Regression Testing
+## Phase 5: Mobile UX — Quick Capture & Bug Fixes
 
-### 5.1 Web flow (regression)
+> Make the mobile PWA feel native. Fix visual bugs found during testing, add native app deep links, and replace the FAB + BottomSheet task input with a persistent quick capture bar + full-screen input.
+
+### 5.1 Fix task card swipe backgrounds visible on mobile ✅
+
+- [x] Task cards used `bg-transparent` (flat Card variant) which let the swipe action backgrounds (blue archive / red delete) show through
+- [x] Added opaque `bg-[var(--inbox-bg-primary)]` to TaskCard when `isMobile`
+
+### 5.2 Add native app deep links for Gmail & Calendar ✅
+
+- [x] Updated `openGmailThread` — tries `googlegmail:///mail/thread/{threadId}` first on mobile, falls back to web URL
+- [x] Updated `openGmailCompose` and `openGmailReply` — uses shared `openNativeAppWithFallback` helper
+- [x] Updated `CalendarDraftCard` — tries `googlecalendar://` scheme on mobile, falls back to web URL
+- [x] Created shared `openNativeAppWithFallback()` helper in `lib/email/gmail-links.ts`
+
+### 5.3 Quick Capture — Persistent Input Bar + Full-Screen Capture
+
+> Replace the FAB + BottomSheet pattern with a persistent input bar + full-screen task creation view. Reduces task capture from 3 taps to 1 tap.
+
+**Design pattern:** Same as Todoist, Google Tasks, Apple Reminders — persistent "Add a task" bar, tapping opens full-screen input.
+
+#### 5.3.1 Create `QuickCaptureBar` component ✅
+
+- [x] Persistent pill-shaped bar docked above BottomNav
+  - `[+ Add a task...]` — always visible on all tabs
+  - Position: fixed, above BottomNav (`bottom: calc(4rem + env(safe-area-inset-bottom))`)
+  - Background: `surface-container-high`, `rounded-xl`, `shadow-inbox-elevated`
+  - Icon: `add_circle` filled, 24px, `text-primary`
+  - Tapping opens the full-screen capture view
+
+#### 5.3.2 Create `FullScreenCapture` component ✅
+
+- [x] Full-screen overlay that slides up from bottom (300ms ease-decelerate)
+  - **Header**: back arrow | "New task" | Save button
+  - **Input area**: guiding label "What do you need to get done?"
+  - **Textarea**: large 24px text, auto-focused, keyboard opens immediately
+  - **Placeholder**: `e.g. "Reply to Sarah about the Q3 budget review"`
+  - **Save**: creates task, slides down (250ms), task appears in list
+  - **Back**: slides down, discards input (no confirmation — quick capture is disposable)
+  - Portal to `document.body`, `z-50`, covers everything including BottomNav
+  - Body scroll locked while open
+  - `Cmd+Enter` / `Ctrl+Enter` keyboard shortcut for save (iPad)
+
+#### 5.3.3 Update `page.tsx` mobile layout ✅
+
+- [x] Remove FAB + "Add Task" BottomSheet from mobile layout
+- [x] Remove `showAddTaskModal` state
+- [x] Add `QuickCaptureBar` above `BottomNav`
+- [x] Add `FullScreenCapture` with `showCapture` state
+- [x] Increase main content bottom padding from `pb-20` to `pb-32` to clear both bar and nav
+- [x] Also add QuickCaptureBar to Insights view layout
+
+#### 5.3.4 Testing
+
+- [ ] QuickCaptureBar visible on all tabs (active, completed, archived, insights)
+- [ ] Tapping bar opens full-screen capture with keyboard
+- [ ] Typing + Save creates task, full-screen closes, task appears at top
+- [ ] Back arrow dismisses without confirmation
+- [ ] Keyboard behaves correctly in iOS PWA standalone mode
+- [ ] Desktop layout unchanged (still uses inline TaskInput)
+- [ ] Task detail panel still works after creating a task
+
+---
+
+## Phase 6: Verification & Regression Testing
+
+### 6.1 Web flow (regression)
 
 - [ ] Sign in on desktop browser — NextAuth flow works
 - [ ] Tasks load correctly
@@ -189,7 +245,7 @@ Already in place (no changes needed):
 - [ ] Agent runs work
 - [ ] Gmail/Calendar data accessible through agent
 
-### 5.2 PWA flow (iPhone Safari)
+### 6.2 PWA flow (iPhone Safari)
 
 - [ ] Add to Home Screen → standalone mode
 - [ ] Sign in with Google OAuth → works (no WebView issues)
@@ -198,7 +254,7 @@ Already in place (no changes needed):
 - [ ] Share from other apps works
 - [ ] Sign out and sign back in
 
-### 5.3 Deploy
+### 6.3 Deploy
 
 - [ ] Deploy to Vercel
 - [ ] Verify service worker serves correctly in production
@@ -206,11 +262,11 @@ Already in place (no changes needed):
 
 ---
 
-## Phase 6: Lint Cleanup
+## Phase 7: Lint Cleanup
 
-> Fix all 55 pre-existing ESLint warnings across the codebase. These are not from our PWA changes — they existed before ESLint was properly configured.
+> Fix all 56 ESLint warnings across the codebase. These are not from our PWA changes — they existed before ESLint was properly configured.
 
-### Categories of warnings (55 total):
+### Categories of warnings (56 total):
 - `@typescript-eslint/no-explicit-any` — replace `any` with proper types
 - `@typescript-eslint/no-unused-vars` — remove unused imports/variables
 - `@typescript-eslint/no-empty-object-type` — use `Record<string, never>` or proper type
@@ -218,7 +274,7 @@ Already in place (no changes needed):
 - `react-hooks/preserve-manual-memoization` — fix memoization patterns
 
 ### Goal:
-- [ ] Fix all 55 warnings so `npm run lint` produces 0 problems
+- [ ] Fix all 56 warnings so `npm run lint` produces 0 problems
 - [ ] Promote warning rules to errors in `eslint.config.mjs` to prevent regressions
 
 ---
@@ -237,24 +293,31 @@ Already in place (no changes needed):
 
 ---
 
-## Files to Create (New)
+## Files Created
 
 | File | Purpose |
 |------|---------|
 | `types/next-auth.d.ts` | NextAuth session type augmentation (Phase 1) ✅ |
-| `app/sw.ts` | Service worker entry point (Phase 2) |
-| `app/share/page.tsx` | Share target handler page (Phase 4) |
+| `app/sw.ts` | Service worker entry point (Phase 2) ✅ |
+| `app/share/page.tsx` | Share target handler page (Phase 4) ✅ |
+| `components/QuickCapture.tsx` | QuickCaptureBar + FullScreenCapture (Phase 5) |
 
-## Files to Modify
+## Files Modified
 
 | File | Changes |
 |------|---------|
-| `next.config.mjs` | Wrap with `withSerwist()` |
-| `public/manifest.json` | Add `share_target` and `scope` |
-| `app/globals.css` | Add `overscroll-behavior: none` |
-| `app/layout.tsx` | Add apple splash screen link tags |
-| `.gitignore` | Add SW build artifacts |
-| `components/EmailDraftCard.tsx` | `<a>` → `window.open()` |
-| `components/ui/Markdown.tsx` | `<a>` → `window.open()` |
-| `components/insight/InsightDetailPanel.tsx` | `<a>` → `window.open()` |
-| `components/SourceBadge.tsx` | `<a>` → `window.open()` |
+| `next.config.mjs` | Wrap with `withSerwist()` ✅ |
+| `public/manifest.json` | Add `share_target`, `scope` ✅ |
+| `app/globals.css` | Add `overscroll-behavior: none` ✅ |
+| `.gitignore` | Add SW build artifacts ✅ |
+| `tsconfig.json` | Add `webworker` lib, serwist typings ✅ |
+| `eslint.config.mjs` | Add `next.config.mjs` to ignores ✅ |
+| `package.json` | Remove Capacitor deps, add serwist, `--webpack` build flag ✅ |
+| 9 components | `<a target="_blank">` → `window.open()` ✅ |
+| 7 components/hooks | Revert native auth code ✅ |
+| 9 API routes | `getHybridSession()` → `getServerSession(authOptions)` ✅ |
+| `components/TaskCard.tsx` | Opaque background on mobile to hide swipe actions ✅ |
+| `lib/email/gmail-links.ts` | Native app deep links + `openNativeAppWithFallback` helper ✅ |
+| `lib/utils/gmail-compose.ts` | Use native app deep links on mobile ✅ |
+| `components/CalendarDraftCard.tsx` | Use native Calendar app deep link on mobile ✅ |
+| `app/page.tsx` | Remove FAB + BottomSheet, add QuickCapture (Phase 5) |
