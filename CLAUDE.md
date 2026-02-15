@@ -134,6 +134,13 @@ ENCRYPTION_SECRET
 ### React Callbacks
 - Avoid state in `useCallback` deps that changes frequently - use refs instead
 
+### Security / Logging
+- Never log API keys, tokens (access/refresh), or their prefixes
+- Never log user email addresses, email subjects, sender names, or email content
+- Operational logs (counts, tiers, scores, status booleans) are fine
+- No debug/test API endpoints in production — all routes must check authentication
+- Debug endpoints were removed in the 2/15 security review — do not recreate them
+
 ### PWA / Mobile
 - iOS standalone PWA opens Safari for OAuth — session cookie is shared back via same origin. Post-OAuth landing page at `/auth/complete` handles the redirect.
 - Web Share Target API is Chromium-only — does not work on iOS Safari

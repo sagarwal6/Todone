@@ -10,44 +10,34 @@
 
 ---
 
-## Phase 1: Remove Debug & Dev Endpoints (CRITICAL)
+## Phase 1: Remove Debug & Dev Endpoints (CRITICAL) ✅
 
 > Delete all debug/test API routes that are publicly accessible without authentication.
 
-### Tasks
-- [ ] Delete `app/api/debug/oauth/route.ts`
-- [ ] Delete `app/api/debug/anthropic/route.ts`
-- [ ] Delete `app/api/debug/insight-actions/route.ts`
-- [ ] Delete `app/api/test-db/route.ts`
-- [ ] Verify no other unauthenticated endpoints exist
-
-### Testing
-- Confirm all `/api/debug/*` and `/api/test-db` return 404
-- Confirm all authenticated endpoints still work (tasks, scan, chat, run)
-
-### Key Files
-| File | Action |
-|------|--------|
-| `app/api/debug/oauth/route.ts` | Delete |
-| `app/api/debug/anthropic/route.ts` | Delete |
-| `app/api/debug/insight-actions/route.ts` | Delete |
-| `app/api/test-db/route.ts` | Delete |
+### Completed
+- [x] Deleted `app/api/debug/oauth/route.ts`
+- [x] Deleted `app/api/debug/anthropic/route.ts`
+- [x] Deleted `app/api/debug/insight-actions/route.ts`
+- [x] Deleted `app/api/test-db/route.ts`
+- [x] Verified no other unauthenticated endpoints exist
+- [x] Typecheck, build pass clean
 
 ---
 
-## Phase 2: Remove Sensitive Logging (CRITICAL)
+## Phase 2: Remove Sensitive Logging (CRITICAL) ✅
 
 > Strip all console.log statements that leak API keys, tokens, or user PII.
 
-### Tasks
-- [ ] Remove API key prefix logging in `lib/ai/anthropic.ts` (line ~41)
-- [ ] Remove `console.log('User email:', user.email)` in NextAuth signIn callback
-- [ ] Audit all `console.log` statements across the codebase for any other sensitive data leaks
-- [ ] Keep operational logs (errors, status messages) — only remove ones that log secrets/PII
-
-### Testing
-- Search codebase for any remaining `console.log` that includes tokens, keys, emails, or passwords
-- Build passes
+### Completed
+- [x] Removed API key prefix logging in `lib/ai/anthropic.ts`
+- [x] Removed user email logging in NextAuth signIn callback and signOut event
+- [x] Removed access token prefix logging in `lib/ai/execute-tool.ts`
+- [x] Removed user email from scan session check (`app/api/scan/route.ts`)
+- [x] Removed email addresses from scoring debug logs (`lib/email/scoring.ts`)
+- [x] Removed email subjects, sender names, from addresses from scan/metadata logs (`lib/scan/metadata.ts`)
+- [x] Removed API key availability logging from web search (`lib/ai/web.ts`)
+- [x] Removed profile data from auth callback log
+- [x] Kept operational logs: counts, tiers, scores, status messages
 
 ### Key Files
 | File | Change |
