@@ -24,7 +24,15 @@ import type { EmailMetadataWithHeaders } from '../email/types';
 
 /**
  * Redact PII from text before sending to LLM
- * SECURITY: Prevents sensitive data (SSN, credit cards, account numbers) from being sent to Claude
+ * SECURITY: Prevents sensitive data from being sent to Claude
+ *
+ * PRESERVED (needed for task execution):
+ * - Policy numbers, order numbers, tracking numbers, reference IDs, invoice numbers
+ *
+ * REDACTED:
+ * - SSN, credit cards, bank accounts, routing numbers
+ * - Passwords, auth tokens, API keys
+ * - Date of birth patterns, passport numbers, driver's license numbers
  */
 function redactPII(text: string): string {
   if (!text) return text;
@@ -38,12 +46,29 @@ function redactPII(text: string): string {
     .replace(/\b3[47]\d{2}[-\s]?\d{6}[-\s]?\d{5}\b/g, '[CC REDACTED]')
     // Generic 16-digit card numbers
     .replace(/\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g, '[CC REDACTED]')
-    // Account numbers: "Account: 123456789" or "Account #123456789" or "Acct: 123456789"
-    .replace(/(?:account|acct)\s*#?\s*:?\s*\d{6,}/gi, '[ACCOUNT REDACTED]')
-    // Policy numbers: "Policy: 123456789" or "Policy #123456789"
-    .replace(/policy\s*#?\s*:?\s*\d{6,}/gi, '[POLICY REDACTED]')
-    // Routing numbers: 9 digits (US bank routing)
-    .replace(/\brouting\s*#?\s*:?\s*\d{9}\b/gi, '[ROUTING REDACTED]');
+    // Bank account numbers: "Account: 123456789" or "Account #123456789" or "Acct: 123456789"
+    // (but NOT "policy number", "order number", etc. — those are preserved)
+    .replace(/(?:(?:bank|checking|savings|debit)\s+)?(?:account|acct)\s*#?\s*:?\s*\d{6,}/gi, '[BANK ACCOUNT REDACTED]')
+    // Routing numbers: "Routing: 123456789" or "ABA: 123456789"
+    .replace(/(?:routing|aba)\s*#?\s*:?\s*\d{9}\b/gi, '[ROUTING REDACTED]')
+    // IBAN: 2-letter country code + 2 check digits + up to 30 alphanumeric
+    .replace(/\b[A-Z]{2}\d{2}[\s]?[\dA-Z]{4}[\s]?(?:[\dA-Z]{4}[\s]?){1,7}[\dA-Z]{1,4}\b/g, '[IBAN REDACTED]')
+    // SWIFT/BIC codes: 8 or 11 alphanumeric chars
+    .replace(/\bSWIFT\s*:?\s*[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b/gi, '[SWIFT REDACTED]')
+    // Passwords in email text: "Password: xyz" or "password is xyz" or "temp password: xyz"
+    .replace(/(?:password|passwd|pwd)\s*(?:is|:|=)\s*\S+/gi, '[PASSWORD REDACTED]')
+    // API keys / tokens in email text: "API key: xyz" or "token: xyz" or "secret: xyz"
+    .replace(/(?:api[_\s]?key|auth[_\s]?token|access[_\s]?token|bearer|secret[_\s]?key)\s*(?:is|:|=)\s*\S+/gi, '[AUTH TOKEN REDACTED]')
+    // Date of birth: "DOB: 01/15/1990" or "Date of Birth: 1990-01-15" or "Born: Jan 15, 1990"
+    .replace(/(?:date\s+of\s+birth|dob|born|birthday)\s*:?\s*\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}/gi, '[DOB REDACTED]')
+    .replace(/(?:date\s+of\s+birth|dob|born|birthday)\s*:?\s*\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/gi, '[DOB REDACTED]')
+    .replace(/(?:date\s+of\s+birth|dob|born|birthday)\s*:?\s*(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{1,2},?\s*\d{4}/gi, '[DOB REDACTED]')
+    // Passport numbers: "Passport: AB1234567" or "Passport #: 123456789"
+    .replace(/passport\s*#?\s*:?\s*[A-Z0-9]{6,12}/gi, '[PASSPORT REDACTED]')
+    // Driver's license: "DL: X12345678" or "Driver's License: 12345678" or "License #: AB-123456"
+    .replace(/(?:driver'?s?\s*license|dl|license)\s*#?\s*:?\s*[A-Z0-9][\w-]{5,15}/gi, '[DL REDACTED]')
+    // Medical record numbers: "MRN: 123456" or "Medical Record: 123456"
+    .replace(/(?:mrn|medical\s+record)\s*#?\s*:?\s*\d{5,}/gi, '[MRN REDACTED]');
 }
 
 /**
