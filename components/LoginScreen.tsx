@@ -5,7 +5,7 @@ import { MaterialIcon } from '@/components/ui/MaterialIcon';
 
 export function LoginScreen() {
   const handleSignIn = () => {
-    signIn('google', { callbackUrl: '/' });
+    signIn('google', { callbackUrl: '/auth/complete' });
   };
 
   return (
