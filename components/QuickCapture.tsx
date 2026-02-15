@@ -351,10 +351,10 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
         </button>
       </div>
 
-      {/* Input area — dims when voice is active */}
+      {/* Input area — hidden when voice is active */}
       <div
-        className={`flex-1 flex items-start px-6 pt-12 transition-opacity duration-300 ${
-          isVoiceActive ? 'opacity-30 pointer-events-none' : 'opacity-100'
+        className={`flex-1 flex items-start px-6 pt-12 ${
+          isVoiceActive ? 'hidden' : ''
         }`}
       >
         <div className="w-full max-w-2xl mx-auto">
@@ -404,17 +404,17 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
         </div>
       </div>
 
-      {/* Voice zone — slides up when voice is active */}
+      {/* Voice zone — fills full area when voice is active */}
       {isVoiceActive && (
         <div
-          className="border-t border-inbox-divider bg-inbox-bg-primary rounded-t-3xl shadow-[0_-4px_16px_rgba(60,64,67,0.08)] animate-slide-in-bottom"
+          className="flex-1 flex flex-col bg-surface-bright"
           style={{ paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }}
           role="region"
           aria-label="Voice input"
         >
           {/* Listening state */}
           {voiceState === 'listening' && (
-            <div className="px-6 pt-6 pb-4 flex flex-col items-center">
+            <div className="flex-1 px-6 pt-6 pb-4 flex flex-col items-center justify-center">
               {/* Transcript display */}
               <div className="min-h-[64px] flex items-center justify-center mb-4 w-full max-w-xs">
                 {hasTranscript ? (
@@ -455,7 +455,7 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
 
           {/* Done state — iMessage-style editable transcript with send */}
           {voiceState === 'done' && (
-            <div className="px-6 pt-5 pb-4 animate-fade-in">
+            <div className="mt-auto px-6 pt-5 pb-4 animate-fade-in">
               {/* Editable textarea — auto-grows, wraps text, tap to edit */}
               <div className="flex items-end gap-3 w-full">
                 <div className="flex-1 relative">
