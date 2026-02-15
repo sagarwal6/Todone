@@ -1,6 +1,8 @@
-# Cross-Device Sync Plan (Revised)
+# Cross-Device Sync Plan (DEPRECATED)
 
-Todone on web + iOS with shared Supabase backend. iOS app is a Capacitor wrapper around the mobile-responsive web app.
+> **This plan is deprecated. See [`plan-iOS-native-oauth.md`](./plan-iOS-native-oauth.md) for the current consolidated plan.** The Capacitor approach was abandoned in favor of PWA. All Supabase sync work from this plan is preserved there as "Phase 0".
+
+~~Todone on web + iOS with shared Supabase backend. iOS app is a Capacitor wrapper around the mobile-responsive web app.~~
 
 ---
 
