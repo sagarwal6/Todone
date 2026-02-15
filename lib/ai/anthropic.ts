@@ -35,10 +35,7 @@ function getAnthropicClient(): Anthropic {
   if (!_anthropic) {
     // Use TODONE_ANTHROPIC_API_KEY to avoid conflict with Claude Code's ANTHROPIC_API_KEY
     const apiKey = process.env.TODONE_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
-    console.log('=== Anthropic Lazy Init ===');
-    console.log('Using TODONE_ANTHROPIC_API_KEY:', !!process.env.TODONE_ANTHROPIC_API_KEY);
-    console.log('API Key exists:', !!apiKey);
-    console.log('API Key prefix:', apiKey?.substring(0, 20) + '...');
+    console.log('Anthropic client initialized');
 
     if (!apiKey) {
       throw new Error('TODONE_ANTHROPIC_API_KEY (or ANTHROPIC_API_KEY) environment variable is not set');

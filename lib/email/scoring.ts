@@ -412,8 +412,7 @@ export function extractSignals(
 
   // Debug logging for direct email detection
   if (toList.length > 0 && toList.length <= 3) {
-    console.log(`Scoring: To list (${toList.length}):`, toList.map(e => extractEmailAddress(e)));
-    console.log(`Scoring: User email: "${userEmailLower}", isInTo: ${isInTo}`);
+    console.log(`Scoring: To list count: ${toList.length}, isInTo: ${isInTo}`);
   }
 
   // Count total recipients

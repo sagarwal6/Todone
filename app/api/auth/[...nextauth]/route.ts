@@ -59,9 +59,7 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async signIn({ user, account }) {
-      console.log('=== NextAuth signIn callback ===');
-      console.log('Provider:', account?.provider);
-      console.log('User email:', user.email);
+      console.log('NextAuth signIn callback, provider:', account?.provider);
 
       if (account?.provider === 'google') {
         try {
@@ -72,7 +70,7 @@ export const authOptions: NextAuthOptions = {
             .eq('email', user.email)
             .single();
 
-          console.log('Existing profile check:', { existingProfile, selectError: selectError?.message });
+          console.log('Existing profile check:', { exists: !!existingProfile, error: selectError?.message });
 
           let profileId: string;
 
@@ -175,7 +173,7 @@ export const authOptions: NextAuthOptions = {
           if (profileData) {
             // Revoke tokens with Google and delete from database
             await revokeTokens(profileData.id);
-            console.log('Tokens revoked for user:', session.user.email);
+            console.log('Tokens revoked for user');
           }
         } catch (error) {
           console.error('Error revoking tokens on sign out:', error);

@@ -209,7 +209,6 @@ async function executeGmailSearch(
 
   try {
     console.log('Gmail search: Starting with query:', query);
-    console.log('Gmail search: Token prefix:', context.accessToken.substring(0, 20) + '...');
 
     const emails = await gmail.searchEmails(context.accessToken, query, maxResults);
 
@@ -217,8 +216,7 @@ async function executeGmailSearch(
 
     // If user email is available, score and tier the emails
     if (context.userEmail && emails.length > 0) {
-      console.log('Gmail search: Scoring emails for user:', context.userEmail);
-      console.log('Gmail search: Emails with rawHeaders:', emails.filter(e => e.rawHeaders).length, 'of', emails.length);
+      console.log('Gmail search: Scoring', emails.length, 'emails,', emails.filter(e => e.rawHeaders).length, 'with headers');
 
       // Convert to EmailMetadataWithHeaders format for scoring
       const emailsWithHeaders = emails
@@ -244,12 +242,6 @@ async function executeGmailSearch(
         const tierSummary = getTierSummary(scoredEmails);
 
         console.log('Gmail search: Email tier summary:', tierSummary);
-
-        // Log details for all emails
-        for (const email of scoredEmails) {
-          console.log(`Gmail search: [${email.tier}] score=${email.score} from="${email.from}" subject="${email.subject.substring(0, 50)}"`);
-          console.log(`  -> Direct: ${email.signals.isDirect}, OneToOne: ${email.signals.isOneToOne}, Recipients: ${email.signals.recipientCount}, Automated: ${email.signals.isAutomated}, MailingList: ${email.signals.isMailingList}`);
-        }
 
         // Group emails by tier for clearer LLM consumption
         const highPriority = scoredEmails.filter(e => e.tier === 'high');
@@ -278,7 +270,7 @@ async function executeGmailSearch(
         };
       }
     } else {
-      console.log('Gmail search: No userEmail provided, skipping scoring. userEmail:', context.userEmail);
+      console.log('Gmail search: No userEmail provided, skipping scoring');
     }
 
     // Fallback: return unscored emails if scoring not possible
