@@ -93,13 +93,29 @@ export function TaskCard({
   const cardRef = useRef<HTMLDivElement>(null);
   const swipeCommittedRef = useRef(false);
 
+  // Track whether this gesture has been locked to horizontal swipe
+  const swipeLockedRef = useRef<'horizontal' | 'vertical' | null>(null);
+
   const swipeHandlers = useSwipeable({
     onSwiping: (e) => {
-      // Disable swipes while dragging (dnd-kit) to prevent green/blue backgrounds
       if (!isMobile || swipeCommittedRef.current || isDragging) return;
-      setSwipeOffset(e.deltaX);
+
+      // Lock direction on first significant movement (prevents scroll triggering swipe)
+      if (!swipeLockedRef.current) {
+        if (Math.abs(e.deltaX) > 10 && Math.abs(e.deltaX) > Math.abs(e.deltaY) * 1.5) {
+          swipeLockedRef.current = 'horizontal';
+        } else if (Math.abs(e.deltaY) > 10) {
+          swipeLockedRef.current = 'vertical';
+        }
+      }
+
+      // Only allow swipe offset if locked to horizontal
+      if (swipeLockedRef.current === 'horizontal') {
+        setSwipeOffset(e.deltaX);
+      }
     },
     onSwipedLeft: () => {
+      swipeLockedRef.current = null;
       if (!isMobile || isDragging) return;
       const width = cardRef.current?.offsetWidth || 300;
       if (swipeOffset < -(width * 0.4)) {
@@ -117,6 +133,7 @@ export function TaskCard({
       }
     },
     onSwipedRight: () => {
+      swipeLockedRef.current = null;
       if (!isMobile || isDragging) return;
       const width = cardRef.current?.offsetWidth || 300;
       if (swipeOffset > width * 0.4) {
@@ -134,8 +151,8 @@ export function TaskCard({
       }
     },
     onTouchEndOrOnMouseUp: () => {
+      swipeLockedRef.current = null;
       if (swipeCommittedRef.current || isDragging) return;
-      // Always snap back on touch end if not committed
       setSwipeOffset(0);
       setIsSwipeRevealed(null);
     },
