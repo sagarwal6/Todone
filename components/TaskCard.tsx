@@ -34,6 +34,10 @@ interface TaskCardProps {
   isSelected?: boolean;
   showHoverActions?: boolean;
   isAgentRunning?: boolean;
+  dragHandleProps?: {
+    listeners?: React.HTMLAttributes<HTMLElement>;
+    attributes?: React.HTMLAttributes<HTMLElement>;
+  };
 }
 
 // Generate a concise summary for options (e.g., flights)
@@ -76,6 +80,7 @@ export function TaskCard({
   isSelected = false,
   showHoverActions = false,
   isAgentRunning = false,
+  dragHandleProps,
 }: TaskCardProps) {
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isSwipeRevealed, setIsSwipeRevealed] = useState<'left' | 'right' | null>(null);
@@ -215,6 +220,18 @@ export function TaskCard({
         >
           {/* Main content row */}
           <div className="flex items-center gap-3">
+            {/* Drag handle (mobile only) — touch-none so browser doesn't steal touch for scroll */}
+            {isMobile && dragHandleProps && (
+              <div
+                {...dragHandleProps.attributes}
+                {...dragHandleProps.listeners}
+                className="shrink-0 touch-none cursor-grab active:cursor-grabbing -ml-1 p-1"
+                style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
+                aria-label="Drag to reorder"
+              >
+                <MaterialIcon name="drag_indicator" size={20} className="text-inbox-text-tertiary/40" />
+              </div>
+            )}
             {/* Circular Checkbox (desktop only — mobile uses swipe gestures) */}
             {!isMobile && (
               <CircularCheckbox

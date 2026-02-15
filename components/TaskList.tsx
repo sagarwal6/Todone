@@ -67,20 +67,26 @@ function SortableTask({
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
-    // Suppress iOS context menu (copy/lookup/etc) during long-press drag
-    WebkitTouchCallout: 'none',
-    WebkitUserSelect: 'none',
-    userSelect: 'none',
   };
+
+  // On mobile, drag listeners go on the drag handle inside TaskCard (not the wrapper)
+  // so scrolling and swiping work normally on the card body.
+  // On desktop, drag listeners go on the whole wrapper.
+  const wrapperProps = isMobile
+    ? {}
+    : { ...attributes, ...listeners };
+
+  const dragHandleProps = isMobile
+    ? { listeners: listeners as React.HTMLAttributes<HTMLElement>, attributes: attributes as React.HTMLAttributes<HTMLElement> }
+    : undefined;
 
   if (compact) {
     return (
       <div
         ref={setNodeRef}
         style={style}
-        {...attributes}
-        {...listeners}
-        className="cursor-grab active:cursor-grabbing"
+        {...wrapperProps}
+        className={isMobile ? '' : 'cursor-grab active:cursor-grabbing'}
       >
         <CompactTaskCard
           task={task}
@@ -99,9 +105,8 @@ function SortableTask({
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
-      className="cursor-grab active:cursor-grabbing"
+      {...wrapperProps}
+      className={isMobile ? '' : 'cursor-grab active:cursor-grabbing'}
     >
       <TaskCard
         task={task}
@@ -117,6 +122,7 @@ function SortableTask({
         isSelected={isSelected}
         showHoverActions={true}
         isAgentRunning={isAgentRunning}
+        dragHandleProps={dragHandleProps}
       />
     </div>
   );
