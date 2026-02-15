@@ -105,9 +105,16 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
   const [value, setValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const [mounted, setMounted] = useState(false);
-  const [isListening, setIsListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+
+  // Voice state machine: idle → listening → done → idle
+  type VoiceState = 'idle' | 'listening' | 'done';
+  const [voiceState, setVoiceState] = useState<VoiceState>('idle');
+  const [finalTranscript, setFinalTranscript] = useState('');
+  const [interimTranscript, setInterimTranscript] = useState('');
+
+  const isVoiceActive = voiceState !== 'idle';
 
   // Mount portal + check speech support
   useEffect(() => {
@@ -115,27 +122,26 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
     setSpeechSupported(hasSpeechRecognition());
   }, []);
 
-  // Auto-focus input when opening
+  // Auto-focus input when opening (only if not starting with voice)
   useEffect(() => {
-    if (isOpen) {
-      // Small delay to let the animation start, then focus
+    if (isOpen && !startWithVoice) {
       const timer = setTimeout(() => {
         inputRef.current?.focus();
       }, 100);
       return () => clearTimeout(timer);
-    } else {
-      // Reset value when closing
+    } else if (!isOpen) {
       setValue('');
+      setVoiceState('idle');
+      setFinalTranscript('');
+      setInterimTranscript('');
     }
-  }, [isOpen]);
+  }, [isOpen, startWithVoice]);
 
   // Lock body scroll while open
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
-      return () => {
-        document.body.style.overflow = '';
-      };
+      return () => { document.body.style.overflow = ''; };
     }
   }, [isOpen]);
 
@@ -149,78 +155,90 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
   }, [value, onSave, onClose]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    // Enter to save (natural for single-line input)
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleSave();
-    }
-    // Escape to cancel
-    if (e.key === 'Escape') {
-      onClose();
-    }
+    if (e.key === 'Enter') { e.preventDefault(); handleSave(); }
+    if (e.key === 'Escape') { onClose(); }
   }, [handleSave, onClose]);
 
   // Stop listening when closing
   useEffect(() => {
     if (!isOpen && recognitionRef.current) {
       recognitionRef.current.abort();
-      setIsListening(false);
+      setVoiceState('idle');
     }
   }, [isOpen]);
 
-  const toggleVoice = useCallback(() => {
-    if (isListening && recognitionRef.current) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-      return;
-    }
-
+  const startListening = useCallback(() => {
     const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognitionAPI) return;
+
+    // Reset transcript state
+    setFinalTranscript('');
+    setInterimTranscript('');
 
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = false;
     recognition.interimResults = true;
     recognition.lang = 'en-US';
 
-    let finalTranscript = '';
-
     recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let final = '';
       let interim = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
+      for (let i = 0; i < event.results.length; i++) {
         if (event.results[i].isFinal) {
-          finalTranscript += transcript;
+          final += event.results[i][0].transcript;
         } else {
-          interim = transcript;
+          interim += event.results[i][0].transcript;
         }
       }
-      // Show interim results in real-time
-      setValue(prev => {
-        const base = prev.endsWith(interim) ? prev.slice(0, -interim.length) : prev;
-        return (finalTranscript || base) + (interim ? interim : '');
-      });
+      setFinalTranscript(final);
+      setInterimTranscript(interim);
     };
 
     recognition.onend = () => {
-      setIsListening(false);
-      if (finalTranscript) {
-        setValue(finalTranscript);
-      }
       recognitionRef.current = null;
-      // Focus the input after voice
-      inputRef.current?.focus();
+      // Commit transcript to input value
+      setFinalTranscript(prev => {
+        const text = prev.trim();
+        if (text) {
+          setValue(text);
+          setVoiceState('done');
+        } else {
+          setVoiceState('idle');
+        }
+        return prev;
+      });
+      setInterimTranscript('');
     };
 
     recognition.onerror = () => {
-      setIsListening(false);
+      setVoiceState('idle');
       recognitionRef.current = null;
     };
 
     recognitionRef.current = recognition;
     recognition.start();
-    setIsListening(true);
-  }, [isListening]);
+    setVoiceState('listening');
+  }, []);
+
+  const stopListening = useCallback(() => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+  }, []);
+
+  const handleMicTap = useCallback(() => {
+    if (voiceState === 'listening') {
+      stopListening();
+    } else {
+      startListening();
+    }
+  }, [voiceState, startListening, stopListening]);
+
+  // Dismiss voice zone and switch to editing
+  const handleEditAfterVoice = useCallback(() => {
+    setVoiceState('idle');
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }, []);
 
   // Auto-start voice when opened with startWithVoice
   const hasTriggeredVoiceRef = useRef(false);
@@ -228,18 +246,17 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
   useEffect(() => {
     if (isOpen && startWithVoice && speechSupported && !hasTriggeredVoiceRef.current) {
       hasTriggeredVoiceRef.current = true;
-      // Delay to let overlay animate in before mic permission prompt
-      const timer = setTimeout(() => {
-        toggleVoice();
-      }, 350);
+      const timer = setTimeout(() => startListening(), 350);
       return () => clearTimeout(timer);
     }
     if (!isOpen) {
       hasTriggeredVoiceRef.current = false;
     }
-  }, [isOpen, startWithVoice, speechSupported, toggleVoice]);
+  }, [isOpen, startWithVoice, speechSupported, startListening]);
 
   if (!mounted) return null;
+
+  const hasTranscript = finalTranscript.trim() || interimTranscript.trim();
 
   return createPortal(
     <div
@@ -281,10 +298,13 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
         </button>
       </div>
 
-      {/* Input area - centered vertically for focus */}
-      <div className="flex-1 flex items-start px-6 pt-12">
+      {/* Input area — dims when voice is active */}
+      <div
+        className={`flex-1 flex items-start px-6 pt-12 transition-opacity duration-300 ${
+          isVoiceActive ? 'opacity-30 pointer-events-none' : 'opacity-100'
+        }`}
+      >
         <div className="w-full max-w-2xl mx-auto">
-          {/* Checkmark icon for subtle encouragement */}
           <div className="flex items-start gap-4">
             <div className="mt-2 shrink-0">
               <MaterialIcon
@@ -298,7 +318,6 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
               />
             </div>
 
-            {/* Auto-sizing input */}
             <div className="flex-1 relative">
               <input
                 ref={inputRef}
@@ -322,8 +341,7 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
                 autoCapitalize="sentences"
               />
 
-              {/* Hint text when empty */}
-              {!value && (
+              {!value && !isVoiceActive && (
                 <p className="mt-3 text-xs font-normal text-inbox-text-tertiary/40 leading-relaxed">
                   Try: &quot;Reply to Sarah&quot; or &quot;Schedule dentist appointment&quot;
                 </p>
@@ -333,39 +351,122 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
         </div>
       </div>
 
-      {/* Voice input FAB */}
-      {speechSupported && (
+      {/* Voice zone — slides up when voice is active */}
+      {isVoiceActive && (
+        <div
+          className="border-t border-inbox-divider bg-inbox-bg-primary rounded-t-3xl shadow-[0_-4px_16px_rgba(60,64,67,0.08)] animate-slide-in-bottom"
+          style={{ paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }}
+          role="region"
+          aria-label="Voice input"
+        >
+          <div className="px-6 pt-6 pb-4 flex flex-col items-center">
+            {/* Transcript display */}
+            <div className="min-h-[64px] flex items-center justify-center mb-4 w-full max-w-xs">
+              {hasTranscript ? (
+                <p className="text-2xl text-center leading-relaxed">
+                  <span className="text-inbox-text-primary">{finalTranscript}</span>
+                  {interimTranscript && (
+                    <span className="text-inbox-text-tertiary/50 transition-opacity duration-150">
+                      {finalTranscript ? ' ' : ''}{interimTranscript}
+                    </span>
+                  )}
+                  {voiceState === 'listening' && (
+                    <span className="inline-block w-0.5 h-6 bg-primary ml-0.5 align-middle animate-[voice-cursor-blink_1s_infinite]" />
+                  )}
+                </p>
+              ) : voiceState === 'listening' ? (
+                <p className="text-inbox-text-tertiary/40 text-lg">Speak now...</p>
+              ) : null}
+            </div>
+
+            {/* Listening indicator — waveform dots */}
+            {voiceState === 'listening' && (
+              <div className="flex flex-col items-center mb-4">
+                <div className="flex items-end gap-1.5 h-5">
+                  <span className="w-2 h-2 rounded-full bg-inbox-error animate-[voice-dot-bounce_1.2s_infinite_0ms]" />
+                  <span className="w-2 h-2 rounded-full bg-inbox-error animate-[voice-dot-bounce_1.2s_infinite_150ms]" />
+                  <span className="w-2 h-2 rounded-full bg-inbox-error animate-[voice-dot-bounce_1.2s_infinite_300ms]" />
+                </div>
+                <span className="text-xs font-medium text-inbox-text-tertiary mt-2">Listening...</span>
+              </div>
+            )}
+
+            {/* Mic button — centered */}
+            <button
+              onClick={handleMicTap}
+              className={`
+                rounded-full flex items-center justify-center
+                transition-all duration-300
+                ${voiceState === 'listening'
+                  ? 'w-16 h-16 bg-inbox-error animate-[voice-ring-pulse_1.8s_ease-out_infinite]'
+                  : 'w-12 h-12 bg-inbox-bg-secondary'
+                }
+              `}
+              aria-label={voiceState === 'listening' ? 'Stop recording' : 'Record again'}
+            >
+              <MaterialIcon
+                name={voiceState === 'listening' ? 'mic' : 'mic'}
+                size={voiceState === 'listening' ? 28 : 22}
+                className={voiceState === 'listening' ? 'text-on-primary' : 'text-inbox-text-secondary'}
+              />
+            </button>
+
+            {/* Post-voice actions — save + edit */}
+            {voiceState === 'done' && value.trim() && (
+              <div className="w-full mt-5 flex flex-col items-center gap-3 animate-fade-in">
+                <button
+                  onClick={handleSave}
+                  className="
+                    w-full max-w-xs h-12
+                    bg-primary text-on-primary
+                    text-base font-medium
+                    rounded-full
+                    active:scale-[0.98] transition-transform duration-100
+                  "
+                >
+                  Save task
+                </button>
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => { setValue(''); startListening(); }}
+                    className="w-10 h-10 rounded-full bg-inbox-bg-secondary flex items-center justify-center"
+                    aria-label="Record again"
+                  >
+                    <MaterialIcon name="mic" size={20} className="text-inbox-text-secondary" />
+                  </button>
+                  <button
+                    onClick={handleEditAfterVoice}
+                    className="w-10 h-10 rounded-full bg-inbox-bg-secondary flex items-center justify-center"
+                    aria-label="Edit text"
+                  >
+                    <MaterialIcon name="edit" size={20} className="text-inbox-text-secondary" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Mic FAB — only shown when voice is idle */}
+      {speechSupported && !isVoiceActive && (
         <div
           className="px-6 pb-6 flex justify-end"
           style={{ paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }}
         >
           <button
-            onClick={toggleVoice}
-            className={`
+            onClick={handleMicTap}
+            className="
               w-14 h-14 rounded-full
               flex items-center justify-center
               shadow-inbox-elevated
+              bg-primary hover:bg-inbox-accent-hover
               active:scale-95 transition-all duration-150
-              ${isListening
-                ? 'bg-inbox-error animate-[mic-pulse_1.5s_ease-in-out_infinite]'
-                : 'bg-primary hover:bg-inbox-accent-hover'
-              }
-            `}
-            aria-label={isListening ? 'Stop recording' : 'Voice input'}
+            "
+            aria-label="Voice input"
           >
-            <MaterialIcon
-              name={isListening ? 'stop' : 'mic'}
-              size={24}
-              className="text-on-primary"
-            />
+            <MaterialIcon name="mic" size={24} className="text-on-primary" />
           </button>
-          {isListening && (
-            <div className="absolute bottom-24 right-6 flex justify-center" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-              <span className="text-inbox-caption font-medium text-primary bg-inbox-accent-light px-3 py-1 rounded-full">
-                Listening...
-              </span>
-            </div>
-          )}
         </div>
       )}
     </div>,
