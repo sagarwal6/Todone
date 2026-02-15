@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useSwipeable } from 'react-swipeable';
 import { Task, ProgressStatus } from '@/lib/types';
 import { ProgressiveReveal } from './ProgressiveReveal';
@@ -89,17 +89,28 @@ export function TaskCard({
   const options = task.research?.options;
   const hasOptions = options && options.length > 0;
 
+  // Track container width for full swipe-through
+  const cardRef = useRef<HTMLDivElement>(null);
+  const swipeCommittedRef = useRef(false);
+
   const swipeHandlers = useSwipeable({
     onSwiping: (e) => {
-      if (!isMobile) return;
-      // Limit swipe distance
-      const maxSwipe = 80;
-      const offset = Math.max(-maxSwipe, Math.min(maxSwipe, e.deltaX));
-      setSwipeOffset(offset);
+      if (!isMobile || swipeCommittedRef.current) return;
+      // Allow full-width swiping (no cap) — rubber-band feel
+      setSwipeOffset(e.deltaX);
     },
     onSwipedLeft: () => {
       if (!isMobile) return;
-      if (swipeOffset < -40) {
+      const width = cardRef.current?.offsetWidth || 300;
+      if (swipeOffset < -(width * 0.4)) {
+        // Full swipe-through: animate off-screen then fire action
+        swipeCommittedRef.current = true;
+        setSwipeOffset(-width);
+        setTimeout(() => {
+          swipeCommittedRef.current = false;
+          onArchive(task.id);
+        }, 200);
+      } else if (swipeOffset < -40) {
         setIsSwipeRevealed('left');
         setSwipeOffset(-80);
       } else {
@@ -109,7 +120,16 @@ export function TaskCard({
     },
     onSwipedRight: () => {
       if (!isMobile) return;
-      if (swipeOffset > 40) {
+      const width = cardRef.current?.offsetWidth || 300;
+      if (swipeOffset > width * 0.4) {
+        // Full swipe-through: animate off-screen then fire action
+        swipeCommittedRef.current = true;
+        setSwipeOffset(width);
+        setTimeout(() => {
+          swipeCommittedRef.current = false;
+          onComplete(task.id);
+        }, 200);
+      } else if (swipeOffset > 40) {
         setIsSwipeRevealed('right');
         setSwipeOffset(80);
       } else {
@@ -118,6 +138,7 @@ export function TaskCard({
       }
     },
     onTouchEndOrOnMouseUp: () => {
+      if (swipeCommittedRef.current) return;
       if (Math.abs(swipeOffset) < 40) {
         setSwipeOffset(0);
         setIsSwipeRevealed(null);
@@ -153,25 +174,24 @@ export function TaskCard({
     onDelete(task.id);
   };
 
+  // Determine if the card is animating (snap-back or swipe-through)
+  const isAnimating = swipeOffset === 0 || swipeCommittedRef.current;
+
   return (
-    <div className="relative overflow-hidden">
-      {/* Swipe action backgrounds (mobile only, hidden until swiping) */}
+    <div ref={cardRef} className="relative overflow-hidden">
+      {/* Swipe action backgrounds — full width, revealed as card slides */}
       {isMobile && swipeOffset !== 0 && (
         <>
-          {/* Done action (swipe right) */}
+          {/* Done action (swipe right) — green fills from left */}
           {swipeOffset > 0 && (
-            <div className="absolute inset-y-0 left-0 w-20 bg-inbox-success flex items-center justify-center">
-              <button onClick={() => { setSwipeOffset(0); setIsSwipeRevealed(null); onComplete(task.id); }} className="p-3">
-                <MaterialIcon name="check_circle" size={24} className="text-white" />
-              </button>
+            <div className="absolute inset-0 bg-inbox-success flex items-center pl-6">
+              <MaterialIcon name="check_circle" size={24} className="text-white" />
             </div>
           )}
-          {/* Archive action (swipe left) */}
+          {/* Archive action (swipe left) — blue fills from right */}
           {swipeOffset < 0 && (
-            <div className="absolute inset-y-0 right-0 w-20 bg-primary flex items-center justify-center">
-              <button onClick={handleArchive} className="p-3">
-                <MaterialIcon name="inventory_2" size={24} className="text-on-primary" />
-              </button>
+            <div className="absolute inset-0 bg-primary flex items-center justify-end pr-6">
+              <MaterialIcon name="inventory_2" size={24} className="text-on-primary" />
             </div>
           )}
         </>
@@ -180,7 +200,7 @@ export function TaskCard({
       {/* Card content */}
       <div
         {...(isMobile ? swipeHandlers : {})}
-        style={isMobile ? { transform: `translateX(${swipeOffset}px)`, transition: swipeOffset === 0 ? 'transform 0.2s ease-out' : 'none' } : {}}
+        style={isMobile ? { transform: `translateX(${swipeOffset}px)`, transition: isAnimating ? 'transform 0.2s ease-out' : 'none' } : {}}
       >
         <Card
           variant="flat"

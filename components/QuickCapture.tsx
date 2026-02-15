@@ -39,9 +39,10 @@ export function QuickCaptureBar({ onTap, onMicTap }: QuickCaptureBarProps) {
         className="
           w-full flex items-center
           bg-inbox-bg-primary
-          border border-inbox-divider
+          border border-inbox-divider-strong
           rounded-2xl
-          shadow-inbox-subtle
+          shadow-inbox-elevated
+          ring-1 ring-primary/[0.07]
         "
       >
         {/* Main tap zone: opens typing capture */}
@@ -49,7 +50,7 @@ export function QuickCaptureBar({ onTap, onMicTap }: QuickCaptureBarProps) {
           onClick={onTap}
           className="
             flex-1 flex items-center gap-3
-            px-4 py-3
+            px-4 py-3.5
             rounded-2xl
             active:scale-[0.98] transition-transform duration-100
           "
@@ -60,7 +61,7 @@ export function QuickCaptureBar({ onTap, onMicTap }: QuickCaptureBarProps) {
             fill
             className="text-primary"
           />
-          <span className="text-inbox-body text-inbox-text-tertiary">
+          <span className="text-inbox-body-medium text-inbox-text-secondary">
             Add a task...
           </span>
         </button>

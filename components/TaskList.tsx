@@ -64,9 +64,13 @@ function SortableTask({
     isDragging,
   } = useSortable({ id: task.id });
 
-  const style = {
+  const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
+    // Suppress iOS context menu (copy/lookup/etc) during long-press drag
+    WebkitTouchCallout: 'none',
+    WebkitUserSelect: 'none',
+    userSelect: 'none',
   };
 
   if (compact) {
