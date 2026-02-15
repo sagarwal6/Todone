@@ -6,6 +6,7 @@ import {
   closestCenter,
   KeyboardSensor,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   DragEndEvent,
@@ -17,6 +18,7 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { CSS } from '@dnd-kit/utilities';
 import { Task, ProgressStatus } from '@/lib/types';
 import { TaskCard } from './TaskCard';
@@ -74,7 +76,7 @@ function SortableTask({
         style={style}
         {...attributes}
         {...listeners}
-        className="cursor-grab active:cursor-grabbing touch-none"
+        className="cursor-grab active:cursor-grabbing"
       >
         <CompactTaskCard
           task={task}
@@ -95,7 +97,7 @@ function SortableTask({
       style={style}
       {...attributes}
       {...listeners}
-      className="cursor-grab active:cursor-grabbing touch-none"
+      className="cursor-grab active:cursor-grabbing"
     >
       <TaskCard
         task={task}
@@ -153,6 +155,12 @@ export function TaskList({
         distance: 8,
       },
     }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 250,
+        tolerance: 5,
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -203,6 +211,7 @@ export function TaskList({
       sensors={sensors}
       collisionDetection={closestCenter}
       onDragEnd={handleDragEnd}
+      modifiers={[restrictToVerticalAxis]}
     >
       <SortableContext
         items={sortedTasks.map((t) => t.id)}
