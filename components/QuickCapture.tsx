@@ -105,13 +105,13 @@ interface FullScreenCaptureProps {
 export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = false }: FullScreenCaptureProps) {
   const [value, setValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
-  const reviewInputRef = useRef<HTMLInputElement>(null);
+  const doneTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [mounted, setMounted] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
 
-  // Voice state machine: idle → permission → listening → review → idle
-  type VoiceState = 'idle' | 'permission' | 'listening' | 'review';
+  // Voice state machine: idle → permission → listening → done → idle
+  type VoiceState = 'idle' | 'permission' | 'listening' | 'done';
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
   const [finalTranscript, setFinalTranscript] = useState('');
   const [interimTranscript, setInterimTranscript] = useState('');
@@ -233,7 +233,7 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
       const text = finalTranscriptRef.current.trim();
       if (text) {
         setValue(text);
-        setVoiceState('review');
+        setVoiceState('done');
       } else {
         setVoiceState('idle');
       }
@@ -262,7 +262,7 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
   const handleMicTap = useCallback(() => {
     if (voiceState === 'listening') {
       stopListening();
-    } else if (voiceState === 'review') {
+    } else if (voiceState === 'done') {
       setValue('');
       startListening();
     } else if (micPermission === 'denied') {
@@ -270,24 +270,24 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
     } else if (micPermission === 'granted' || hasEverListenedRef.current) {
       startListening();
     } else {
-      // Need permission — show pre-prompt
       setVoiceState('permission');
     }
   }, [voiceState, micPermission, startListening, stopListening]);
 
-  // Auto-focus review input when entering review state
-  useEffect(() => {
-    if (voiceState === 'review') {
-      const timer = setTimeout(() => {
-        const input = reviewInputRef.current;
-        if (input) {
-          input.focus();
-          input.setSelectionRange(input.value.length, input.value.length);
-        }
-      }, 50);
-      return () => clearTimeout(timer);
+  // Auto-resize textarea in done state
+  const autoResizeTextarea = useCallback(() => {
+    const ta = doneTextareaRef.current;
+    if (ta) {
+      ta.style.height = 'auto';
+      ta.style.height = ta.scrollHeight + 'px';
     }
-  }, [voiceState]);
+  }, []);
+
+  useEffect(() => {
+    if (voiceState === 'done') {
+      autoResizeTextarea();
+    }
+  }, [voiceState, value, autoResizeTextarea]);
 
   // Auto-start voice when opened with startWithVoice
   const hasTriggeredVoiceRef = useRef(false);
@@ -502,67 +502,70 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
             </div>
           )}
 
-          {/* Review state — inline editable transcript */}
-          {voiceState === 'review' && (
-            <div className="px-6 pt-5 pb-4 flex flex-col items-center animate-fade-in">
-              {/* Editable transcript */}
-              <div className="flex items-center gap-3 w-full max-w-md">
-                <MaterialIcon
-                  name="check_circle"
-                  size={24}
-                  fill
-                  className="text-primary shrink-0"
-                />
-                <input
-                  ref={reviewInputRef}
-                  type="text"
-                  value={value}
-                  onChange={(e) => setValue(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  className="
-                    flex-1
-                    text-xl text-inbox-text-primary
-                    bg-transparent
-                    border-0 border-b-2 border-primary/40
-                    outline-none
-                    pb-1
-                    placeholder:text-inbox-text-tertiary/40
-                  "
-                  placeholder="What can I help you with?"
-                  autoComplete="off"
-                  autoCapitalize="sentences"
-                />
+          {/* Done state — iMessage-style editable transcript with send */}
+          {voiceState === 'done' && (
+            <div className="px-6 pt-5 pb-4 animate-fade-in">
+              {/* Editable textarea — auto-grows, wraps text, tap to edit */}
+              <div className="flex items-end gap-3 w-full">
+                <div className="flex-1 relative">
+                  <textarea
+                    ref={doneTextareaRef}
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    rows={1}
+                    className="
+                      w-full
+                      text-lg text-inbox-text-primary leading-relaxed
+                      bg-inbox-bg-secondary
+                      rounded-2xl
+                      px-4 py-3
+                      border-0 outline-none
+                      resize-none
+                      overflow-hidden
+                      placeholder:text-inbox-text-tertiary/40
+                    "
+                    placeholder="What can I help you with?"
+                    autoComplete="off"
+                    autoCapitalize="sentences"
+                  />
+                </div>
+                {/* Send button — like iMessage arrow */}
+                <button
+                  onClick={handleSave}
+                  disabled={!value.trim()}
+                  className={`
+                    shrink-0 w-10 h-10 rounded-full
+                    flex items-center justify-center
+                    transition-all duration-150
+                    ${value.trim()
+                      ? 'bg-primary active:scale-90'
+                      : 'bg-inbox-bg-secondary cursor-not-allowed'
+                    }
+                  `}
+                  aria-label="Save task"
+                >
+                  <MaterialIcon
+                    name="arrow_upward"
+                    size={22}
+                    className={value.trim() ? 'text-on-primary' : 'text-inbox-text-tertiary/40'}
+                  />
+                </button>
               </div>
 
-              {/* Save button */}
-              <button
-                onClick={handleSave}
-                disabled={!value.trim()}
-                className={`
-                  w-full max-w-md h-12 mt-4
-                  rounded-full
-                  text-base font-medium
-                  active:scale-[0.98] transition-all duration-150
-                  ${value.trim()
-                    ? 'bg-primary text-on-primary'
-                    : 'bg-inbox-bg-secondary text-inbox-text-tertiary/40 cursor-not-allowed'
-                  }
-                `}
-              >
-                Save task
-              </button>
-
               {/* Re-record option */}
-              <button
-                onClick={() => { setValue(''); startListening(); }}
-                className="flex items-center gap-2 mt-3 py-1 active:scale-95 transition-transform duration-100"
-                aria-label="Record again"
-              >
-                <div className="w-8 h-8 rounded-full bg-inbox-bg-secondary flex items-center justify-center">
-                  <MaterialIcon name="mic" size={18} className="text-inbox-text-secondary" />
-                </div>
-                <span className="text-xs text-inbox-text-tertiary">Re-record</span>
-              </button>
+              <div className="flex items-center justify-center mt-3">
+                <button
+                  onClick={() => { setValue(''); startListening(); }}
+                  className="flex items-center gap-2 py-1 active:scale-95 transition-transform duration-100"
+                  aria-label="Record again"
+                >
+                  <div className="w-8 h-8 rounded-full bg-inbox-bg-secondary flex items-center justify-center">
+                    <MaterialIcon name="mic" size={18} className="text-inbox-text-secondary" />
+                  </div>
+                  <span className="text-xs text-inbox-text-tertiary">Re-record</span>
+                </button>
+              </div>
             </div>
           )}
         </div>
