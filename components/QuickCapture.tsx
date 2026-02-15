@@ -148,6 +148,10 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
   const handleSave = useCallback(() => {
     const trimmed = value.trim();
     if (trimmed) {
+      // Reset voice state before closing to prevent animation conflicts
+      setVoiceState('idle');
+      setFinalTranscript('');
+      setInterimTranscript('');
       onSave(trimmed);
       setValue('');
       onClose();
@@ -167,11 +171,15 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
     }
   }, [isOpen]);
 
+  // Use a ref to track final transcript in speech callbacks (closures)
+  const finalTranscriptRef = useRef('');
+
   const startListening = useCallback(() => {
     const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognitionAPI) return;
 
     // Reset transcript state
+    finalTranscriptRef.current = '';
     setFinalTranscript('');
     setInterimTranscript('');
 
@@ -190,24 +198,21 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
           interim += event.results[i][0].transcript;
         }
       }
+      finalTranscriptRef.current = final;
       setFinalTranscript(final);
       setInterimTranscript(interim);
     };
 
     recognition.onend = () => {
       recognitionRef.current = null;
-      // Commit transcript to input value
-      setFinalTranscript(prev => {
-        const text = prev.trim();
-        if (text) {
-          setValue(text);
-          setVoiceState('done');
-        } else {
-          setVoiceState('idle');
-        }
-        return prev;
-      });
       setInterimTranscript('');
+      const text = finalTranscriptRef.current.trim();
+      if (text) {
+        setValue(text);
+        setVoiceState('done');
+      } else {
+        setVoiceState('idle');
+      }
     };
 
     recognition.onerror = () => {
