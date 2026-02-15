@@ -69,11 +69,12 @@ export default function InsightBriefingCard({ onClick, isSelected }: InsightBrie
     <button
       onClick={onClick}
       className={`
-        w-full flex items-center gap-3 px-3 py-3
-        text-left
+        w-full flex items-center gap-3 px-4 py-4
+        text-left rounded-lg
         transition-colors duration-100
         hover:bg-inbox-bg-hover
         ${isSelected ? 'bg-inbox-accent-light' : ''}
+        ${scan.phase === 'complete' && totalItems > 0 ? 'bg-inbox-accent-light/50' : ''}
       `}
     >
       {/* Sparkle icon or spinner */}
@@ -107,7 +108,7 @@ export default function InsightBriefingCard({ onClick, isSelected }: InsightBrie
 
       {/* Count badge (only when complete with items) */}
       {scan.phase === 'complete' && totalItems > 0 && (
-        <span className="flex-shrink-0 text-xs text-inbox-text-tertiary">
+        <span className="flex-shrink-0 min-w-[24px] h-6 px-2 flex items-center justify-center rounded-full bg-inbox-accent text-white text-xs font-medium">
           {totalItems}
         </span>
       )}

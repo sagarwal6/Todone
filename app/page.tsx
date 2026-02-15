@@ -6,7 +6,6 @@ import { TaskInput } from '@/components/TaskInput';
 import { TaskList } from '@/components/TaskList';
 import { ConversationPanel } from '@/components/ConversationPanel';
 import { BottomNav, MobileHeader } from '@/components/Navigation';
-import { BottomSheet } from '@/components/ui/Modal';
 import { QuickCaptureBar, FullScreenCapture } from '@/components/QuickCapture';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { EmptyState } from '@/components/EmptyState';
@@ -201,6 +200,7 @@ function AuthenticatedHome() {
   const [insightSelected, setInsightSelected] = useState(false);
   const [selectedInsightActionId, setSelectedInsightActionId] = useState<string | null>(null);
   const [showCapture, setShowCapture] = useState(false);
+  const [captureVoice, setCaptureVoice] = useState(false);
   const [autoStartAgentTaskId, setAutoStartAgentTaskId] = useState<string | null>(null);
 
   const selectedTask = selectedTaskId ? tasks.find(t => t.id === selectedTaskId) || null : null;
@@ -238,8 +238,9 @@ function AuthenticatedHome() {
     const task = tasks.find(t => t.id === autoStartAgentTaskId);
     if (!task) return;
 
-    // Only auto-start for insight tasks (regular tasks use ConversationPanel)
-    if (task.source !== 'insight') return;
+    // On desktop, regular tasks use ConversationPanel to start the agent.
+    // On mobile, we stay on the task list, so we start the agent here directly.
+    if (task.source !== 'insight' && !isMobile) return;
 
     // Check if agent is already running
     if (agent.isAgentRunning(task.id)) return;
@@ -300,7 +301,7 @@ function AuthenticatedHome() {
 
     // Clear the auto-start flag
     setAutoStartAgentTaskId(null);
-  }, [autoStartAgentTaskId, tasks, agent, scan, setAgentQuickInfo, addChatMessage]);
+  }, [autoStartAgentTaskId, tasks, agent, scan, setAgentQuickInfo, addChatMessage, isMobile]);
 
   // Watch for insight task completion and update scan action states
   useEffect(() => {
@@ -349,9 +350,14 @@ function AuthenticatedHome() {
 
     // ALL tasks go to Claude Opus agent
     // The agent will handle everything: research, email, calendar, web search, etc.
-    setSelectedTaskId(newTask.id);
     setAutoStartAgentTaskId(newTask.id);
-  }, [addTask]);
+
+    // On desktop, open the task detail panel. On mobile, stay on the list
+    // so the user sees the task captured and can quickly add another.
+    if (!isMobile) {
+      setSelectedTaskId(newTask.id);
+    }
+  }, [addTask, isMobile]);
 
   const handleShowDetails = useCallback((taskId: string) => {
     // Toggle selection - clicking same task again closes detail view
@@ -400,8 +406,23 @@ function AuthenticatedHome() {
     // Show full-screen InsightView when insights tab is selected
     if (viewMode === 'insights') {
       return (
-        <div className="min-h-screen bg-inbox-bg-primary pb-32 flex flex-col">
-          <MobileHeader />
+        <div
+          className="fixed inset-0 z-50 bg-inbox-bg-primary flex flex-col animate-slide-in-from-right"
+          style={{ paddingTop: 'env(safe-area-inset-top)' }}
+        >
+          {/* Header with back arrow */}
+          <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3 border-b border-inbox-divider">
+            <button
+              onClick={() => setViewMode('active')}
+              className="p-2 -ml-2 rounded-full text-inbox-text-secondary hover:bg-inbox-bg-hover transition-colors"
+              aria-label="Back"
+            >
+              <MaterialIcon name="arrow_back" size={24} />
+            </button>
+            <h2 className="flex-1 text-inbox-body font-medium text-inbox-text-primary">
+              Proactive todos
+            </h2>
+          </div>
           <div className="flex-1 overflow-hidden">
             <InsightView
               onClose={() => setViewMode('active')}
@@ -430,17 +451,56 @@ function AuthenticatedHome() {
               tasks={tasks}
             />
           </div>
-          <QuickCaptureBar onTap={() => setShowCapture(true)} />
-          <BottomNav
-            currentView={viewMode}
-            onViewChange={setViewMode}
-            counts={counts}
-          />
           <FullScreenCapture
             isOpen={showCapture}
-            onClose={() => setShowCapture(false)}
+            onClose={() => {
+              setShowCapture(false);
+              setCaptureVoice(false);
+            }}
             onSave={handleAddTask}
+            startWithVoice={captureVoice}
           />
+        </div>
+      );
+    }
+
+    // Full-screen task detail view (replaces BottomSheet)
+    if (isTaskSelected && selectedTask) {
+      return (
+        <div
+          className="fixed inset-0 z-50 bg-inbox-bg-primary flex flex-col animate-slide-in-from-right"
+          style={{ paddingTop: 'env(safe-area-inset-top)' }}
+        >
+          {/* Detail header with back arrow + title */}
+          <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3 border-b border-inbox-divider">
+            <button
+              onClick={handleClosePanel}
+              className="p-2 -ml-2 rounded-full text-inbox-text-secondary hover:bg-inbox-bg-hover transition-colors"
+              aria-label="Back"
+            >
+              <MaterialIcon name="arrow_back" size={24} />
+            </button>
+            <h2 className="flex-1 text-inbox-body font-medium text-inbox-text-primary truncate">
+              {selectedTask.title}
+            </h2>
+          </div>
+          {/* Full ConversationPanel */}
+          <div className="flex-1 overflow-hidden">
+            <ConversationPanel
+              task={selectedTask}
+              onClose={handleClosePanel}
+              onAddChatMessage={addChatMessage}
+              onComplete={completeTask}
+              onArchive={archiveTask}
+              onDelete={deleteTask}
+              onTogglePin={togglePin}
+              onUpdateQuickInfo={setAgentQuickInfo}
+              onUpdateAgentSteps={setAgentSteps}
+              autoStartAgent={autoStartAgentTaskId === selectedTask.id}
+              onAgentStarted={() => setAutoStartAgentTaskId(null)}
+              isMobile
+            />
+          </div>
         </div>
       );
     }
@@ -449,7 +509,7 @@ function AuthenticatedHome() {
       <div className="min-h-screen bg-inbox-bg-primary pb-32">
         <MobileHeader />
 
-        <main className="px-4 py-4">
+        <main key={viewMode} className="px-4 py-4 animate-fade-in">
           {/* Insight Briefing Card - lives at top of task list */}
           {viewMode === 'active' && (
             <div className="mb-3">
@@ -475,7 +535,16 @@ function AuthenticatedHome() {
           )}
         </main>
 
-        <QuickCaptureBar onTap={() => setShowCapture(true)} />
+        <QuickCaptureBar
+          onTap={() => {
+            setCaptureVoice(false);
+            setShowCapture(true);
+          }}
+          onMicTap={() => {
+            setCaptureVoice(true);
+            setShowCapture(true);
+          }}
+        />
 
         <BottomNav
           currentView={viewMode}
@@ -485,32 +554,13 @@ function AuthenticatedHome() {
 
         <FullScreenCapture
           isOpen={showCapture}
-          onClose={() => setShowCapture(false)}
+          onClose={() => {
+            setShowCapture(false);
+            setCaptureVoice(false);
+          }}
           onSave={handleAddTask}
+          startWithVoice={captureVoice}
         />
-
-        <BottomSheet
-          isOpen={isTaskSelected}
-          onClose={handleClosePanel}
-          title={selectedTask?.title || 'Task Details'}
-          showCloseButton={false}
-        >
-          {selectedTask && (
-            <ConversationPanel
-              task={selectedTask}
-              onClose={handleClosePanel}
-              onAddChatMessage={addChatMessage}
-              onComplete={completeTask}
-              onArchive={archiveTask}
-              onDelete={deleteTask}
-              onTogglePin={togglePin}
-              onUpdateQuickInfo={setAgentQuickInfo}
-              onUpdateAgentSteps={setAgentSteps}
-                            autoStartAgent={autoStartAgentTaskId === selectedTask.id}
-              onAgentStarted={() => setAutoStartAgentTaskId(null)}
-            />
-          )}
-        </BottomSheet>
       </div>
     );
   }

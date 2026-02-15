@@ -37,7 +37,7 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
   ) => {
     // Inbox-style base: minimal padding, quick transitions
     const baseStyles = `
-      px-3 py-3
+      px-4 py-3.5
       transition-colors duration-100 ease-out
     `;
 

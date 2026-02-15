@@ -90,9 +90,11 @@ interface ConversationPanelProps {
   onUpdateAgentSteps?: (taskId: string, agentSteps: AgentStepSummary[]) => void;
   autoStartAgent?: boolean;
   onAgentStarted?: () => void;
+  /** When true, hides title and close button (shown in page-level header instead) */
+  isMobile?: boolean;
 }
 
-export function ConversationPanel({ task, onClose, onAddChatMessage, onComplete, onArchive, onDelete, onTogglePin, onUpdateQuickInfo, onUpdateAgentSteps, autoStartAgent, onAgentStarted }: ConversationPanelProps) {
+export function ConversationPanel({ task, onClose, onAddChatMessage, onComplete, onArchive, onDelete, onTogglePin, onUpdateQuickInfo, onUpdateAgentSteps, autoStartAgent, onAgentStarted, isMobile = false }: ConversationPanelProps) {
   // Initialize messages from persisted chat history
   const [messages, setMessages] = useState<ChatMessage[]>(task.chatMessages || []);
   const [input, setInput] = useState('');
@@ -228,64 +230,67 @@ export function ConversationPanel({ task, onClose, onAddChatMessage, onComplete,
   return (
     <div className="h-full flex flex-col bg-inbox-bg-primary">
       {/* Header - Inbox style: minimal chrome */}
-      <div className="flex-shrink-0 px-6 py-4 border-b border-inbox-divider">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1 min-w-0">
-            <h2 className="text-inbox-headline text-inbox-text-primary">
-              {task.title}
-            </h2>
-            {/* Action bar */}
-            <div className="flex items-center gap-1 mt-3">
-              {task.status !== 'completed' && task.status !== 'archived' && (
-                <>
-                  <button
-                    onClick={() => onComplete?.(task.id)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-inbox-caption text-inbox-text-secondary hover:text-inbox-success hover:bg-inbox-success/10 transition-colors"
-                  >
-                    <MaterialIcon name="check_circle" size={16} weight={300} />
-                    <span>Done</span>
-                  </button>
-                  <button
-                    onClick={() => onTogglePin?.(task.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-inbox-caption transition-colors ${
-                      task.isPinned
-                        ? 'text-inbox-accent bg-inbox-accent/10'
-                        : 'text-inbox-text-secondary hover:text-inbox-accent hover:bg-inbox-accent/10'
-                    }`}
-                  >
-                    <MaterialIcon name="push_pin" size={16} weight={300} fill={task.isPinned} />
-                    <span>{task.isPinned ? 'Pinned' : 'Pin'}</span>
-                  </button>
-                  <button
-                    onClick={() => onArchive?.(task.id)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-inbox-caption text-inbox-text-secondary hover:text-inbox-text-primary hover:bg-inbox-bg-hover transition-colors"
-                  >
-                    <MaterialIcon name="inventory_2" size={16} weight={300} />
-                    <span>Archive</span>
-                  </button>
-                </>
-              )}
+      <div className={`flex-shrink-0 border-b border-inbox-divider ${isMobile ? 'px-4 py-3' : 'px-6 py-4'}`}>
+        <div className={isMobile ? '' : 'flex items-start justify-between gap-4'}>
+          {/* Title + close button (desktop only) */}
+          {!isMobile && (
+            <div className="flex items-start justify-between gap-4 w-full">
+              <h2 className="text-inbox-headline text-inbox-text-primary flex-1 min-w-0">
+                {task.title}
+              </h2>
               <button
-                onClick={() => { onDelete?.(task.id); onClose(); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-inbox-caption text-inbox-text-secondary hover:text-inbox-error hover:bg-inbox-error/10 transition-colors"
+                onClick={onClose}
+                className="p-2 -mr-2 rounded-full text-inbox-text-secondary hover:text-inbox-text-primary hover:bg-inbox-bg-hover transition-colors duration-100"
+                aria-label="Close panel"
               >
-                <MaterialIcon name="delete" size={16} weight={300} />
-                <span>Delete</span>
+                <MaterialIcon name="close" size={24} weight={300} />
               </button>
             </div>
+          )}
+          {/* Action bar */}
+          <div className={`flex items-center gap-1 ${isMobile ? '' : 'mt-3'}`}>
+            {task.status !== 'completed' && task.status !== 'archived' && (
+              <>
+                <button
+                  onClick={() => onComplete?.(task.id)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-inbox-caption text-inbox-text-secondary hover:text-inbox-success hover:bg-inbox-success/10 transition-colors"
+                >
+                  <MaterialIcon name="check_circle" size={16} weight={300} />
+                  <span>Done</span>
+                </button>
+                <button
+                  onClick={() => onTogglePin?.(task.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-inbox-caption transition-colors ${
+                    task.isPinned
+                      ? 'text-inbox-accent bg-inbox-accent/10'
+                      : 'text-inbox-text-secondary hover:text-inbox-accent hover:bg-inbox-accent/10'
+                  }`}
+                >
+                  <MaterialIcon name="push_pin" size={16} weight={300} fill={task.isPinned} />
+                  <span>{task.isPinned ? 'Pinned' : 'Pin'}</span>
+                </button>
+                <button
+                  onClick={() => onArchive?.(task.id)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-inbox-caption text-inbox-text-secondary hover:text-inbox-text-primary hover:bg-inbox-bg-hover transition-colors"
+                >
+                  <MaterialIcon name="inventory_2" size={16} weight={300} />
+                  <span>Archive</span>
+                </button>
+              </>
+            )}
+            <button
+              onClick={() => { onDelete?.(task.id); onClose(); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-inbox-caption text-inbox-text-secondary hover:text-inbox-error hover:bg-inbox-error/10 transition-colors"
+            >
+              <MaterialIcon name="delete" size={16} weight={300} />
+              <span>Delete</span>
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 -mr-2 rounded-full text-inbox-text-secondary hover:text-inbox-text-primary hover:bg-inbox-bg-hover transition-colors duration-100"
-            aria-label="Close panel"
-          >
-            <MaterialIcon name="close" size={24} weight={300} />
-          </button>
         </div>
       </div>
 
       {/* Content - scrollable */}
-      <div className="flex-1 overflow-y-auto px-6 py-6">
+      <div className={`flex-1 overflow-y-auto ${isMobile ? 'px-4 py-4' : 'px-6 py-6'}`}>
         {/* 1. Agent Progress - what the agent did (green box, compact) */}
         {(isRunning || agentProgress.length > 0 || agentResult?.status === 'completed' || task.agentSteps?.length) && (
           <div className="mb-4">
@@ -572,7 +577,7 @@ export function ConversationPanel({ task, onClose, onAddChatMessage, onComplete,
       </div>
 
       {/* Chat input - Inbox style */}
-      <div className="flex-shrink-0 px-6 py-4 border-t border-inbox-divider bg-inbox-bg-primary">
+      <div className={`flex-shrink-0 border-t border-inbox-divider bg-inbox-bg-primary ${isMobile ? 'px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]' : 'px-6 py-4'}`}>
         <div className="flex gap-3 items-center">
           <div className="flex-1 relative">
             <input

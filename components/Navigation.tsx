@@ -105,10 +105,10 @@ export function BottomNav({ currentView, onViewChange, counts }: BottomNavProps)
   return (
     <nav className="
       fixed bottom-0 left-0 right-0 z-40
-      bg-surface-container
-      border-t border-outline-variant
+      bg-inbox-bg-primary
+      border-t border-inbox-divider
       pb-safe-bottom
-      shadow-elevation-2
+      shadow-inbox-subtle
     ">
       <ul className="flex justify-around items-center h-16">
         {navItems.map((item) => {
@@ -145,7 +145,7 @@ export function BottomNav({ currentView, onViewChange, counts }: BottomNavProps)
                       min-w-[18px] h-[18px]
                       flex items-center justify-center
                       text-label-small font-medium
-                      bg-error text-on-error
+                      bg-inbox-accent text-white
                       rounded-full
                       px-1
                     ">
@@ -176,14 +176,13 @@ export function MobileHeader({ title = 'Todone' }: MobileHeaderProps) {
   return (
     <header className="
       sticky top-0 z-30
-      bg-surface
-      border-b border-outline-variant
-      px-4 py-3
-      pt-safe-top
+      bg-inbox-bg-primary
+      border-b border-inbox-divider
+      px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))]
     ">
       <div className="flex items-center justify-between">
-        <h1 className="text-title-large font-display text-on-surface flex items-center gap-2">
-          <MaterialIcon name="task_alt" size={24} className="text-primary" fill />
+        <h1 className="text-title-large font-display text-inbox-text-primary flex items-center gap-2">
+          <MaterialIcon name="task_alt" size={24} className="text-inbox-accent" fill />
           {title}
         </h1>
       </div>

@@ -155,21 +155,25 @@ export function TaskCard({
 
   return (
     <div className="relative overflow-hidden">
-      {/* Swipe action backgrounds (mobile only) */}
-      {isMobile && (
+      {/* Swipe action backgrounds (mobile only, hidden until swiping) */}
+      {isMobile && swipeOffset !== 0 && (
         <>
-          {/* Archive action (swipe right) */}
-          <div className="absolute inset-y-0 left-0 w-20 bg-primary flex items-center justify-center">
-            <button onClick={handleArchive} className="p-3">
-              <MaterialIcon name="inventory_2" size={24} className="text-on-primary" />
-            </button>
-          </div>
-          {/* Delete action (swipe left) */}
-          <div className="absolute inset-y-0 right-0 w-20 bg-error flex items-center justify-center">
-            <button onClick={handleDelete} className="p-3">
-              <MaterialIcon name="delete" size={24} className="text-on-error" />
-            </button>
-          </div>
+          {/* Done action (swipe right) */}
+          {swipeOffset > 0 && (
+            <div className="absolute inset-y-0 left-0 w-20 bg-inbox-success flex items-center justify-center">
+              <button onClick={() => { setSwipeOffset(0); setIsSwipeRevealed(null); onComplete(task.id); }} className="p-3">
+                <MaterialIcon name="check_circle" size={24} className="text-white" />
+              </button>
+            </div>
+          )}
+          {/* Archive action (swipe left) */}
+          {swipeOffset < 0 && (
+            <div className="absolute inset-y-0 right-0 w-20 bg-primary flex items-center justify-center">
+              <button onClick={handleArchive} className="p-3">
+                <MaterialIcon name="inventory_2" size={24} className="text-on-primary" />
+              </button>
+            </div>
+          )}
         </>
       )}
 
@@ -190,14 +194,16 @@ export function TaskCard({
           onClick={handleCardClick}
         >
           {/* Main content row */}
-          <div className="flex items-center gap-2">
-            {/* Circular Checkbox */}
-            <CircularCheckbox
-              checked={isCompleted}
-              onChange={() => isCompleted ? onRestore(task.id) : onComplete(task.id)}
-              size="medium"
-              aria-label={isCompleted ? 'Restore task' : 'Complete task'}
-            />
+          <div className="flex items-center gap-3">
+            {/* Circular Checkbox (desktop only — mobile uses swipe gestures) */}
+            {!isMobile && (
+              <CircularCheckbox
+                checked={isCompleted}
+                onChange={() => isCompleted ? onRestore(task.id) : onComplete(task.id)}
+                size="medium"
+                aria-label={isCompleted ? 'Restore task' : 'Complete task'}
+              />
+            )}
 
             {/* Content */}
             <div className="flex-1 min-w-0">

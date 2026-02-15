@@ -38,28 +38,33 @@ export function CircularCheckbox({
       disabled={disabled}
       onClick={() => !disabled && onChange(!checked)}
       className={`
-        ${container}
-        rounded-full
-        flex items-center justify-center flex-shrink-0
+        relative flex items-center justify-center flex-shrink-0
+        min-w-[44px] min-h-[44px]
         transition-all duration-150 ease-out
         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inbox-accent focus-visible:ring-offset-2
+        ${disabled ? "opacity-38 cursor-not-allowed" : "cursor-pointer"}
+        ${className}
+      `}
+    >
+      <span className={`
+        ${container}
+        rounded-full
+        flex items-center justify-center
         ${
           checked
             ? "bg-inbox-accent text-inbox-text-inverse"
             : "border border-[#DADCE0] hover:border-[#9AA0A6] hover:bg-inbox-accent/5"
         }
-        ${disabled ? "opacity-38 cursor-not-allowed" : "cursor-pointer"}
-        ${className}
-      `}
-    >
-      {checked && (
-        <MaterialIcon
-          name="check"
-          size={icon}
-          weight={400}
-          className="animate-scale-in text-white"
-        />
-      )}
+      `}>
+        {checked && (
+          <MaterialIcon
+            name="check"
+            size={icon}
+            weight={400}
+            className="animate-scale-in text-white"
+          />
+        )}
+      </span>
     </button>
   );
 }

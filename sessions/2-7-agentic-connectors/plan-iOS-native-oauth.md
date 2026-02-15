@@ -235,9 +235,93 @@ Already in place (no changes needed):
 
 ---
 
-## Phase 6: Verification & Regression Testing
+## Phase 6: Mobile UI Polish — "Inbox by Gmail" Feel ✅
 
-### 6.1 Web flow (regression)
+> Deep design audit revealed the mobile UI feels like a responsive desktop site, not a native app. These changes bring it to Inbox by Gmail quality: proper full-screen navigation, consistent tokens, generous touch targets, and smooth transitions.
+
+### 6.0 Fix swipe background rendering ✅
+
+- [x] Only render swipe action backgrounds when user is actively swiping (`swipeOffset !== 0`)
+- [x] Fixed Tailwind specificity issue — `!important` override for opaque card background
+- [x] Swipe right = done (green), swipe left = archive (blue)
+- [x] Removed checkboxes on mobile — swipe gestures replace them
+
+### 6.1 Full-screen task detail on mobile (P0) ✅
+
+- [x] Replaced BottomSheet with full-screen view (`fixed inset-0 z-50`)
+- [x] Slide-from-right animation (300ms, MD3 emphasized decelerate)
+- [x] Detail header: back arrow | task title (truncated)
+- [x] ConversationPanel simplified on mobile: hidden title/close, tighter padding, safe-area bottom
+- [x] Full-screen insights view with consistent back-arrow pattern
+
+### 6.2 Scope hover effects to desktop only (P1) ✅
+
+- [x] `.task-card:hover` transform/shadow wrapped in `@media (hover: hover)`
+- [x] `.task-card:active` state for mobile touch feedback (50ms transition)
+
+### 6.3 Standardize on Inbox tokens (P1) ✅
+
+- [x] MobileHeader: `bg-surface` → `bg-inbox-bg-primary`, inbox tokens throughout
+- [x] MobileHeader padding: `pt-[max(1rem,env(safe-area-inset-top))]`
+- [x] BottomNav: `bg-surface-container` → `bg-inbox-bg-primary`, inbox tokens
+- [x] QuickCaptureBar: inbox tokens, `border border-inbox-divider`, `rounded-2xl`
+
+### 6.4 Fix BottomNav badge color (P1) ✅
+
+- [x] Badge: `bg-error text-on-error` (red) → `bg-inbox-accent text-white` (blue)
+
+### 6.5 Increase touch targets and spacing (P1) ✅
+
+- [x] `Card.tsx` — base padding `px-4 py-3.5` (user feedback: py-4 was too much)
+- [x] `TaskCard.tsx` — gap `gap-2` → `gap-3`
+- [x] `CircularCheckbox.tsx` — 44px min touch target with inner visual circle
+
+### 6.6 Visual polish (P2) ✅
+
+- [x] `InsightBriefingCard.tsx` — accent tint + blue pill badge
+- [x] Tab cross-fade with `key={viewMode}` on `<main>`
+- [x] FullScreenCapture redesigned: single-line input, check circle icon, Enter to save
+
+### 6.7 FullScreenCapture color palette & voice input ✅
+
+- [x] Background: `bg-surface-bright` (pure white) instead of cold gray
+- [x] Header: `bg-inbox-bg-secondary/50` tint, "New task" in blue, close X icon
+- [x] Check circle: muted blue (`text-primary/25`) empty state, pops to full blue + scale on typing
+- [x] Save button: scale animation (95% → 100%) + color transition when text entered
+- [x] Hint text: `text-xs` at `/40` opacity — subtle, doesn't compete
+- [x] Placeholder: "What can I help you with?" — signals AI assistant
+- [x] Focus underline: `border-primary/40` for visible active state
+- [x] Voice input FAB (56px blue mic, bottom-right) with Web Speech API
+- [x] Mic icon on QuickCaptureBar — 1-tap voice capture without opening overlay first
+- [x] `startWithVoice` prop auto-starts recording when opened via mic tap
+- [x] Pulse animation while recording, "Listening..." badge, red stop button
+- [x] Graceful fallback: mic hidden if Speech API unavailable
+
+### 6.8 Mobile task creation flow ✅
+
+- [x] After saving a task on mobile, returns to task list (not task detail)
+- [x] Agent starts in background — "Working..." spinner shows on task card
+- [x] QuickCaptureBar immediately available for adding another task
+- [x] Desktop flow unchanged (opens task detail panel after creation)
+
+### 6.9 Testing
+
+- [ ] Task detail opens full-screen with slide-from-right animation
+- [ ] Back arrow returns to task list
+- [ ] No hover lift on mobile touch, instant active feedback instead
+- [ ] Swipe right = done, swipe left = archive (no checkboxes on mobile)
+- [ ] Consistent Inbox token usage — no MD3 generic tokens on mobile
+- [ ] BottomNav badges are blue, not red
+- [ ] Touch targets are 44px minimum
+- [ ] Add task → returns to list, agent runs in background
+- [ ] Voice input works via mic FAB and QuickCaptureBar mic icon
+- [ ] Desktop layout unchanged — still uses side panel, hover effects, etc.
+
+---
+
+## Phase 7: Verification & Regression Testing
+
+### 7.1 Web flow (regression)
 
 - [ ] Sign in on desktop browser — NextAuth flow works
 - [ ] Tasks load correctly
@@ -245,7 +329,7 @@ Already in place (no changes needed):
 - [ ] Agent runs work
 - [ ] Gmail/Calendar data accessible through agent
 
-### 6.2 PWA flow (iPhone Safari)
+### 7.2 PWA flow (iPhone Safari)
 
 - [ ] Add to Home Screen → standalone mode
 - [ ] Sign in with Google OAuth → works (no WebView issues)
@@ -254,7 +338,7 @@ Already in place (no changes needed):
 - [ ] Share from other apps works
 - [ ] Sign out and sign back in
 
-### 6.3 Deploy
+### 7.3 Deploy
 
 - [ ] Deploy to Vercel
 - [ ] Verify service worker serves correctly in production
@@ -262,7 +346,7 @@ Already in place (no changes needed):
 
 ---
 
-## Phase 7: Lint Cleanup
+## Phase 8: Lint Cleanup
 
 > Fix all 56 ESLint warnings across the codebase. These are not from our PWA changes — they existed before ESLint was properly configured.
 
@@ -300,7 +384,8 @@ Already in place (no changes needed):
 | `types/next-auth.d.ts` | NextAuth session type augmentation (Phase 1) ✅ |
 | `app/sw.ts` | Service worker entry point (Phase 2) ✅ |
 | `app/share/page.tsx` | Share target handler page (Phase 4) ✅ |
-| `components/QuickCapture.tsx` | QuickCaptureBar + FullScreenCapture (Phase 5) |
+| `components/QuickCapture.tsx` | QuickCaptureBar + FullScreenCapture + voice input (Phase 5/6) ✅ |
+| `types/speech.d.ts` | Web Speech API type declarations (Phase 6) ✅ |
 
 ## Files Modified
 
@@ -320,4 +405,11 @@ Already in place (no changes needed):
 | `lib/email/gmail-links.ts` | Native app deep links + `openNativeAppWithFallback` helper ✅ |
 | `lib/utils/gmail-compose.ts` | Use native app deep links on mobile ✅ |
 | `components/CalendarDraftCard.tsx` | Use native Calendar app deep link on mobile ✅ |
-| `app/page.tsx` | Remove FAB + BottomSheet, add QuickCapture (Phase 5) |
+| `app/page.tsx` | Remove FAB + BottomSheet, add QuickCapture (Phase 5), full-screen views, mobile task flow (Phase 6) ✅ |
+| `app/globals.css` | Slide animation, hover scoping, mic pulse animation (Phase 6) ✅ |
+| `components/Navigation.tsx` | Inbox token alignment, badge color fix, safe-area header (Phase 6) ✅ |
+| `components/ConversationPanel.tsx` | Mobile header simplification, safe area (Phase 6) ✅ |
+| `components/TaskCard.tsx` | Swipe gestures (done/archive), remove mobile checkboxes (Phase 6) ✅ |
+| `components/ui/Card.tsx` | Padding adjustment `py-3.5` (Phase 6) ✅ |
+| `components/ui/CircularCheckbox.tsx` | 44px touch target (Phase 6) ✅ |
+| `components/insight/InsightBriefingCard.tsx` | Accent tint + blue pill badge (Phase 6) ✅ |
