@@ -32,7 +32,10 @@ export default function TermsPage() {
               Calendar, and Contacts. You can revoke this access at any time via{' '}
               <a href="https://myaccount.google.com/permissions" className="text-primary underline" target="_blank" rel="noopener noreferrer">Google Account Permissions</a>.
               Todone will never send emails, create calendar events, or modify contacts
-              through the Google API on your behalf.
+              through the Google API on your behalf. Todone&apos;s use of Google data is governed
+              by the{' '}
+              <a href="https://developers.google.com/terms/api-services-user-data-policy" className="text-primary underline" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>,
+              including the Limited Use requirements.
             </p>
           </section>
 
@@ -78,15 +81,36 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-xl font-medium text-on-surface mb-3">7. Changes</h2>
+            <h2 className="text-xl font-medium text-on-surface mb-3">7. Termination</h2>
             <p>
-              We may update these terms from time to time. Continued use of Todone after
-              changes constitutes acceptance of the updated terms.
+              You may stop using Todone at any time by signing out and revoking Google access.
+              We may suspend or terminate your access if you violate these terms or if required
+              by law. Upon termination, you can request deletion of all your data via your
+              account settings or by contacting{' '}
+              <a href="mailto:support@todone.app" className="text-primary underline">support@todone.app</a>.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-medium text-on-surface mb-3">8. Contact</h2>
+            <h2 className="text-xl font-medium text-on-surface mb-3">8. Age Requirement</h2>
+            <p>
+              You must be at least 13 years old to use Todone. By using the service, you
+              represent that you meet this age requirement.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-medium text-on-surface mb-3">9. Changes</h2>
+            <p>
+              We may update these terms from time to time. If we make material changes, we
+              will notify you by email or by a prominent notice within the app at least 30 days
+              before the changes take effect. Continued use of Todone after the effective date
+              constitutes acceptance of the updated terms.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-medium text-on-surface mb-3">10. Contact</h2>
             <p>
               Questions about these terms? Contact us at{' '}
               <a href="mailto:support@todone.app" className="text-primary underline">support@todone.app</a>.

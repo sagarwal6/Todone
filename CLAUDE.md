@@ -143,6 +143,19 @@ ENCRYPTION_SECRET
 - No debug/test API endpoints in production — all routes must check authentication
 - Debug endpoints were removed in the 2/15 security review — do not recreate them
 
+### Google API & Privacy Compliance
+Code MUST match what the privacy policy (`/app/privacy/page.tsx`) and terms (`/app/terms/page.tsx`) promise:
+- **Read-only only** — no Google API write calls (no POST/PUT to Gmail, Calendar, Contacts)
+- **No full email bodies stored in DB** — only metadata (sender, subject, date) and task summaries
+- **PII redaction before AI** — all email content passes through `redactPII()` in `execute-tool.ts` before reaching Claude/Gemini
+- **Tokens encrypted at rest** — always call `encrypt()` before storing, `decrypt()` when reading
+- **Token revocation on sign-out** — revoke with Google AND delete from DB
+- **No analytics/tracking/ad SDKs** — no Google Analytics, Mixpanel, Segment, etc.
+- **No AI model training** — use Anthropic zero-retention API; Gemini paid API (no training)
+- **Limited Use compliance** — Google user data only for user-facing features, never sold/shared
+- **COPPA** — service is for users 13+; no features directed at children
+- **Account deletion** — users can delete all their data (Phase 6: DELETE /api/user)
+
 ### PWA / Mobile
 - iOS standalone PWA opens Safari for OAuth — session cookie is shared back via same origin. Post-OAuth landing page at `/auth/complete` handles the redirect.
 - Web Share Target API is Chromium-only — does not work on iOS Safari

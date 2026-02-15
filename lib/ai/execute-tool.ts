@@ -60,8 +60,8 @@ function redactPII(text: string): string {
     // API keys / tokens in email text: "API key: xyz" or "token: xyz" or "secret: xyz"
     .replace(/(?:api[_\s]?key|auth[_\s]?token|access[_\s]?token|bearer|secret[_\s]?key)\s*(?:is|:|=)\s*\S+/gi, '[AUTH TOKEN REDACTED]')
     // Date of birth: "DOB: 01/15/1990" or "Date of Birth: 1990-01-15" or "Born: Jan 15, 1990"
-    .replace(/(?:date\s+of\s+birth|dob|born|birthday)\s*:?\s*\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}/gi, '[DOB REDACTED]')
-    .replace(/(?:date\s+of\s+birth|dob|born|birthday)\s*:?\s*\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2}/gi, '[DOB REDACTED]')
+    .replace(/(?:date\s+of\s+birth|dob|born|birthday)\s*:?\s*\d{1,2}[/-]\d{1,2}[/-]\d{2,4}/gi, '[DOB REDACTED]')
+    .replace(/(?:date\s+of\s+birth|dob|born|birthday)\s*:?\s*\d{4}[/-]\d{1,2}[/-]\d{1,2}/gi, '[DOB REDACTED]')
     .replace(/(?:date\s+of\s+birth|dob|born|birthday)\s*:?\s*(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{1,2},?\s*\d{4}/gi, '[DOB REDACTED]')
     // Passport numbers: "Passport: AB1234567" or "Passport #: 123456789"
     .replace(/passport\s*#?\s*:?\s*[A-Z0-9]{6,12}/gi, '[PASSPORT REDACTED]')

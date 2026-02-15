@@ -81,17 +81,30 @@
 
 ---
 
-## Phase 5: Privacy Policy & Terms of Service (CRITICAL)
+## Phase 5: Privacy Policy & Terms of Service (CRITICAL) ✅
 
 > Google API Services User Data Policy requires clear disclosure. Add /privacy and /terms pages.
 
 ### Completed
-- [x] Created `/app/privacy/page.tsx` — covers data access, usage, storage, security, PII redaction, third-party services, user rights, contact
-- [x] Created `/app/terms/page.tsx` — covers service description, Google access, AI-generated content, data ownership, acceptable use, liability
+- [x] Created `/app/privacy/page.tsx` with all required sections:
+  - What Todone Does, What Data We Access, How Your Data Is Used
+  - No AI model training disclosure, Data transfer restrictions
+  - What We Store (with retention periods), Data Security
+  - Your Rights, Third-Party Services (with links to each provider's privacy policy)
+  - Children's Privacy (COPPA), Google API Services Disclosure (Limited Use)
+  - Changes to This Policy (30-day notice), Contact
+- [x] Created `/app/terms/page.tsx` with all required sections:
+  - Service Description, Google Account Access (with Limited Use reference)
+  - AI-Generated Content, Your Data, Acceptable Use
+  - Limitation of Liability, Termination, Age Requirement (13+)
+  - Changes (30-day notice), Contact
 - [x] Both are static server components with proper metadata
-- [x] Typecheck and build pass
+- [x] Verified code matches all policy claims (7/8 verified; account deletion = Phase 6)
+- [x] Added Google API & Privacy Compliance rules to CLAUDE.md
+- [x] Fixed regex lint errors in PII redaction (execute-tool.ts)
+- [x] Typecheck, lint (errors only), and build pass
 
-### Remaining
+### Remaining (non-blocking)
 - [ ] Add footer links to privacy/terms from the main layout or settings
 - [ ] Set privacy policy URL in Google Cloud Console OAuth consent screen
 
