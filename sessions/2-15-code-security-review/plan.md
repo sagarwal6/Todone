@@ -85,28 +85,15 @@
 
 > Google API Services User Data Policy requires clear disclosure. Add /privacy and /terms pages.
 
-### Tasks
-- [ ] Create `/app/privacy/page.tsx` — Privacy Policy covering:
-  - What data is accessed (Gmail metadata + body, Calendar events, Contacts)
-  - How data is used (AI-assisted task execution, no manual human review)
-  - What is stored (task summaries, encrypted OAuth tokens) vs transient (email body passed to AI then discarded)
-  - Third-party AI providers (Gemini, Claude) — what data they receive
-  - Data retention (tasks persist until user deletes; agent execution data cleaned after 90 days)
-  - User rights (deletion, export)
-  - Contact info
-- [ ] Create `/app/terms/page.tsx` — Terms of Service
+### Completed
+- [x] Created `/app/privacy/page.tsx` — covers data access, usage, storage, security, PII redaction, third-party services, user rights, contact
+- [x] Created `/app/terms/page.tsx` — covers service description, Google access, AI-generated content, data ownership, acceptable use, liability
+- [x] Both are static server components with proper metadata
+- [x] Typecheck and build pass
+
+### Remaining
 - [ ] Add footer links to privacy/terms from the main layout or settings
-- [ ] Ensure privacy policy URL is set in Google Cloud Console OAuth consent screen
-
-### Testing
-- Pages render correctly at /privacy and /terms
-- Links work from app footer/settings
-
-### Key Files
-| File | Action |
-|------|--------|
-| `app/privacy/page.tsx` | Create |
-| `app/terms/page.tsx` | Create |
+- [ ] Set privacy policy URL in Google Cloud Console OAuth consent screen
 
 ---
 
