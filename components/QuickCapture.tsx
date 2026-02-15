@@ -123,6 +123,8 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
   }, []);
 
   // Auto-focus input when opening (only if not starting with voice)
+  // Delay cleanup when closing so the slide-down animation (300ms) completes
+  // before DOM changes (voice zone unmount, input clearing) that would cause reflow.
   useEffect(() => {
     if (isOpen && !startWithVoice) {
       const timer = setTimeout(() => {
@@ -130,10 +132,13 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
       }, 100);
       return () => clearTimeout(timer);
     } else if (!isOpen) {
-      setValue('');
-      setVoiceState('idle');
-      setFinalTranscript('');
-      setInterimTranscript('');
+      const timer = setTimeout(() => {
+        setValue('');
+        setVoiceState('idle');
+        setFinalTranscript('');
+        setInterimTranscript('');
+      }, 350); // slightly longer than the 300ms slide-down transition
+      return () => clearTimeout(timer);
     }
   }, [isOpen, startWithVoice]);
 
@@ -160,11 +165,12 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
     if (e.key === 'Escape') { onClose(); }
   }, [handleSave, onClose]);
 
-  // Stop listening when closing
+  // Stop recognition when closing (but don't reset state — the delayed
+  // cleanup in the isOpen effect handles that after the slide-down animation)
   useEffect(() => {
     if (!isOpen && recognitionRef.current) {
       recognitionRef.current.abort();
-      setVoiceState('idle');
+      recognitionRef.current = null;
     }
   }, [isOpen]);
 
