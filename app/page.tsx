@@ -507,7 +507,7 @@ function AuthenticatedHome() {
 
     return (
       <div className="min-h-screen bg-inbox-bg-primary pb-32">
-        <MobileHeader />
+        <MobileHeader onSignOut={handleSignOut} />
 
         <main key={viewMode} className="px-4 py-4 animate-fade-in">
           {/* Insight Briefing Card - lives at top of task list */}
