@@ -148,12 +148,9 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
   const handleSave = useCallback(() => {
     const trimmed = value.trim();
     if (trimmed) {
-      // Reset voice state before closing to prevent animation conflicts
-      setVoiceState('idle');
-      setFinalTranscript('');
-      setInterimTranscript('');
       onSave(trimmed);
-      setValue('');
+      // Don't reset voice/value state here — the isOpen=false effect handles cleanup.
+      // Resetting before onClose causes a flash of the empty capture view.
       onClose();
     }
   }, [value, onSave, onClose]);
