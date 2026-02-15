@@ -54,16 +54,35 @@ export function getGmailSearchLink(query: string, userEmail?: string): string {
 }
 
 /**
- * Opens a Gmail thread in a new tab.
- * Handles mobile detection and opens the appropriate URL.
+ * Opens a Gmail thread.
+ * On mobile, tries the Gmail app first via deep link, falls back to web.
  *
  * @param threadId - The thread ID from Gmail API
  * @param userEmail - The user's Gmail address (for multi-account support)
  */
 export function openGmailThread(threadId: string, userEmail?: string): void {
-  const url = getGmailThreadLink(threadId, userEmail);
+  if (typeof window === 'undefined') return;
 
-  if (typeof window !== 'undefined') {
-    window.open(url, '_blank', 'noopener,noreferrer');
+  const webUrl = getGmailThreadLink(threadId, userEmail);
+
+  if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+    // Try Gmail app deep link first
+    const deepLink = `googlegmail:///mail/thread/${threadId}`;
+    openNativeAppWithFallback(deepLink, webUrl);
+  } else {
+    window.open(webUrl, '_blank', 'noopener,noreferrer');
   }
+}
+
+/**
+ * Try to open a native app via URL scheme, fall back to web URL.
+ * Works in PWA standalone mode where window.open() bypasses Universal Links.
+ */
+export function openNativeAppWithFallback(appUrl: string, webUrl: string): void {
+  const fallbackTimeout = setTimeout(() => {
+    window.open(webUrl, '_blank');
+  }, 600);
+
+  window.addEventListener('blur', () => clearTimeout(fallbackTimeout), { once: true });
+  window.location.href = appUrl;
 }

@@ -10,6 +10,7 @@
  */
 
 import type { EmailDraft } from '@/lib/ai/types';
+import { openNativeAppWithFallback } from '@/lib/email/gmail-links';
 
 /**
  * Generate a Gmail reply URL that opens compose with pre-filled content.
@@ -51,7 +52,8 @@ export function generateGmailReplyUrl(
 }
 
 /**
- * Open Gmail reply compose in a new tab.
+ * Open Gmail reply compose.
+ * On mobile, tries the Gmail app first via deep link, falls back to web.
  */
 export function openGmailReply(
   to: string | string[],
@@ -59,10 +61,21 @@ export function openGmailReply(
   body: string,
   userEmail?: string
 ): void {
-  const url = generateGmailReplyUrl(to, subject, body, userEmail);
+  if (typeof window === 'undefined') return;
 
-  if (typeof window !== 'undefined') {
-    window.open(url, '_blank', 'noopener,noreferrer');
+  const webUrl = generateGmailReplyUrl(to, subject, body, userEmail);
+
+  if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+    const recipients = Array.isArray(to) ? to.join(',') : to;
+    const replySubject = subject.startsWith('Re:') ? subject : `Re: ${subject}`;
+    const params = new URLSearchParams();
+    params.set('to', recipients);
+    params.set('subject', replySubject);
+    params.set('body', body.substring(0, 1500));
+    const deepLink = `googlegmail://co?${params.toString()}`;
+    openNativeAppWithFallback(deepLink, webUrl);
+  } else {
+    window.open(webUrl, '_blank', 'noopener,noreferrer');
   }
 }
 
@@ -129,27 +142,17 @@ export function generateGmailDeepLink(draft: EmailDraft): string {
 
 /**
  * Open Gmail compose with the draft content.
- * Attempts deep link on mobile, falls back to web URL.
+ * On mobile, tries the Gmail app first via deep link, falls back to web.
  */
 export function openGmailCompose(draft: EmailDraft): void {
+  if (typeof window === 'undefined') return;
+
   const webUrl = generateGmailComposeUrl(draft);
 
-  // On mobile, try the deep link first
-  if (typeof window !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+  if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
     const deepLink = generateGmailDeepLink(draft);
-
-    // Try to open the app, fall back to web after a short delay
-    const fallbackTimeout = setTimeout(() => {
-      window.open(webUrl, '_blank');
-    }, 500);
-
-    // If the app opens, this will be cancelled
-    window.location.href = deepLink;
-
-    // Clear timeout if we're still here (app didn't open)
-    window.addEventListener('blur', () => clearTimeout(fallbackTimeout), { once: true });
+    openNativeAppWithFallback(deepLink, webUrl);
   } else {
-    // Desktop - just open the web URL
     window.open(webUrl, '_blank');
   }
 }

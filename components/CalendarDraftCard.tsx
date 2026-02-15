@@ -10,6 +10,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import type { CalendarEventDraft, PendingDraft } from '@/lib/ai/types';
 import { generateCalendarEventUrl } from '@/lib/utils/gmail-compose';
+import { openNativeAppWithFallback } from '@/lib/email/gmail-links';
 
 interface CalendarDraftCardProps {
   draft: PendingDraft;
@@ -100,7 +101,13 @@ export function CalendarDraftCard({
       location: dataToOpen.location,
       attendees: dataToOpen.attendees?.map(a => a.email),
     });
-    window.open(url, '_blank');
+    if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+      // Try Google Calendar app, fall back to web
+      const calDeepLink = `googlecalendar://`;
+      openNativeAppWithFallback(calDeepLink, url);
+    } else {
+      window.open(url, '_blank');
+    }
     onOpenInCalendar?.(draft.id);
   }, [isEditing, editedData, eventData, draft.id, onOpenInCalendar]);
 
