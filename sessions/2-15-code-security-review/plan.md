@@ -47,27 +47,19 @@
 
 ---
 
-## Phase 3: Reconcile OAuth Scopes (CRITICAL)
+## Phase 3: Reconcile OAuth Scopes (CRITICAL) ✅
 
 > Fix the mismatch between `lib/google/auth.ts` and the NextAuth config. Ensure scopes are minimal and consistent.
 
-### Tasks
-- [ ] Audit what scopes are actually needed by the app's features (gmail read, draft, calendar read, contacts read)
-- [ ] If `gmail.compose` is needed for drafts: add it to NextAuth scope list too
-- [ ] If `calendar.events` is NOT used for writes: remove it from `auth.ts`
-- [ ] Make `lib/google/auth.ts` `GOOGLE_SCOPES` the single source of truth — NextAuth should reference it
-- [ ] Add a comment explaining why each scope is needed
+### Completed
+- [x] Audited scopes: app is read-only only — `gmail.compose` and `calendar.events` not needed
+- [x] Removed `gmail.compose` and `calendar.events` from `GOOGLE_SCOPES` in `auth.ts`
+- [x] Made `GOOGLE_SCOPES` the single source of truth — NextAuth now imports from `auth.ts`
+- [x] Verified `createDraft()` throws (redirects to compose URL) and `calendar_create` only builds pending drafts
+- [x] Typecheck and build pass
 
 ### Testing
-- Sign out and sign back in — verify OAuth consent screen shows correct scopes
-- Verify draft creation still works (if gmail.compose added)
-- Verify calendar read still works
-
-### Key Files
-| File | Change |
-|------|--------|
-| `lib/google/auth.ts` | Fix GOOGLE_SCOPES to match reality |
-| `app/api/auth/[...nextauth]/route.ts` | Import scopes from auth.ts |
+- Sign out and sign back in — verify OAuth consent screen shows only readonly scopes
 
 ---
 

@@ -14,13 +14,11 @@ import { encrypt, decrypt } from '@/lib/utils/encryption';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 
-// Required scopes for agentic features
-// SECURITY: gmail.send removed - we only create drafts, never send directly
+// Required scopes — read-only access only
+// No write scopes (gmail.compose, calendar.events, gmail.send) requested
 export const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
-  'https://www.googleapis.com/auth/gmail.compose',  // Drafts only, no send
   'https://www.googleapis.com/auth/calendar.readonly',
-  'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/contacts.readonly',
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/userinfo.profile',

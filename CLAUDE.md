@@ -5,10 +5,12 @@ AI-powered task assistant that helps users get things done by connecting to thei
 ## Critical Safety Rules
 
 ### Google API Access (Read-Only Only)
-- `gmail.readonly`, `calendar.readonly`, `contacts.readonly` - no write scopes
+- `gmail.readonly`, `calendar.readonly`, `contacts.readonly` — no write scopes
+- Scopes defined in `lib/google/auth.ts` `GOOGLE_SCOPES` (single source of truth, imported by NextAuth)
 - **Email replies**: AI prepares draft, user clicks "Reply in Gmail" to open thread and reply there
 - **Calendar events**: AI prepares details, user clicks "Create in Calendar" to open Google Calendar
 - All write actions are URL-based redirects, never API writes
+- Never add `gmail.compose`, `gmail.send`, or `calendar.events` scopes without explicit approval
 
 ### Human-in-the-Loop Required
 All actions (send email, create event) require explicit user confirmation in Google's native UI.

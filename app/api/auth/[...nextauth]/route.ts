@@ -3,7 +3,7 @@ import GoogleProvider from 'next-auth/providers/google';
 import { supabaseAdmin } from '@/lib/supabase';
 import { v4 as uuidv4 } from 'uuid';
 import { encrypt } from '@/lib/utils/encryption';
-import { revokeTokens } from '@/lib/google/auth';
+import { revokeTokens, GOOGLE_SCOPES } from '@/lib/google/auth';
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -12,14 +12,7 @@ export const authOptions: NextAuthOptions = {
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       authorization: {
         params: {
-          scope: [
-            'openid',
-            'https://www.googleapis.com/auth/userinfo.email',
-            'https://www.googleapis.com/auth/userinfo.profile',
-            'https://www.googleapis.com/auth/gmail.readonly',
-            'https://www.googleapis.com/auth/calendar.readonly',
-            'https://www.googleapis.com/auth/contacts.readonly',
-          ].join(' '),
+          scope: ['openid', ...GOOGLE_SCOPES].join(' '),
           access_type: 'offline',  // Required to get refresh_token
           prompt: 'consent',       // Force consent to always get refresh_token
         },
