@@ -95,12 +95,12 @@ export function TaskCard({
 
   const swipeHandlers = useSwipeable({
     onSwiping: (e) => {
-      if (!isMobile || swipeCommittedRef.current) return;
-      // Allow full-width swiping (no cap) — rubber-band feel
+      // Disable swipes while dragging (dnd-kit) to prevent green/blue backgrounds
+      if (!isMobile || swipeCommittedRef.current || isDragging) return;
       setSwipeOffset(e.deltaX);
     },
     onSwipedLeft: () => {
-      if (!isMobile) return;
+      if (!isMobile || isDragging) return;
       const width = cardRef.current?.offsetWidth || 300;
       if (swipeOffset < -(width * 0.4)) {
         // Full swipe-through: animate off-screen then fire action
@@ -110,16 +110,14 @@ export function TaskCard({
           swipeCommittedRef.current = false;
           onArchive(task.id);
         }, 200);
-      } else if (swipeOffset < -40) {
-        setIsSwipeRevealed('left');
-        setSwipeOffset(-80);
       } else {
+        // Below threshold — always snap back (no stop at tap target)
         setSwipeOffset(0);
         setIsSwipeRevealed(null);
       }
     },
     onSwipedRight: () => {
-      if (!isMobile) return;
+      if (!isMobile || isDragging) return;
       const width = cardRef.current?.offsetWidth || 300;
       if (swipeOffset > width * 0.4) {
         // Full swipe-through: animate off-screen then fire action
@@ -129,20 +127,17 @@ export function TaskCard({
           swipeCommittedRef.current = false;
           onComplete(task.id);
         }, 200);
-      } else if (swipeOffset > 40) {
-        setIsSwipeRevealed('right');
-        setSwipeOffset(80);
       } else {
+        // Below threshold — always snap back (no stop at tap target)
         setSwipeOffset(0);
         setIsSwipeRevealed(null);
       }
     },
     onTouchEndOrOnMouseUp: () => {
-      if (swipeCommittedRef.current) return;
-      if (Math.abs(swipeOffset) < 40) {
-        setSwipeOffset(0);
-        setIsSwipeRevealed(null);
-      }
+      if (swipeCommittedRef.current || isDragging) return;
+      // Always snap back on touch end if not committed
+      setSwipeOffset(0);
+      setIsSwipeRevealed(null);
     },
     trackMouse: false,
     trackTouch: true,
