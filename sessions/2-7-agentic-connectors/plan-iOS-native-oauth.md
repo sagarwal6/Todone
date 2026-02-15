@@ -319,9 +319,83 @@ Already in place (no changes needed):
 
 ---
 
-## Phase 7: Verification & Regression Testing
+## Phase 7: Mobile Interaction Polish — Touch Gestures & Voice
 
-### 7.1 Web flow (regression)
+> Fix mobile-specific interaction issues: drag/scroll conflicts, voice capture consistency, swipe-through gestures, and iOS quirks.
+
+### 7.1 Fix drag-drop conflicting with scrolling ✅
+
+- [x] Added `@dnd-kit/modifiers` package
+- [x] Added `restrictToVerticalAxis` modifier — drag only moves vertically
+- [x] Added `TouchSensor` with 250ms delay + 5px tolerance (long-press to drag)
+- [x] Kept `PointerSensor` with `distance: 8` for desktop
+
+### 7.2 Full swipe-through gestures (Gmail Inbox style) ✅
+
+- [x] Removed 80px swipe cap — cards swipe full width
+- [x] 40% threshold: swipe past 40% of card width → animate off-screen → fire action
+- [x] Swipe right = complete (green background, check icon from left)
+- [x] Swipe left = archive (blue background, archive icon from right)
+- [x] Rubber-band feel during swiping, 200ms ease-out on snap-back
+
+### 7.3 iOS context menu suppression during long-press drag ✅
+
+- [x] Added `-webkit-touch-callout: none` and `user-select: none` to drag handle
+- [x] Prevents iOS copy/lookup/share context menu from appearing during drag
+
+### 7.4 QuickCaptureBar prominence ✅
+
+- [x] Elevated shadow, stronger border, accent ring
+- [x] Medium-weight text for better visibility
+
+### 7.5 Voice capture — iMessage-style edit flow ✅
+
+- [x] After voice capture, shows auto-growing `<textarea>` in rounded bubble
+- [x] Circular send button (arrow_upward) beside textarea — 1-tap to save
+- [x] Tap mic again to re-record (replaces text)
+
+### 7.6 Voice flow consolidation (forensic fix) ✅
+
+> Found 5 bugs causing inconsistent behavior: two parallel entry points, phantom permission state, combinatorial state refs, split lifecycle effects, no double-start guard.
+
+- [x] Simplified voice state machine: `'idle' | 'listening' | 'done'` (removed `permission` state)
+- [x] Removed all permission tracking (`micPermission`, `hasEverListenedRef`, `hasTriggeredVoiceRef`)
+- [x] Single `startListening()` entry point with double-start guard (`recognitionRef.current` check)
+- [x] Single `handleMicTap` handler: either stops or starts listening
+- [x] Single `useEffect` for open/close lifecycle (voice vs text path on open, delayed cleanup on close)
+- [x] Consistent behavior: mic tap → listening → stop/silence → done (editable) → send
+
+### 7.7 Fix voice save not dismissing capture view ✅
+
+- [x] Two `useEffect` hooks both fired on `isOpen=false` — one immediately reset `voiceState('idle')` causing voice zone DOM unmount mid-CSS-transition
+- [x] Fixed by removing the immediate state reset; only delayed cleanup (350ms) resets state
+
+### 7.8 Drag-to-reorder: clean long-press approach (no visible chrome) ✅
+
+> Previously tried drag handle (visible `drag_indicator` icon) — user feedback: "feels like chrome over content". Researched native app patterns (Things 3, Todoist, Apple Reminders) — all use long-press anywhere on the row, no visible handle.
+
+- [x] Removed drag handle element from `TaskCard.tsx`
+- [x] Removed `dragHandleProps` interface and prop passing
+- [x] Drag listeners go on the whole card wrapper (both mobile and desktop)
+- [x] Added `touch-action: manipulation` on mobile sortable items — allows normal scroll/tap but lets dnd-kit's `TouchSensor` intercept via `touchmove` `preventDefault()` after 250ms delay
+- [x] Zero UI chrome added — cards are completely clean
+
+### 7.9 Testing
+
+- [ ] Long-press (250ms) on a task card → card lifts for vertical drag reorder
+- [ ] Normal scroll works without triggering drag
+- [ ] Swipe right all the way = complete, swipe left all the way = archive
+- [ ] Partial swipe reveals action button, full swipe animates off-screen
+- [ ] Voice: mic tap → listening → silence → editable bubble → send = task created
+- [ ] Voice: consistent behavior on repeated attempts
+- [ ] No iOS context menu during long-press drag
+- [ ] QuickCaptureBar prominent and easy to spot
+
+---
+
+## Phase 8: Verification & Regression Testing
+
+### 8.1 Web flow (regression)
 
 - [ ] Sign in on desktop browser — NextAuth flow works
 - [ ] Tasks load correctly
@@ -329,7 +403,7 @@ Already in place (no changes needed):
 - [ ] Agent runs work
 - [ ] Gmail/Calendar data accessible through agent
 
-### 7.2 PWA flow (iPhone Safari)
+### 8.2 PWA flow (iPhone Safari)
 
 - [ ] Add to Home Screen → standalone mode
 - [ ] Sign in with Google OAuth → works (no WebView issues)
@@ -338,7 +412,7 @@ Already in place (no changes needed):
 - [ ] Share from other apps works
 - [ ] Sign out and sign back in
 
-### 7.3 Deploy
+### 8.3 Deploy
 
 - [ ] Deploy to Vercel
 - [ ] Verify service worker serves correctly in production
@@ -346,7 +420,7 @@ Already in place (no changes needed):
 
 ---
 
-## Phase 8: Lint Cleanup
+## Phase 9: Lint Cleanup
 
 > Fix all 56 ESLint warnings across the codebase. These are not from our PWA changes — they existed before ESLint was properly configured.
 
@@ -409,7 +483,8 @@ Already in place (no changes needed):
 | `app/globals.css` | Slide animation, hover scoping, mic pulse animation (Phase 6) ✅ |
 | `components/Navigation.tsx` | Inbox token alignment, badge color fix, safe-area header (Phase 6) ✅ |
 | `components/ConversationPanel.tsx` | Mobile header simplification, safe area (Phase 6) ✅ |
-| `components/TaskCard.tsx` | Swipe gestures (done/archive), remove mobile checkboxes (Phase 6) ✅ |
+| `components/TaskCard.tsx` | Swipe gestures, remove mobile checkboxes (Phase 6), full swipe-through, removed drag handle (Phase 7) ✅ |
+| `components/TaskList.tsx` | TouchSensor + delay, restrictToVerticalAxis, touch-action manipulation (Phase 7) ✅ |
 | `components/ui/Card.tsx` | Padding adjustment `py-3.5` (Phase 6) ✅ |
 | `components/ui/CircularCheckbox.tsx` | 44px touch target (Phase 6) ✅ |
 | `components/insight/InsightBriefingCard.tsx` | Accent tint + blue pill badge (Phase 6) ✅ |

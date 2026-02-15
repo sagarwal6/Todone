@@ -67,18 +67,14 @@ function SortableTask({
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
+    // On mobile, allow scroll/tap but let TouchSensor intercept after delay
+    ...(isMobile ? { touchAction: 'manipulation' } : {}),
   };
 
-  // On mobile, drag listeners go on the drag handle inside TaskCard (not the wrapper)
-  // so scrolling and swiping work normally on the card body.
-  // On desktop, drag listeners go on the whole wrapper.
-  const wrapperProps = isMobile
-    ? {}
-    : { ...attributes, ...listeners };
-
-  const dragHandleProps = isMobile
-    ? { listeners: listeners as React.HTMLAttributes<HTMLElement>, attributes: attributes as React.HTMLAttributes<HTMLElement> }
-    : undefined;
+  // Drag listeners go on the whole wrapper for both mobile and desktop.
+  // On mobile, TouchSensor with 250ms delay handles the scroll vs drag conflict
+  // (long-press to drag, normal touch to scroll — like Things 3 / Todoist).
+  const wrapperProps = { ...attributes, ...listeners };
 
   if (compact) {
     return (
@@ -86,7 +82,7 @@ function SortableTask({
         ref={setNodeRef}
         style={style}
         {...wrapperProps}
-        className={isMobile ? '' : 'cursor-grab active:cursor-grabbing'}
+        className="cursor-grab active:cursor-grabbing"
       >
         <CompactTaskCard
           task={task}
@@ -106,7 +102,7 @@ function SortableTask({
       ref={setNodeRef}
       style={style}
       {...wrapperProps}
-      className={isMobile ? '' : 'cursor-grab active:cursor-grabbing'}
+      className="cursor-grab active:cursor-grabbing"
     >
       <TaskCard
         task={task}
@@ -122,7 +118,6 @@ function SortableTask({
         isSelected={isSelected}
         showHoverActions={true}
         isAgentRunning={isAgentRunning}
-        dragHandleProps={dragHandleProps}
       />
     </div>
   );

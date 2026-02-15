@@ -138,6 +138,8 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
 
     // Reset transcript state
     finalTranscriptRef.current = '';
+    interimTranscriptRef.current = '';
+    bestTextRef.current = '';
     setFinalTranscript('');
     setInterimTranscript('');
 
@@ -157,6 +159,12 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
         }
       }
       finalTranscriptRef.current = final;
+      interimTranscriptRef.current = interim;
+      // Track the best (longest) text we've seen — survives any later clearing
+      const currentBest = (final || interim).trim();
+      if (currentBest.length > bestTextRef.current.length) {
+        bestTextRef.current = currentBest;
+      }
       setFinalTranscript(final);
       setInterimTranscript(interim);
     };
@@ -164,20 +172,36 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
     recognition.onend = () => {
       recognitionRef.current = null;
       setInterimTranscript('');
-      const text = finalTranscriptRef.current.trim();
+      // Triple fallback for iOS Safari quirks:
+      // 1. Final transcript (normal path — engine finalized results)
+      // 2. Interim transcript (stop() fired before finalization)
+      // 3. Best text seen (safety net — survives any clearing by late events)
+      const text = (
+        finalTranscriptRef.current ||
+        interimTranscriptRef.current ||
+        bestTextRef.current
+      ).trim();
       if (text) {
         setValue(text);
         setVoiceState('done');
       } else {
-        // No text captured — return to idle
+        // Truly no text captured — return to idle
         setVoiceState('idle');
       }
     };
 
-    recognition.onerror = () => {
-      // All errors (not-allowed, network, etc.) → return to idle
-      setVoiceState('idle');
-      recognitionRef.current = null;
+    recognition.onerror = (event: Event) => {
+      // Don't set state here — onend always fires after onerror and handles
+      // the state transition. Setting idle here would race with onend's done
+      // transition if text was already captured.
+      // Exception: 'not-allowed' means mic permission denied, no onend may follow
+      // on some browsers, so handle it explicitly.
+      const errorEvent = event as Event & { error?: string };
+      if (errorEvent.error === 'not-allowed' || errorEvent.error === 'service-not-allowed') {
+        recognitionRef.current = null;
+        setVoiceState('idle');
+      }
+      // For all other errors (no-speech, network, aborted), let onend handle it
     };
 
     recognitionRef.current = recognition;
@@ -185,8 +209,14 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
     setVoiceState('listening');
   }, []);
 
-  // Use a ref to track final transcript in speech callbacks (closures)
+  // Refs to track transcript in speech callbacks (closures capture stale state).
+  // bestTextRef is a "high-water mark" — the best text we've seen from any onresult,
+  // never cleared by subsequent events, only by a fresh startListening() call.
+  // This protects against iOS Safari edge cases where onend fires before finalization,
+  // or a final onresult comes through with empty transcript.
   const finalTranscriptRef = useRef('');
+  const interimTranscriptRef = useRef('');
+  const bestTextRef = useRef('');
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
