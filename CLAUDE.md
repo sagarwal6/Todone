@@ -133,3 +133,9 @@ ENCRYPTION_SECRET
 
 ### React Callbacks
 - Avoid state in `useCallback` deps that changes frequently - use refs instead
+
+### PWA / Mobile
+- iOS standalone PWA opens Safari for OAuth — session cookie is shared back via same origin. Post-OAuth landing page at `/auth/complete` handles the redirect.
+- Web Share Target API is Chromium-only — does not work on iOS Safari
+- `@dnd-kit` `PointerSensor` fires on touch devices — use `TouchSensor` only on mobile, `PointerSensor` only on desktop
+- Voice capture (Web Speech API): iOS Safari may fire `onend` before `isFinal` results — use triple-fallback transcript recovery
