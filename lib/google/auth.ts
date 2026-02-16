@@ -7,7 +7,7 @@
  * - Token expiration handling
  */
 
-import { supabaseAdmin } from '@/lib/supabase/server';
+import { supabaseAdmin, logAuditEvent } from '@/lib/supabase/server';
 import { encrypt, decrypt } from '@/lib/utils/encryption';
 
 // Google OAuth endpoints
@@ -179,6 +179,9 @@ export async function refreshAccessToken(
     .update(updateData)
     .eq('user_id', userId)
     .eq('provider', 'google');
+
+  // Audit: log token refresh event (no token content)
+  logAuditEvent(userId, null, 'token_refresh', { rotated: !!data.refresh_token }).catch(() => {});
 
   // Return unencrypted tokens for immediate use
   return {

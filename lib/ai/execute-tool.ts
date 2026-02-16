@@ -20,6 +20,8 @@ import * as contacts from '../google/contacts';
 import * as web from './web';
 // Import email scoring
 import { scoreEmails, getTierSummary } from '../email/scoring';
+// Import audit logging
+import { logAuditEvent } from '../supabase/server';
 import type { EmailMetadataWithHeaders } from '../email/types';
 
 /**
@@ -235,6 +237,9 @@ async function executeGmailSearch(
   try {
     console.log('Gmail search: Starting with query:', query);
 
+    // Audit: log query (not results)
+    logAuditEvent(context.userId, context.taskId, 'gmail_search', { query, maxResults }).catch(() => {});
+
     const emails = await gmail.searchEmails(context.accessToken, query, maxResults);
 
     console.log('Gmail search: Found', emails.length, 'emails');
@@ -339,6 +344,9 @@ async function executeGmailRead(
   const emailId = input.email_id as string;
   const includeThread = (input.include_thread as boolean) ?? true;
 
+  // Audit: log email ID accessed (not content)
+  logAuditEvent(context.userId, context.taskId, 'gmail_read', { emailId }).catch(() => {});
+
   const email = await gmail.readEmail(context.accessToken, emailId, includeThread);
 
   // SECURITY: Redact PII (SSN, credit cards, account numbers) before sending to LLM
@@ -433,6 +441,9 @@ async function executeCalendarList(
   const maxResults = (input.max_results as number) || 20;
   const calendarId = (input.calendar_id as string) || 'primary';
 
+  // Audit: log date range queried (not event content)
+  logAuditEvent(context.userId, context.taskId, 'calendar_list', { timeMin, timeMax, calendarId }).catch(() => {});
+
   const events = await calendar.listEvents(context.accessToken, {
     timeMin,
     timeMax,
@@ -518,6 +529,9 @@ async function executeContactsSearch(
 
   const query = input.query as string;
   const maxResults = (input.max_results as number) || 10;
+
+  // Audit: log search query (not results)
+  logAuditEvent(context.userId, context.taskId, 'contacts_search', { query }).catch(() => {});
 
   const contactsList = await contacts.searchContacts(context.accessToken, query, maxResults);
 
