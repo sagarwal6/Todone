@@ -103,8 +103,17 @@ interface FullScreenCaptureProps {
  * Clean, focused input with subtle encouragement.
  */
 export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = false }: FullScreenCaptureProps) {
-  const [value, setValue] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [value, _setValue] = useState('');
+  const inputRef = useRef<HTMLDivElement>(null);
+
+  // Wrapper to keep contentEditable div in sync with state
+  const setValue = useCallback((v: string, fromInput = false) => {
+    _setValue(v);
+    // Update contentEditable div if change came from outside (e.g., voice, clear)
+    if (!fromInput && inputRef.current) {
+      inputRef.current.textContent = v;
+    }
+  }, []);
   const doneTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [mounted, setMounted] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
@@ -372,26 +381,40 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
             </div>
 
             <div className="flex-1 relative">
-              <input
+              <div
                 ref={inputRef}
-                type="text"
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
+                contentEditable
+                role="textbox"
+                aria-label="Task title"
+                onInput={(e) => setValue(e.currentTarget.textContent || '', true)}
                 onKeyDown={handleKeyDown}
-                placeholder="What can I help you with?"
+                onPaste={(e) => {
+                  e.preventDefault();
+                  const text = e.clipboardData.getData('text/plain');
+                  const sel = window.getSelection();
+                  if (sel && sel.rangeCount > 0) {
+                    const range = sel.getRangeAt(0);
+                    range.deleteContents();
+                    range.insertNode(document.createTextNode(text));
+                    range.collapse(false);
+                  } else if (inputRef.current) {
+                    inputRef.current.textContent = (inputRef.current.textContent || '') + text;
+                  }
+                  setValue(inputRef.current?.textContent || '', true);
+                }}
+                data-placeholder="What can I help you with?"
                 className="
                   w-full
                   text-2xl text-inbox-text-primary
                   bg-transparent
                   border-0 outline-none
-                  placeholder:text-inbox-text-tertiary/40
                   pb-2
                   border-b-2 border-transparent
                   focus:border-primary/40
                   transition-colors duration-200
+                  empty:before:content-[attr(data-placeholder)]
+                  empty:before:text-inbox-text-tertiary/40
                 "
-                autoComplete="off"
-                autoCapitalize="sentences"
               />
 
               {!value && !isVoiceActive && (
