@@ -36,13 +36,15 @@
 - [ ] Confirm `ENCRYPTION_SECRET` is set and matches any existing encrypted tokens
 
 ## Smoke Test (post-deploy)
-- [ ] Sign in with Google — only readonly scopes on consent screen
-- [ ] Create a task, run agent, verify Gmail/Calendar access works
-- [ ] Visit `/privacy` and `/terms` — pages load
-- [ ] Account menu: Privacy, Terms, Sign out, Delete account all work
-- [ ] Delete test account — verify data removed
-- [ ] Security headers present (`curl -I <url>`)
-- [ ] PWA install and post-OAuth redirect (`/auth/complete`)
+- [x] Sign in with Google — only readonly scopes on consent screen
+- [x] Create a task, run agent, verify Gmail/Calendar access works
+- [x] Visit `/privacy` and `/terms` — pages load
+- [x] Account menu: Privacy, Terms, Sign out, Delete account all work (desktop + mobile)
+- [x] Delete test account — verify data removed (desktop + mobile)
+- [x] Security headers present (`curl -I <url>`) — all 4 headers confirmed
+- [x] PWA install and post-OAuth redirect (`/auth/complete`)
+- [x] Mobile: agent results don't overflow horizontally
+- [ ] Mobile: test voice input (mic button, recording, transcript editing)
 
 ## References
 - [Sensitive scope verification](https://developers.google.com/identity/protocols/oauth2/production-readiness/sensitive-scope-verification)

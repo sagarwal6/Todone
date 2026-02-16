@@ -161,3 +161,10 @@ Code MUST match what the privacy policy (`/app/privacy/page.tsx`) and terms (`/a
 - Web Share Target API is Chromium-only — does not work on iOS Safari
 - `@dnd-kit` `PointerSensor` fires on touch devices — use `TouchSensor` only on mobile, `PointerSensor` only on desktop
 - Voice capture (Web Speech API): iOS Safari may fire `onend` before `isFinal` results — use triple-fallback transcript recovery
+- iOS keyboard toolbar (prev/next/done) cannot be hidden from web code — it's native WKWebView chrome. Only removable via Capacitor (`Keyboard.setAccessoryBarVisible`). Don't waste time on contentEditable or other web workarounds.
+- Mobile text overflow: use `overflow-hidden break-words` on content containers and `min-w-0` on flex children to prevent horizontal scroll
+
+### Desktop Layout
+- App uses `MobileHeader` + `BottomNav` on mobile, simple header on desktop — no Sidebar component
+- `DesktopAccountMenu` in `Navigation.tsx` provides account menu (sign out, privacy, terms, delete)
+- `DeleteAccountDialog` must be rendered in BOTH mobile and desktop layout branches in `page.tsx`
