@@ -5,10 +5,12 @@ AI-powered task assistant that helps users get things done by connecting to thei
 ## Critical Safety Rules
 
 ### Google API Access (Read-Only Only)
-- `gmail.readonly`, `calendar.readonly`, `contacts.readonly` - no write scopes
+- `gmail.readonly`, `calendar.readonly`, `contacts.readonly` — no write scopes
+- Scopes defined in `lib/google/auth.ts` `GOOGLE_SCOPES` (single source of truth, imported by NextAuth)
 - **Email replies**: AI prepares draft, user clicks "Reply in Gmail" to open thread and reply there
 - **Calendar events**: AI prepares details, user clicks "Create in Calendar" to open Google Calendar
 - All write actions are URL-based redirects, never API writes
+- Never add `gmail.compose`, `gmail.send`, or `calendar.events` scopes without explicit approval
 
 ### Human-in-the-Loop Required
 All actions (send email, create event) require explicit user confirmation in Google's native UI.
@@ -133,6 +135,26 @@ ENCRYPTION_SECRET
 
 ### React Callbacks
 - Avoid state in `useCallback` deps that changes frequently - use refs instead
+
+### Security / Logging
+- Never log API keys, tokens (access/refresh), or their prefixes
+- Never log user email addresses, email subjects, sender names, or email content
+- Operational logs (counts, tiers, scores, status booleans) are fine
+- No debug/test API endpoints in production — all routes must check authentication
+- Debug endpoints were removed in the 2/15 security review — do not recreate them
+
+### Google API & Privacy Compliance
+Code MUST match what the privacy policy (`/app/privacy/page.tsx`) and terms (`/app/terms/page.tsx`) promise:
+- **Read-only only** — no Google API write calls (no POST/PUT to Gmail, Calendar, Contacts)
+- **No full email bodies stored in DB** — only metadata (sender, subject, date) and task summaries
+- **PII redaction before AI** — all email content passes through `redactPII()` in `execute-tool.ts` before reaching Claude/Gemini
+- **Tokens encrypted at rest** — always call `encrypt()` before storing, `decrypt()` when reading
+- **Token revocation on sign-out** — revoke with Google AND delete from DB
+- **No analytics/tracking/ad SDKs** — no Google Analytics, Mixpanel, Segment, etc.
+- **No AI model training** — use Anthropic zero-retention API; Gemini paid API (no training)
+- **Limited Use compliance** — Google user data only for user-facing features, never sold/shared
+- **COPPA** — service is for users 13+; no features directed at children
+- **Account deletion** — users can delete all their data (Phase 6: DELETE /api/user)
 
 ### PWA / Mobile
 - iOS standalone PWA opens Safari for OAuth — session cookie is shared back via same origin. Post-OAuth landing page at `/auth/complete` handles the redirect.

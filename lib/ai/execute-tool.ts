@@ -20,11 +20,21 @@ import * as contacts from '../google/contacts';
 import * as web from './web';
 // Import email scoring
 import { scoreEmails, getTierSummary } from '../email/scoring';
+// Import audit logging
+import { logAuditEvent } from '../supabase/server';
 import type { EmailMetadataWithHeaders } from '../email/types';
 
 /**
  * Redact PII from text before sending to LLM
- * SECURITY: Prevents sensitive data (SSN, credit cards, account numbers) from being sent to Claude
+ * SECURITY: Prevents sensitive data from being sent to Claude
+ *
+ * PRESERVED (needed for task execution):
+ * - Policy numbers, order numbers, tracking numbers, reference IDs, invoice numbers
+ *
+ * REDACTED:
+ * - SSN, credit cards, bank accounts, routing numbers
+ * - Passwords, auth tokens, API keys
+ * - Date of birth patterns, passport numbers, driver's license numbers
  */
 function redactPII(text: string): string {
   if (!text) return text;
@@ -38,12 +48,29 @@ function redactPII(text: string): string {
     .replace(/\b3[47]\d{2}[-\s]?\d{6}[-\s]?\d{5}\b/g, '[CC REDACTED]')
     // Generic 16-digit card numbers
     .replace(/\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g, '[CC REDACTED]')
-    // Account numbers: "Account: 123456789" or "Account #123456789" or "Acct: 123456789"
-    .replace(/(?:account|acct)\s*#?\s*:?\s*\d{6,}/gi, '[ACCOUNT REDACTED]')
-    // Policy numbers: "Policy: 123456789" or "Policy #123456789"
-    .replace(/policy\s*#?\s*:?\s*\d{6,}/gi, '[POLICY REDACTED]')
-    // Routing numbers: 9 digits (US bank routing)
-    .replace(/\brouting\s*#?\s*:?\s*\d{9}\b/gi, '[ROUTING REDACTED]');
+    // Bank account numbers: "Account: 123456789" or "Account #123456789" or "Acct: 123456789"
+    // (but NOT "policy number", "order number", etc. — those are preserved)
+    .replace(/(?:(?:bank|checking|savings|debit)\s+)?(?:account|acct)\s*#?\s*:?\s*\d{6,}/gi, '[BANK ACCOUNT REDACTED]')
+    // Routing numbers: "Routing: 123456789" or "ABA: 123456789"
+    .replace(/(?:routing|aba)\s*#?\s*:?\s*\d{9}\b/gi, '[ROUTING REDACTED]')
+    // IBAN: 2-letter country code + 2 check digits + up to 30 alphanumeric
+    .replace(/\b[A-Z]{2}\d{2}[\s]?[\dA-Z]{4}[\s]?(?:[\dA-Z]{4}[\s]?){1,7}[\dA-Z]{1,4}\b/g, '[IBAN REDACTED]')
+    // SWIFT/BIC codes: 8 or 11 alphanumeric chars
+    .replace(/\bSWIFT\s*:?\s*[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b/gi, '[SWIFT REDACTED]')
+    // Passwords in email text: "Password: xyz" or "password is xyz" or "temp password: xyz"
+    .replace(/(?:password|passwd|pwd)\s*(?:is|:|=)\s*\S+/gi, '[PASSWORD REDACTED]')
+    // API keys / tokens in email text: "API key: xyz" or "token: xyz" or "secret: xyz"
+    .replace(/(?:api[_\s]?key|auth[_\s]?token|access[_\s]?token|bearer|secret[_\s]?key)\s*(?:is|:|=)\s*\S+/gi, '[AUTH TOKEN REDACTED]')
+    // Date of birth: "DOB: 01/15/1990" or "Date of Birth: 1990-01-15" or "Born: Jan 15, 1990"
+    .replace(/(?:date\s+of\s+birth|dob|born|birthday)\s*:?\s*\d{1,2}[/-]\d{1,2}[/-]\d{2,4}/gi, '[DOB REDACTED]')
+    .replace(/(?:date\s+of\s+birth|dob|born|birthday)\s*:?\s*\d{4}[/-]\d{1,2}[/-]\d{1,2}/gi, '[DOB REDACTED]')
+    .replace(/(?:date\s+of\s+birth|dob|born|birthday)\s*:?\s*(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{1,2},?\s*\d{4}/gi, '[DOB REDACTED]')
+    // Passport numbers: "Passport: AB1234567" or "Passport #: 123456789"
+    .replace(/passport\s*#?\s*:?\s*[A-Z0-9]{6,12}/gi, '[PASSPORT REDACTED]')
+    // Driver's license: "DL: X12345678" or "Driver's License: 12345678" or "License #: AB-123456"
+    .replace(/(?:driver'?s?\s*license|dl|license)\s*#?\s*:?\s*[A-Z0-9][\w-]{5,15}/gi, '[DL REDACTED]')
+    // Medical record numbers: "MRN: 123456" or "Medical Record: 123456"
+    .replace(/(?:mrn|medical\s+record)\s*#?\s*:?\s*\d{5,}/gi, '[MRN REDACTED]');
 }
 
 /**
@@ -86,7 +113,7 @@ export async function executeTool(
 
     // Merge with external abort signal if provided
     const combinedSignal = context.abortSignal
-      ? combineAbortSignals(context.abortSignal, timeoutController.signal)
+      ? AbortSignal.any([context.abortSignal, timeoutController.signal])
       : timeoutController.signal;
 
     try {
@@ -209,7 +236,9 @@ async function executeGmailSearch(
 
   try {
     console.log('Gmail search: Starting with query:', query);
-    console.log('Gmail search: Token prefix:', context.accessToken.substring(0, 20) + '...');
+
+    // Audit: log query (not results)
+    logAuditEvent(context.userId, context.taskId, 'gmail_search', { query, maxResults }).catch(() => {});
 
     const emails = await gmail.searchEmails(context.accessToken, query, maxResults);
 
@@ -217,8 +246,7 @@ async function executeGmailSearch(
 
     // If user email is available, score and tier the emails
     if (context.userEmail && emails.length > 0) {
-      console.log('Gmail search: Scoring emails for user:', context.userEmail);
-      console.log('Gmail search: Emails with rawHeaders:', emails.filter(e => e.rawHeaders).length, 'of', emails.length);
+      console.log('Gmail search: Scoring', emails.length, 'emails,', emails.filter(e => e.rawHeaders).length, 'with headers');
 
       // Convert to EmailMetadataWithHeaders format for scoring
       const emailsWithHeaders = emails
@@ -244,12 +272,6 @@ async function executeGmailSearch(
         const tierSummary = getTierSummary(scoredEmails);
 
         console.log('Gmail search: Email tier summary:', tierSummary);
-
-        // Log details for all emails
-        for (const email of scoredEmails) {
-          console.log(`Gmail search: [${email.tier}] score=${email.score} from="${email.from}" subject="${email.subject.substring(0, 50)}"`);
-          console.log(`  -> Direct: ${email.signals.isDirect}, OneToOne: ${email.signals.isOneToOne}, Recipients: ${email.signals.recipientCount}, Automated: ${email.signals.isAutomated}, MailingList: ${email.signals.isMailingList}`);
-        }
 
         // Group emails by tier for clearer LLM consumption
         const highPriority = scoredEmails.filter(e => e.tier === 'high');
@@ -278,7 +300,7 @@ async function executeGmailSearch(
         };
       }
     } else {
-      console.log('Gmail search: No userEmail provided, skipping scoring. userEmail:', context.userEmail);
+      console.log('Gmail search: No userEmail provided, skipping scoring');
     }
 
     // Fallback: return unscored emails if scoring not possible
@@ -321,6 +343,9 @@ async function executeGmailRead(
 
   const emailId = input.email_id as string;
   const includeThread = (input.include_thread as boolean) ?? true;
+
+  // Audit: log email ID accessed (not content)
+  logAuditEvent(context.userId, context.taskId, 'gmail_read', { emailId }).catch(() => {});
 
   const email = await gmail.readEmail(context.accessToken, emailId, includeThread);
 
@@ -416,6 +441,9 @@ async function executeCalendarList(
   const maxResults = (input.max_results as number) || 20;
   const calendarId = (input.calendar_id as string) || 'primary';
 
+  // Audit: log date range queried (not event content)
+  logAuditEvent(context.userId, context.taskId, 'calendar_list', { timeMin, timeMax, calendarId }).catch(() => {});
+
   const events = await calendar.listEvents(context.accessToken, {
     timeMin,
     timeMax,
@@ -501,6 +529,9 @@ async function executeContactsSearch(
 
   const query = input.query as string;
   const maxResults = (input.max_results as number) || 10;
+
+  // Audit: log search query (not results)
+  logAuditEvent(context.userId, context.taskId, 'contacts_search', { query }).catch(() => {});
 
   const contactsList = await contacts.searchContacts(context.accessToken, query, maxResults);
 
@@ -693,19 +724,3 @@ function categorizeError(message: string): { retriable: boolean; category: strin
   return { retriable: false, category: 'Error' };
 }
 
-/**
- * Combine multiple abort signals
- */
-function combineAbortSignals(...signals: AbortSignal[]): AbortSignal {
-  const controller = new AbortController();
-
-  for (const signal of signals) {
-    if (signal.aborted) {
-      controller.abort();
-      break;
-    }
-    signal.addEventListener('abort', () => controller.abort(), { once: true });
-  }
-
-  return controller.signal;
-}

@@ -227,12 +227,12 @@ async function findAwaitingResponse(
   for (const { email, scored } of scoredEmails) {
     // Log high-tier emails prominently
     if (scored && scored.tier === 'high') {
-      console.log(`[SCAN] HIGH-TIER: "${email.subject}" from ${extractName(email.from)} - score: ${scored.score}, isDirect: ${scored.signals.isDirect}, isUnread: ${email.isUnread}`);
+      console.log(`[SCAN] HIGH-TIER: score=${scored.score}, isDirect: ${scored.signals.isDirect}, isUnread: ${email.isUnread}`);
     } else if (scored && scored.score >= 5) {
       // Log emails close to high tier with full breakdown for debugging
       const breakdown = getScoreBreakdown(scored.signals);
       const breakdownStr = breakdown.map(b => `${b.modifier}:${b.value > 0 ? '+' : ''}${b.value}`).join(', ');
-      console.log(`[SCAN] Near-high: "${email.subject}" from ${extractName(email.from)} - tier: ${scored.tier}, score: ${scored.score}, breakdown: [${breakdownStr}]`);
+      console.log(`[SCAN] Near-high: tier=${scored.tier}, score=${scored.score}, breakdown: [${breakdownStr}]`);
     }
 
     // CRITICAL: Use scoring layer to filter
@@ -246,14 +246,14 @@ async function findAwaitingResponse(
         if (scored.signals.isAutomated) reasons.push('automated');
         if (scored.signals.isMarketingSubject) reasons.push('marketing');
         if (scored.signals.isHtmlOnly) reasons.push('html-only');
-        console.log(`[SCAN] SKIP: "${email.subject}" from ${extractName(email.from)} - tier: ${scored.tier}, score: ${scored.score}, reasons: [${reasons.join(', ')}]`);
+        console.log(`[SCAN] SKIP: tier=${scored.tier}, score=${scored.score}, reasons: [${reasons.join(', ')}]`);
         continue;
       }
       // For medium-tier emails, require unread status UNLESS it's a direct email
       // Direct emails (1:1 or small group) likely need a response even if read
       // High-tier emails show even if read (user may have opened but not replied)
       if (scored.tier === 'medium' && !email.isUnread && !scored.signals.isDirect) {
-        console.log(`[SCAN] Skipping read medium-tier: "${email.subject}"`);
+        console.log('[SCAN] Skipping read medium-tier email');
         continue;
       }
     } else {
@@ -291,11 +291,11 @@ async function findAwaitingResponse(
         const lastFromMe = threadInfo.lastMessageFrom.toLowerCase().includes('me') ||
                           threadInfo.lastMessageFrom.includes(extractEmail(email.to[0] || ''));
         if (lastFromMe && !isHighTier && !hasActiveTask && !hasProtectedSender) {
-          console.log(`[SCAN] Skipping thread where user sent last message: "${email.subject}"`);
+          console.log('[SCAN] Skipping thread where user sent last message');
           continue;
         }
         if (lastFromMe && (hasActiveTask || hasProtectedSender)) {
-          console.log(`[SCAN] Keeping thread with active task/protected sender despite user sent last: "${email.subject}" (sender: ${senderName})`);
+          console.log('[SCAN] Keeping thread with active task/protected sender despite user sent last');
         }
       }
     }

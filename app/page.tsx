@@ -5,7 +5,7 @@ import { useSession, signOut } from 'next-auth/react';
 import { TaskInput } from '@/components/TaskInput';
 import { TaskList } from '@/components/TaskList';
 import { ConversationPanel } from '@/components/ConversationPanel';
-import { BottomNav, MobileHeader } from '@/components/Navigation';
+import { BottomNav, MobileHeader, DesktopAccountMenu, DeleteAccountDialog } from '@/components/Navigation';
 import { QuickCaptureBar, FullScreenCapture } from '@/components/QuickCapture';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { EmptyState } from '@/components/EmptyState';
@@ -75,6 +75,22 @@ export default function Home() {
 function AuthenticatedHome() {
   const handleSignOut = useCallback(() => {
     signOut();
+  }, []);
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteAccount = useCallback(async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch('/api/user', { method: 'DELETE' });
+      if (!res.ok) throw new Error('Delete failed');
+      // Sign out after successful deletion
+      signOut({ callbackUrl: '/' });
+    } catch {
+      setDeleting(false);
+      alert('Failed to delete account. Please try again.');
+    }
   }, []);
 
   const {
@@ -507,7 +523,13 @@ function AuthenticatedHome() {
 
     return (
       <div className="min-h-screen bg-inbox-bg-primary pb-32">
-        <MobileHeader onSignOut={handleSignOut} />
+        <MobileHeader onSignOut={handleSignOut} onDeleteAccount={() => setDeleteDialogOpen(true)} />
+        <DeleteAccountDialog
+          open={deleteDialogOpen}
+          onClose={() => setDeleteDialogOpen(false)}
+          onConfirm={handleDeleteAccount}
+          deleting={deleting}
+        />
 
         <main key={viewMode} className="px-4 py-4 animate-fade-in">
           {/* Insight Briefing Card - lives at top of task list */}
@@ -568,6 +590,12 @@ function AuthenticatedHome() {
   // Desktop Layout - Inbox style: Two states - clean list OR 2-pane
   return (
     <div className="h-screen bg-inbox-bg-secondary flex flex-col overflow-hidden">
+      <DeleteAccountDialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        onConfirm={handleDeleteAccount}
+        deleting={deleting}
+      />
       {/* Header with filter tabs - Inbox style */}
       <header className="flex-shrink-0 bg-inbox-bg-primary border-b border-inbox-divider px-6 py-4">
         <div className="flex items-center justify-between">
@@ -609,14 +637,11 @@ function AuthenticatedHome() {
             </div>
           </div>
 
-          {/* Sign out button */}
-          <button
-            onClick={handleSignOut}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-inbox-caption text-inbox-text-secondary hover:text-inbox-text-primary hover:bg-inbox-bg-hover transition-colors"
-          >
-            <MaterialIcon name="logout" size={16} weight={300} />
-            <span>Sign out</span>
-          </button>
+          {/* Account menu */}
+          <DesktopAccountMenu
+            onSignOut={handleSignOut}
+            onDeleteAccount={() => setDeleteDialogOpen(true)}
+          />
         </div>
       </header>
 

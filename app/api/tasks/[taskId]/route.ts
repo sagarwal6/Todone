@@ -100,7 +100,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
   if (error) {
     console.error('Failed to update task:', error);
     return NextResponse.json(
-      { error: 'Failed to update task', details: error.message },
+      { error: 'Failed to update task' },
       { status: 500 }
     );
   }
@@ -131,7 +131,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   if (error) {
     console.error('Failed to delete task:', error);
     return NextResponse.json(
-      { error: 'Failed to delete task', details: error.message },
+      { error: 'Failed to delete task' },
       { status: 500 }
     );
   }

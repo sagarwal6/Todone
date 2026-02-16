@@ -49,12 +49,7 @@ export interface EmailContent extends EmailMetadata {
   bcc?: string[];
   messageIdHeader?: string; // RFC 2822 Message-ID header (for reply threading)
   referencesHeader?: string; // References header (for reply threading)
-  attachments?: {
-    filename: string;
-    mimeType: string;
-    size: number;
-    attachmentId: string;
-  }[];
+  // Note: attachment download is not supported. Use hasAttachments (boolean) for metadata only.
   threadMessages?: EmailMetadata[];
 }
 
@@ -253,7 +248,6 @@ function parseEmailContent(message: GmailMessage): EmailContent {
     referencesHeader: getHeader('References') || undefined, // For reply threading
     body,
     htmlBody: undefined, // Don't include HTML to save tokens
-    attachments: message.payload ? extractAttachments(message.payload) : [],
   };
 }
 
@@ -290,23 +284,6 @@ function extractHtmlBody(payload: GmailMessage['payload']): string | undefined {
     }
   }
   return undefined;
-}
-
-function extractAttachments(
-  payload: GmailMessage['payload']
-): EmailContent['attachments'] {
-  const attachments: NonNullable<EmailContent['attachments']> = [];
-
-  if (payload.parts) {
-    for (const part of payload.parts) {
-      if (part.mimeType !== 'text/plain' && part.mimeType !== 'text/html') {
-        // This is likely an attachment
-        // Note: Full attachment extraction would require additional API calls
-      }
-    }
-  }
-
-  return attachments.length > 0 ? attachments : undefined;
 }
 
 function hasAttachments(payload: GmailMessage['payload']): boolean {

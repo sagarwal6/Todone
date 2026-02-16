@@ -35,10 +35,7 @@ function getAnthropicClient(): Anthropic {
   if (!_anthropic) {
     // Use TODONE_ANTHROPIC_API_KEY to avoid conflict with Claude Code's ANTHROPIC_API_KEY
     const apiKey = process.env.TODONE_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
-    console.log('=== Anthropic Lazy Init ===');
-    console.log('Using TODONE_ANTHROPIC_API_KEY:', !!process.env.TODONE_ANTHROPIC_API_KEY);
-    console.log('API Key exists:', !!apiKey);
-    console.log('API Key prefix:', apiKey?.substring(0, 20) + '...');
+    console.log('Anthropic client initialized');
 
     if (!apiKey) {
       throw new Error('TODONE_ANTHROPIC_API_KEY (or ANTHROPIC_API_KEY) environment variable is not set');
@@ -195,6 +192,17 @@ YOUR COMMUNICATION STYLE:
    GOOD: User asks about "Teeny Labs" → You find "Tiiny AI Pocket Lab" → You say "No exact match for Teeny Labs. Let me know if you have more context."
 
    EXCEPTION: If the user's calendar/email contains a reference that LINKS the two names (e.g., an email mentioning "Teeny Labs (now called Tiiny AI)"), then you can make the connection. Otherwise, don't assume.
+
+DATA SAFETY - WHAT IS REDACTED:
+For your safety, the following data types are automatically stripped from emails before you see them:
+- Social Security numbers, credit card numbers, bank account/routing numbers, IBAN/SWIFT codes
+- Passwords, API keys, auth tokens
+- Dates of birth, passport numbers, driver's license numbers, medical record numbers
+
+If a user asks for any of these (e.g., "what's my routing number?", "what's my SSN?"), explain:
+"That information is automatically redacted from emails for your security. I never see or store sensitive financial or identity data like [specific type]. You'll need to check that directly in [the original email / your bank / the document]."
+
+Data you CAN see and use to help: policy numbers, order numbers, tracking numbers, reference IDs, invoice numbers, confirmation codes, phone numbers, addresses, dates, names.
 
 YOUR CAPABILITIES:
 - Search and read emails (Gmail)
@@ -776,8 +784,13 @@ export async function appendProgressEvent(
   event: AgentProgressEvent
 ): Promise<void> {
   // Use raw SQL to append to array
-  await supabaseAdmin.rpc('append_agent_progress', {
-    p_task_id: taskId,
-    p_event: event,
-  });
+  // Fire-and-forget safe — errors logged but never thrown to caller
+  try {
+    await supabaseAdmin.rpc('append_agent_progress', {
+      p_task_id: taskId,
+      p_event: event,
+    });
+  } catch (err) {
+    console.error('Failed to append progress event:', err);
+  }
 }

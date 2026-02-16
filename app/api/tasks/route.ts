@@ -33,7 +33,7 @@ export async function GET() {
   if (error) {
     console.error('Failed to fetch tasks:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch tasks', details: error.message },
+      { error: 'Failed to fetch tasks' },
       { status: 500 }
     );
   }
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
   if (error) {
     console.error('Failed to create task:', error);
     return NextResponse.json(
-      { error: 'Failed to create task', details: error.message },
+      { error: 'Failed to create task' },
       { status: 500 }
     );
   }

@@ -47,10 +47,7 @@ export async function webSearch(
   const tavilyApiKey = process.env.TAVILY_API_KEY;
   const geminiApiKey = process.env.GEMINI_API_KEY;
 
-  console.log('=== Web Search ===');
-  console.log('Query:', query);
-  console.log('Tavily key available:', !!tavilyApiKey);
-  console.log('Gemini key available:', !!geminiApiKey);
+  console.log('Web search: query:', query);
 
   // Try Tavily first (best for AI agents)
   if (tavilyApiKey) {

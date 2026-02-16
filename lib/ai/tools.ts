@@ -38,7 +38,7 @@ export const gmailSearchTool: Tool = {
  */
 export const gmailReadTool: Tool = {
   name: 'gmail_read',
-  description: `Read full email content by ID. Returns body, headers, thread context, and attachments. Use after gmail_search.`,
+  description: `Read full email content by ID. Returns body, headers, and thread context. Use after gmail_search.`,
   input_schema: {
     type: 'object' as const,
     properties: {

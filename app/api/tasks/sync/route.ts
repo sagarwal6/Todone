@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
   if (error) {
     console.error('Failed to sync task:', error);
     return new Response(
-      JSON.stringify({ error: 'Failed to sync task', details: error.message }),
+      JSON.stringify({ error: 'Failed to sync task' }),
       {
         status: 500,
         headers: { 'Content-Type': 'application/json' },

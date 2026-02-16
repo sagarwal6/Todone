@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
 
   // Get session (supports both web NextAuth and mobile JWT)
   const session = await getServerSession(authOptions);
-  console.log('[SCAN] Session check:', { hasSession: !!session, email: session?.user?.email });
+  console.log('[SCAN] Session check:', { hasSession: !!session });
 
   if (!session) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -300,11 +300,7 @@ export async function POST(request: NextRequest) {
         //   }
         // }
 
-        // Log emails being sent to LLM for debugging
-        console.log('[SCAN] Emails awaiting response being sent to LLM:');
-        for (const email of context.emails.awaitingResponse) {
-          console.log(`  - "${email.subject}" from ${email.fromName} <${email.from}> | score: ${email.priorityScore} | direct: ${email.isDirectEmail}`);
-        }
+        console.log('[SCAN] Emails awaiting response:', context.emails.awaitingResponse.length);
 
         // Phase 2: AI Analysis
         emit({ type: 'analysis_started', timestamp: Date.now() });
@@ -417,7 +413,7 @@ export async function POST(request: NextRequest) {
           totalActions: analysisResult.actions.length,
         });
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error('Scan error:', error);
 
         // Update scan as failed if we created one
         if (scanId) {
@@ -425,14 +421,14 @@ export async function POST(request: NextRequest) {
             .from('insight_scans')
             .update({
               status: 'failed',
-              error_message: errorMessage,
+              error_message: 'Scan failed',
             })
             .eq('id', scanId);
         }
 
         emit({
           type: 'error',
-          error: errorMessage,
+          error: 'Scan failed',
           phase: 'analysis',
           recoverable: false,
         });

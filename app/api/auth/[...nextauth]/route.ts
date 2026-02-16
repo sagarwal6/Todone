@@ -3,7 +3,7 @@ import GoogleProvider from 'next-auth/providers/google';
 import { supabaseAdmin } from '@/lib/supabase';
 import { v4 as uuidv4 } from 'uuid';
 import { encrypt } from '@/lib/utils/encryption';
-import { revokeTokens } from '@/lib/google/auth';
+import { revokeTokens, GOOGLE_SCOPES } from '@/lib/google/auth';
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -12,14 +12,7 @@ export const authOptions: NextAuthOptions = {
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       authorization: {
         params: {
-          scope: [
-            'openid',
-            'https://www.googleapis.com/auth/userinfo.email',
-            'https://www.googleapis.com/auth/userinfo.profile',
-            'https://www.googleapis.com/auth/gmail.readonly',
-            'https://www.googleapis.com/auth/calendar.readonly',
-            'https://www.googleapis.com/auth/contacts.readonly',
-          ].join(' '),
+          scope: ['openid', ...GOOGLE_SCOPES].join(' '),
           access_type: 'offline',  // Required to get refresh_token
           prompt: 'consent',       // Force consent to always get refresh_token
         },
@@ -59,9 +52,7 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async signIn({ user, account }) {
-      console.log('=== NextAuth signIn callback ===');
-      console.log('Provider:', account?.provider);
-      console.log('User email:', user.email);
+      console.log('NextAuth signIn callback, provider:', account?.provider);
 
       if (account?.provider === 'google') {
         try {
@@ -72,7 +63,7 @@ export const authOptions: NextAuthOptions = {
             .eq('email', user.email)
             .single();
 
-          console.log('Existing profile check:', { existingProfile, selectError: selectError?.message });
+          console.log('Existing profile check:', { exists: !!existingProfile, error: selectError?.message });
 
           let profileId: string;
 
@@ -175,7 +166,7 @@ export const authOptions: NextAuthOptions = {
           if (profileData) {
             // Revoke tokens with Google and delete from database
             await revokeTokens(profileData.id);
-            console.log('Tokens revoked for user:', session.user.email);
+            console.log('Tokens revoked for user');
           }
         } catch (error) {
           console.error('Error revoking tokens on sign out:', error);

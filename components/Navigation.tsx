@@ -1,5 +1,7 @@
 'use client';
 
+import { useState, useRef, useEffect } from 'react';
+import Link from 'next/link';
 import { MaterialIcon } from './ui/MaterialIcon';
 
 type ViewMode = 'active' | 'completed' | 'archived' | 'insights';
@@ -171,9 +173,25 @@ export function BottomNav({ currentView, onViewChange, counts }: BottomNavProps)
 interface MobileHeaderProps {
   title?: string;
   onSignOut?: () => void;
+  onDeleteAccount?: () => void;
 }
 
-export function MobileHeader({ title = 'Todone', onSignOut }: MobileHeaderProps) {
+export function MobileHeader({ title = 'Todone', onSignOut, onDeleteAccount }: MobileHeaderProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [menuOpen]);
+
   return (
     <header className="
       sticky top-0 z-30
@@ -187,15 +205,168 @@ export function MobileHeader({ title = 'Todone', onSignOut }: MobileHeaderProps)
           {title}
         </h1>
         {onSignOut && (
-          <button
-            onClick={onSignOut}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-inbox-caption text-inbox-text-secondary active:bg-inbox-bg-hover transition-colors"
-            aria-label="Sign out"
-          >
-            <MaterialIcon name="logout" size={16} weight={300} />
-          </button>
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-inbox-caption text-inbox-text-secondary active:bg-inbox-bg-hover transition-colors"
+              aria-label="Account menu"
+            >
+              <MaterialIcon name="more_vert" size={20} weight={300} />
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 top-full mt-1 bg-inbox-bg-primary border border-inbox-divider rounded-xl shadow-lg overflow-hidden min-w-[180px] z-50">
+                <button
+                  onClick={() => { setMenuOpen(false); onSignOut(); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-inbox-text-primary active:bg-inbox-bg-hover transition-colors"
+                >
+                  <MaterialIcon name="logout" size={18} weight={300} />
+                  Sign out
+                </button>
+                <div className="border-t border-inbox-divider">
+                  <Link
+                    href="/privacy"
+                    onClick={() => setMenuOpen(false)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-inbox-text-secondary active:bg-inbox-bg-hover transition-colors"
+                  >
+                    <MaterialIcon name="policy" size={18} weight={300} />
+                    Privacy
+                  </Link>
+                  <Link
+                    href="/terms"
+                    onClick={() => setMenuOpen(false)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-inbox-text-secondary active:bg-inbox-bg-hover transition-colors"
+                  >
+                    <MaterialIcon name="description" size={18} weight={300} />
+                    Terms
+                  </Link>
+                </div>
+                {onDeleteAccount && (
+                  <button
+                    onClick={() => { setMenuOpen(false); onDeleteAccount(); }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-500 active:bg-inbox-bg-hover transition-colors border-t border-inbox-divider"
+                  >
+                    <MaterialIcon name="delete_forever" size={18} weight={300} />
+                    Delete account
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </header>
+  );
+}
+
+interface DesktopAccountMenuProps {
+  onSignOut: () => void;
+  onDeleteAccount: () => void;
+}
+
+export function DesktopAccountMenu({ onSignOut, onDeleteAccount }: DesktopAccountMenuProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [menuOpen]);
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={() => setMenuOpen(!menuOpen)}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-inbox-caption text-inbox-text-secondary hover:text-inbox-text-primary hover:bg-inbox-bg-hover transition-colors"
+        aria-label="Account menu"
+      >
+        <MaterialIcon name="more_vert" size={20} weight={300} />
+      </button>
+      {menuOpen && (
+        <div className="absolute right-0 top-full mt-1 bg-inbox-bg-primary border border-inbox-divider rounded-xl shadow-lg overflow-hidden min-w-[180px] z-50">
+          <button
+            onClick={() => { setMenuOpen(false); onSignOut(); }}
+            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-inbox-text-primary hover:bg-inbox-bg-hover transition-colors"
+          >
+            <MaterialIcon name="logout" size={18} weight={300} />
+            Sign out
+          </button>
+          <div className="border-t border-inbox-divider">
+            <Link
+              href="/privacy"
+              onClick={() => setMenuOpen(false)}
+              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-inbox-text-secondary hover:bg-inbox-bg-hover transition-colors"
+            >
+              <MaterialIcon name="policy" size={18} weight={300} />
+              Privacy
+            </Link>
+            <Link
+              href="/terms"
+              onClick={() => setMenuOpen(false)}
+              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-inbox-text-secondary hover:bg-inbox-bg-hover transition-colors"
+            >
+              <MaterialIcon name="description" size={18} weight={300} />
+              Terms
+            </Link>
+          </div>
+          <button
+            onClick={() => { setMenuOpen(false); onDeleteAccount(); }}
+            className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-500 hover:bg-inbox-bg-hover transition-colors border-t border-inbox-divider"
+          >
+            <MaterialIcon name="delete_forever" size={18} weight={300} />
+            Delete account
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface DeleteAccountDialogProps {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  deleting: boolean;
+}
+
+export function DeleteAccountDialog({ open, onClose, onConfirm, deleting }: DeleteAccountDialogProps) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6">
+      <div className="bg-inbox-bg-primary rounded-2xl p-6 max-w-sm w-full shadow-xl">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+            <MaterialIcon name="warning" size={20} className="text-red-600" />
+          </div>
+          <h2 className="text-lg font-medium text-inbox-text-primary">Delete account?</h2>
+        </div>
+        <p className="text-sm text-inbox-text-secondary mb-6 leading-relaxed">
+          This will permanently delete your account and all your data — tasks, messages,
+          and Google connection. This action cannot be undone.
+        </p>
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onClose}
+            disabled={deleting}
+            className="px-4 py-2 rounded-full text-sm font-medium text-inbox-text-primary active:bg-inbox-bg-hover transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={deleting}
+            className="px-4 py-2 rounded-full text-sm font-medium bg-red-600 text-white active:bg-red-700 transition-colors disabled:opacity-50"
+          >
+            {deleting ? 'Deleting...' : 'Delete my account'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

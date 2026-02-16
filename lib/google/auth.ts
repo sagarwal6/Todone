@@ -7,20 +7,18 @@
  * - Token expiration handling
  */
 
-import { supabaseAdmin } from '@/lib/supabase/server';
+import { supabaseAdmin, logAuditEvent } from '@/lib/supabase/server';
 import { encrypt, decrypt } from '@/lib/utils/encryption';
 
 // Google OAuth endpoints
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 
-// Required scopes for agentic features
-// SECURITY: gmail.send removed - we only create drafts, never send directly
+// Required scopes — read-only access only
+// No write scopes (gmail.compose, calendar.events, gmail.send) requested
 export const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
-  'https://www.googleapis.com/auth/gmail.compose',  // Drafts only, no send
   'https://www.googleapis.com/auth/calendar.readonly',
-  'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/contacts.readonly',
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/userinfo.profile',
@@ -181,6 +179,9 @@ export async function refreshAccessToken(
     .update(updateData)
     .eq('user_id', userId)
     .eq('provider', 'google');
+
+  // Audit: log token refresh event (no token content)
+  logAuditEvent(userId, null, 'token_refresh', { rotated: !!data.refresh_token }).catch(() => {});
 
   // Return unencrypted tokens for immediate use
   return {

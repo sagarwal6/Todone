@@ -90,9 +90,13 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     // Store callbacks
     callbacksRef.current.set(taskId, { onComplete, onError });
 
-    // Create abort controller
+    // Create abort controller with 5-minute max lifetime
     const abortController = new AbortController();
     abortControllersRef.current.set(taskId, abortController);
+    const streamTimeout = setTimeout(() => {
+      console.warn(`Agent stream timeout (5 min) for task ${taskId}`);
+      abortController.abort();
+    }, 5 * 60 * 1000);
 
     // Initialize state
     setAgentStates(prev => {
@@ -262,6 +266,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
         callbacksRef.current.get(taskId)?.onError?.(errorMessage);
       }
     } finally {
+      clearTimeout(streamTimeout);
       abortControllersRef.current.delete(taskId);
       callbacksRef.current.delete(taskId);
     }

@@ -266,11 +266,11 @@ async function handleConfirm(
       error: `Unknown draft type: ${draft.type}`,
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('Draft execution error:', error);
     return {
       success: false,
       action: 'rejected',
-      error: errorMessage,
+      error: 'Failed to execute draft',
     };
   }
 }
@@ -346,11 +346,11 @@ async function handleEdit(
       error: `Unknown draft type: ${draft.type}`,
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('Draft execution error:', error);
     return {
       success: false,
       action: 'rejected',
-      error: errorMessage,
+      error: 'Failed to execute draft',
     };
   }
 }

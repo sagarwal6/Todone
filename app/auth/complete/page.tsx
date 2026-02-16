@@ -7,34 +7,37 @@ import { MaterialIcon } from '@/components/ui/MaterialIcon';
 /**
  * Post-OAuth landing page. After Google OAuth completes, NextAuth redirects here.
  *
- * - If we're in the standalone PWA: redirect to / immediately.
- * - If we're in Safari (user came from PWA → Safari for OAuth): show a
- *   "Return to Todone" prompt. The session cookie is already set and shared
- *   with the PWA, so when they tap back to the app, they'll be logged in.
+ * - Always attempts to redirect to / after a brief delay.
+ * - If the redirect doesn't work (e.g., PWA → Safari OAuth flow on iOS),
+ *   shows a "Return to Todone" prompt as a fallback.
  */
 export default function AuthCompletePage() {
   const router = useRouter();
-  const [isStandalone, setIsStandalone] = useState<boolean | null>(null);
+  const [showFallback, setShowFallback] = useState(false);
 
   useEffect(() => {
-    const standalone =
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (navigator as any).standalone === true;
-
-    if (standalone) {
-      // We're in the PWA — just go home
+    // Try to redirect home after a short delay (let cookie settle)
+    const timer = setTimeout(() => {
       router.replace('/');
-    } else {
-      setIsStandalone(false);
-    }
+    }, 500);
+
+    // If we're still here after 2s, show the fallback UI
+    // (this happens when Safari was opened from the PWA and can't navigate back)
+    const fallbackTimer = setTimeout(() => {
+      setShowFallback(true);
+    }, 2000);
+
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(fallbackTimer);
+    };
   }, [router]);
 
-  // Still detecting...
-  if (isStandalone === null) {
+  if (!showFallback) {
     return null;
   }
 
-  // We're in Safari after OAuth from the PWA
+  // Fallback for PWA → Safari OAuth flow
   return (
     <div className="min-h-screen bg-inbox-bg-primary flex flex-col items-center justify-center px-6">
       <div className="w-full max-w-sm text-center">
@@ -45,14 +48,16 @@ export default function AuthCompletePage() {
           You&apos;re signed in!
         </h1>
         <p className="text-inbox-text-secondary text-base mb-8">
-          Return to the Todone app on your home screen to continue.
+          If you have Todone on your home screen, switch back to it now.
+          Otherwise, tap the button below.
         </p>
-        <div className="bg-white rounded-2xl p-6 shadow-[var(--inbox-shadow-elevated)]">
-          <div className="flex items-center gap-3 justify-center text-inbox-text-tertiary">
-            <MaterialIcon name="touch_app" size={24} />
-            <span className="text-sm">Tap the Todone icon on your home screen</span>
-          </div>
-        </div>
+        <a
+          href="/"
+          className="inline-flex items-center gap-2 px-6 py-3 bg-inbox-accent text-white rounded-full text-sm font-medium"
+        >
+          <MaterialIcon name="arrow_forward" size={18} />
+          Go to Todone
+        </a>
       </div>
     </div>
   );
