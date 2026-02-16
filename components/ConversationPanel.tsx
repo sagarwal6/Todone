@@ -326,7 +326,7 @@ export function ConversationPanel({ task, onClose, onAddChatMessage, onComplete,
                 <div className="w-8 h-8 rounded-full bg-inbox-accent-light flex items-center justify-center flex-shrink-0">
                   <MaterialIcon name="auto_awesome" size={16} className="text-inbox-accent" />
                 </div>
-                <div className="flex-1 pt-1">
+                <div className="flex-1 min-w-0 pt-1">
                   <Markdown content={displayMessage} />
 
                   {/* Inline key facts */}
@@ -518,7 +518,7 @@ export function ConversationPanel({ task, onClose, onAddChatMessage, onComplete,
                   size={16}
                 />
               </div>
-              <div className={`flex-1 ${msg.role === 'user' ? 'flex justify-end' : 'pt-1'}`}>
+              <div className={`flex-1 min-w-0 ${msg.role === 'user' ? 'flex justify-end' : 'pt-1'}`}>
                 {msg.role === 'user' ? (
                   <div className="max-w-[85%] p-4 rounded-2xl text-inbox-body bg-inbox-accent text-inbox-text-inverse">
                     {msg.content}

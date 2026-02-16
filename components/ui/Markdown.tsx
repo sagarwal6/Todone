@@ -12,7 +12,7 @@ interface MarkdownProps {
  */
 export function Markdown({ content, className = '' }: MarkdownProps) {
   return (
-    <div className={`prose prose-sm max-w-none ${className}`}>
+    <div className={`prose prose-sm max-w-none overflow-hidden break-words ${className}`}>
       <ReactMarkdown
         components={{
         // Headers
