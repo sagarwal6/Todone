@@ -158,27 +158,19 @@
 
 ---
 
-## Phase 8: Data Retention Policy (HIGH)
+## Phase 8: Data Retention Policy (HIGH) ✅
 
 > Auto-cleanup old execution data. User-facing data (tasks, messages) persists until user deletes.
 
-### Tasks
-- [ ] Create Supabase SQL migration for cleanup:
-  - `agent_steps` older than 90 days → delete (execution traces, not user-facing)
+### Completed
+- [x] Created `supabase/migrations/010_data_retention.sql` with:
+  - `cleanup_expired_data()` function (SECURITY DEFINER)
+  - `agent_steps` older than 90 days → delete (internal execution traces, not user-facing)
   - `audit_log` older than 1 year → delete
-  - `rate_limits` older than 7 days → delete
-  - Do NOT auto-delete: `tasks`, `task_messages`, `profiles`, `oauth_tokens`
-- [ ] Create a scheduled cleanup function (Supabase cron or pg_cron)
-- [ ] Document retention periods in privacy policy (Phase 5)
-
-### Testing
-- Insert old test rows, run cleanup, verify only old non-user data removed
-- Verify tasks and messages are untouched
-
-### Key Files
-| File | Action |
-|------|--------|
-| `supabase/migrations/010_data_retention.sql` | Create retention policies |
+  - `rate_limits` not updated in 7 days → delete (stale counters)
+  - Does NOT auto-delete: `tasks`, `task_messages`, `profiles`, `oauth_tokens`
+- [x] Scheduled daily cleanup at 3 AM UTC via pg_cron
+- [x] Retention periods already documented in privacy policy (Phase 5)
 
 ---
 
