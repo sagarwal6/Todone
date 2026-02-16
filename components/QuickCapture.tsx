@@ -103,17 +103,8 @@ interface FullScreenCaptureProps {
  * Clean, focused input with subtle encouragement.
  */
 export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = false }: FullScreenCaptureProps) {
-  const [value, _setValue] = useState('');
-  const inputRef = useRef<HTMLDivElement>(null);
-
-  // Wrapper to keep contentEditable div in sync with state
-  const setValue = useCallback((v: string, fromInput = false) => {
-    _setValue(v);
-    // Update contentEditable div if change came from outside (e.g., voice, clear)
-    if (!fromInput && inputRef.current) {
-      inputRef.current.textContent = v;
-    }
-  }, []);
+  const [value, setValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
   const doneTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [mounted, setMounted] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
@@ -381,28 +372,13 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
             </div>
 
             <div className="flex-1 relative">
-              <div
+              <input
                 ref={inputRef}
-                contentEditable
-                role="textbox"
-                aria-label="Task title"
-                onInput={(e) => setValue(e.currentTarget.textContent || '', true)}
+                type="text"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
                 onKeyDown={handleKeyDown}
-                onPaste={(e) => {
-                  e.preventDefault();
-                  const text = e.clipboardData.getData('text/plain');
-                  const sel = window.getSelection();
-                  if (sel && sel.rangeCount > 0) {
-                    const range = sel.getRangeAt(0);
-                    range.deleteContents();
-                    range.insertNode(document.createTextNode(text));
-                    range.collapse(false);
-                  } else if (inputRef.current) {
-                    inputRef.current.textContent = (inputRef.current.textContent || '') + text;
-                  }
-                  setValue(inputRef.current?.textContent || '', true);
-                }}
-                data-placeholder="What can I help you with?"
+                placeholder="What can I help you with?"
                 className="
                   w-full
                   text-2xl text-inbox-text-primary
@@ -412,9 +388,11 @@ export function FullScreenCapture({ isOpen, onClose, onSave, startWithVoice = fa
                   border-b-2 border-transparent
                   focus:border-primary/40
                   transition-colors duration-200
-                  empty:before:content-[attr(data-placeholder)]
-                  empty:before:text-inbox-text-tertiary/40
+                  placeholder:text-inbox-text-tertiary/40
                 "
+                autoComplete="off"
+                autoCorrect="on"
+                autoCapitalize="sentences"
               />
 
               {!value && !isVoiceActive && (
