@@ -209,25 +209,18 @@
 
 ---
 
-## Phase 11: Database Indexes & Hardening (MEDIUM)
+## Phase 11: Database Indexes & Hardening (MEDIUM) ✅
 
 > Add missing indexes for performance. Consider RLS improvements.
 
-### Tasks
-- [ ] Add index on `task_messages(task_id, created_at)` for sorted message queries
-- [ ] Add index on `tasks(user_id, created_at DESC)` for recent task listings
-- [ ] Evaluate RLS policy improvements — currently `USING (true)` for service_role
-  - Document why hybrid session approach prevents adding user_id checks to RLS
-  - Or implement user_id checks if feasible
-
-### Testing
-- Run EXPLAIN on common queries to verify indexes used
-- Existing functionality unaffected
-
-### Key Files
-| File | Action |
-|------|--------|
-| `supabase/migrations/010_data_retention.sql` | Can combine with retention migration, or create 011 |
+### Completed
+- [x] Added composite index `task_messages(task_id, created_at)` for sorted conversation display
+- [x] Added composite index `tasks(user_id, created_at DESC)` for recent task listings
+- [x] Evaluated RLS policies — `USING (true)` for `service_role` is correct and intentional:
+  - NextAuth doesn't set `auth.uid()`, so Supabase Auth RLS can't work
+  - Access restricted to `service_role` only (no direct client access)
+  - User isolation enforced by `.eq('user_id', userId)` in every API route
+  - Documented in migration file for future reference
 
 ---
 
