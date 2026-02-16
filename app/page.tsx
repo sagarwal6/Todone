@@ -5,7 +5,7 @@ import { useSession, signOut } from 'next-auth/react';
 import { TaskInput } from '@/components/TaskInput';
 import { TaskList } from '@/components/TaskList';
 import { ConversationPanel } from '@/components/ConversationPanel';
-import { BottomNav, MobileHeader } from '@/components/Navigation';
+import { BottomNav, MobileHeader, DeleteAccountDialog } from '@/components/Navigation';
 import { QuickCaptureBar, FullScreenCapture } from '@/components/QuickCapture';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { EmptyState } from '@/components/EmptyState';
@@ -75,6 +75,22 @@ export default function Home() {
 function AuthenticatedHome() {
   const handleSignOut = useCallback(() => {
     signOut();
+  }, []);
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteAccount = useCallback(async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch('/api/user', { method: 'DELETE' });
+      if (!res.ok) throw new Error('Delete failed');
+      // Sign out after successful deletion
+      signOut({ callbackUrl: '/' });
+    } catch {
+      setDeleting(false);
+      alert('Failed to delete account. Please try again.');
+    }
   }, []);
 
   const {
@@ -507,7 +523,13 @@ function AuthenticatedHome() {
 
     return (
       <div className="min-h-screen bg-inbox-bg-primary pb-32">
-        <MobileHeader onSignOut={handleSignOut} />
+        <MobileHeader onSignOut={handleSignOut} onDeleteAccount={() => setDeleteDialogOpen(true)} />
+        <DeleteAccountDialog
+          open={deleteDialogOpen}
+          onClose={() => setDeleteDialogOpen(false)}
+          onConfirm={handleDeleteAccount}
+          deleting={deleting}
+        />
 
         <main key={viewMode} className="px-4 py-4 animate-fade-in">
           {/* Insight Briefing Card - lives at top of task list */}

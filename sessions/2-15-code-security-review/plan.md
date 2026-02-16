@@ -110,24 +110,22 @@
 
 ---
 
-## Phase 6: User Data Deletion Endpoint (CRITICAL)
+## Phase 6: User Data Deletion Endpoint (CRITICAL) ✅
 
 > Users must be able to delete all their data. Required for GDPR/CCPA and Google security review.
 
-### Tasks
-- [ ] Create `DELETE /api/user` endpoint that:
+### Completed
+- [x] Created `DELETE /api/user` endpoint that:
   1. Verifies authenticated session
-  2. Revokes Google OAuth tokens
-  3. Deletes from `oauth_tokens` (cascades handled by FK)
-  4. Deletes from `tasks` (cascades to `agent_steps`, `task_messages`)
-  5. Deletes from `insight_scans` and `insight_actions`
-  6. Deletes from `audit_log` (user's entries)
-  7. Deletes from `profiles`
-  8. Clears NextAuth session
-  9. Returns confirmation
-- [ ] Add "Delete Account" button in settings/profile UI
-- [ ] Add confirmation dialog ("This will permanently delete all your data")
-- [ ] Log the deletion event (anonymized) before deleting audit_log
+  2. Logs anonymized deletion event in audit_log (survives via ON DELETE SET NULL)
+  3. Revokes Google OAuth tokens with Google + deletes oauth_tokens row
+  4. Deletes profile row — cascades to all user data (tasks → agent_steps + task_messages, rate_limits, insight_scans → insight_actions, oauth_tokens)
+  5. Returns confirmation; client calls signOut()
+- [x] Added account menu (three-dot) in MobileHeader replacing standalone sign-out button
+- [x] Menu contains "Sign out" and "Delete account" options
+- [x] Added confirmation dialog with warning and "Delete my account" button
+- [x] Loading state while deletion is in progress
+- [x] Typecheck, lint (errors only), and build pass
 
 ### Testing
 - Create test user, add tasks, run agent, then delete account
