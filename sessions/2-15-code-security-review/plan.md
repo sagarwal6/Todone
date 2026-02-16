@@ -174,23 +174,17 @@
 
 ---
 
-## Phase 9: Remove Attachment Download Stubs (MEDIUM)
+## Phase 9: Remove Attachment Download Stubs (MEDIUM) ✅
 
 > Attachment downloads are permanently out of scope. Remove any stubs.
 
-### Tasks
-- [ ] Find and remove any attachment download stubs/placeholders in `lib/google/gmail.ts`
-- [ ] Ensure agent tools don't reference attachment download capability
-- [ ] Update tool descriptions if they mention attachments
-
-### Testing
-- Grep for "attachment" — only references should be metadata (has attachments: true/false)
-
-### Key Files
-| File | Change |
-|------|--------|
-| `lib/google/gmail.ts` | Remove attachment download stubs |
-| `lib/ai/tools.ts` | Update tool descriptions if needed |
+### Completed
+- [x] Removed `extractAttachments` stub function from `lib/google/gmail.ts` (was always returning undefined)
+- [x] Removed `attachments` array type from `EmailContent` interface (filename, mimeType, size, attachmentId)
+- [x] Removed `attachments` field from `parseEmailContent` return
+- [x] Updated `gmail_read` tool description — removed "attachments" mention
+- [x] Kept: `hasAttachments` boolean metadata, `has:attachment` search query, scoring signal
+- [x] Typecheck and build pass
 
 ---
 
