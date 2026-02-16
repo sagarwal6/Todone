@@ -105,7 +105,7 @@
 - [x] Typecheck, lint (errors only), and build pass
 
 ### Remaining (non-blocking)
-- [ ] Add footer links to privacy/terms from the main layout or settings
+- [x] Add privacy/terms links to account menu in MobileHeader
 - [ ] Set privacy policy URL in Google Cloud Console OAuth consent screen
 
 ---

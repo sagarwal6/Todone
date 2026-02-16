@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import Link from 'next/link';
 import { MaterialIcon } from './ui/MaterialIcon';
 
 type ViewMode = 'active' | 'completed' | 'archived' | 'insights';
@@ -221,6 +222,24 @@ export function MobileHeader({ title = 'Todone', onSignOut, onDeleteAccount }: M
                   <MaterialIcon name="logout" size={18} weight={300} />
                   Sign out
                 </button>
+                <div className="border-t border-inbox-divider">
+                  <Link
+                    href="/privacy"
+                    onClick={() => setMenuOpen(false)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-inbox-text-secondary active:bg-inbox-bg-hover transition-colors"
+                  >
+                    <MaterialIcon name="policy" size={18} weight={300} />
+                    Privacy
+                  </Link>
+                  <Link
+                    href="/terms"
+                    onClick={() => setMenuOpen(false)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-inbox-text-secondary active:bg-inbox-bg-hover transition-colors"
+                  >
+                    <MaterialIcon name="description" size={18} weight={300} />
+                    Terms
+                  </Link>
+                </div>
                 {onDeleteAccount && (
                   <button
                     onClick={() => { setMenuOpen(false); onDeleteAccount(); }}
