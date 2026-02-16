@@ -113,7 +113,7 @@ export async function executeTool(
 
     // Merge with external abort signal if provided
     const combinedSignal = context.abortSignal
-      ? combineAbortSignals(context.abortSignal, timeoutController.signal)
+      ? AbortSignal.any([context.abortSignal, timeoutController.signal])
       : timeoutController.signal;
 
     try {
@@ -724,19 +724,3 @@ function categorizeError(message: string): { retriable: boolean; category: strin
   return { retriable: false, category: 'Error' };
 }
 
-/**
- * Combine multiple abort signals
- */
-function combineAbortSignals(...signals: AbortSignal[]): AbortSignal {
-  const controller = new AbortController();
-
-  for (const signal of signals) {
-    if (signal.aborted) {
-      controller.abort();
-      break;
-    }
-    signal.addEventListener('abort', () => controller.abort(), { once: true });
-  }
-
-  return controller.signal;
-}

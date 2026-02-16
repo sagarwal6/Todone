@@ -784,8 +784,13 @@ export async function appendProgressEvent(
   event: AgentProgressEvent
 ): Promise<void> {
   // Use raw SQL to append to array
-  await supabaseAdmin.rpc('append_agent_progress', {
-    p_task_id: taskId,
-    p_event: event,
-  });
+  // Fire-and-forget safe — errors logged but never thrown to caller
+  try {
+    await supabaseAdmin.rpc('append_agent_progress', {
+      p_task_id: taskId,
+      p_event: event,
+    });
+  } catch (err) {
+    console.error('Failed to append progress event:', err);
+  }
 }

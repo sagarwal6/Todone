@@ -413,7 +413,7 @@ export async function POST(request: NextRequest) {
           totalActions: analysisResult.actions.length,
         });
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error('Scan error:', error);
 
         // Update scan as failed if we created one
         if (scanId) {
@@ -421,14 +421,14 @@ export async function POST(request: NextRequest) {
             .from('insight_scans')
             .update({
               status: 'failed',
-              error_message: errorMessage,
+              error_message: 'Scan failed',
             })
             .eq('id', scanId);
         }
 
         emit({
           type: 'error',
-          error: errorMessage,
+          error: 'Scan failed',
           phase: 'analysis',
           recoverable: false,
         });

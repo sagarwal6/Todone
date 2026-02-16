@@ -133,12 +133,12 @@ export async function POST(
         });
         // No need to emit complete here - runAgenticLoop already does it
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error('Agent run error:', error);
 
-        // Emit error
+        // Emit error (generic message to client)
         await emit({
           type: 'error',
-          error: errorMessage,
+          error: 'Agent execution failed',
           recoverable: false,
           timestamp: Date.now(),
         });

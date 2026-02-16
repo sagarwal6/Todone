@@ -188,30 +188,24 @@
 
 ---
 
-## Phase 10: Harden Error Responses & Stream Handling (MEDIUM)
+## Phase 10: Harden Error Responses & Stream Handling (MEDIUM) ✅
 
 > Prevent info leakage via error messages. Fix SSE stream timeout.
 
-### Tasks
-- [ ] Replace `error.message` in API responses with generic messages in production
-  - `app/api/tasks/[taskId]/route.ts` line ~104
-  - Audit other routes for same pattern
-- [ ] Add 5-minute max lifetime to SSE stream in `AgentContext.tsx`
-- [ ] Add `.catch()` to fire-and-forget `appendProgressEvent` RPC in `anthropic.ts`
-- [ ] Fix `combineAbortSignals` event listener cleanup in `execute-tool.ts`
-
-### Testing
-- Trigger API errors — verify generic messages returned (no schema leak)
-- Start long agent run, verify stream auto-closes after 5 min max
-- Build passes
-
-### Key Files
-| File | Change |
-|------|--------|
-| `app/api/tasks/[taskId]/route.ts` | Generic error messages |
-| `contexts/AgentContext.tsx` | SSE stream timeout |
-| `lib/ai/anthropic.ts` | Error handling on appendProgressEvent |
-| `lib/ai/execute-tool.ts` | Signal cleanup |
+### Completed
+- [x] Replaced `error.message` / `details: error.message` with generic messages across all API routes:
+  - `app/api/tasks/[taskId]/route.ts` (update + delete)
+  - `app/api/tasks/route.ts` (fetch + create)
+  - `app/api/tasks/sync/route.ts`
+  - `app/api/tasks/[taskId]/run/route.ts`
+  - `app/api/tasks/[taskId]/confirm/route.ts` (both catch blocks)
+  - `app/api/research/route.ts`
+  - `app/api/scan/route.ts`
+  - `app/api/scan/email/[messageId]/route.ts`
+- [x] Added 5-minute max lifetime to SSE stream in `AgentContext.tsx` (auto-aborts + clears on cleanup)
+- [x] Added try/catch error handling to `appendProgressEvent` in `anthropic.ts`
+- [x] Replaced `combineAbortSignals` with native `AbortSignal.any()` in `execute-tool.ts` (no listener cleanup needed)
+- [x] Typecheck and build pass
 
 ---
 
