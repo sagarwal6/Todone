@@ -161,4 +161,3 @@ Code MUST match what the privacy policy (`/app/privacy/page.tsx`) and terms (`/a
 - Web Share Target API is Chromium-only — does not work on iOS Safari
 - `@dnd-kit` `PointerSensor` fires on touch devices — use `TouchSensor` only on mobile, `PointerSensor` only on desktop
 - Voice capture (Web Speech API): iOS Safari may fire `onend` before `isFinal` results — use triple-fallback transcript recovery
-- iOS keyboard toolbar (prev/next/done) cannot be hidden from web code — it's native WKWebView chrome. Only removable via Capacitor. Don't attempt contentEditable or other workarounds.
