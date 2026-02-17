@@ -32,6 +32,7 @@ const toolConfig: Record<string, { label: string; activeLabel: string; icon: str
   calendar_list: { label: 'Checked your calendar', activeLabel: 'Checking calendar', icon: 'calendar_month' },
   calendar_create: { label: 'Created calendar event', activeLabel: 'Creating event', icon: 'event' },
   contacts_search: { label: 'Found contact info', activeLabel: 'Searching contacts', icon: 'contacts' },
+  contacts_analyze: { label: 'Analyzed relationship', activeLabel: 'Analyzing relationship', icon: 'person_search' },
   web_search: { label: 'Searched the web', activeLabel: 'Searching the web', icon: 'travel_explore' },
   web_fetch: { label: 'Gathered information', activeLabel: 'Fetching page', icon: 'language' },
 };

@@ -61,7 +61,7 @@ export const gmailReadTool: Tool = {
  */
 export const gmailDraftTool: Tool = {
   name: 'gmail_draft',
-  description: `Create email draft for user review (NOT sent automatically). Use for formal, detailed, or group communications — NOT for casual "message/text someone" tasks (use sms: link instead). For replies: MUST include thread_id, message_id (from gmail_read), and original_email to thread properly.`,
+  description: `Create email draft for user review (NOT sent automatically). Use for formal, detailed, or group communications — NOT for casual "message/text someone" tasks (use sms: link instead). Keep drafts SHORT and direct — 1-2 sentences max for quick messages. No corporate filler ("Thanks for your patience!", "I hope this email finds you well"). No sign-off unless it's a formal email. For replies: MUST include thread_id, message_id (from gmail_read), and original_email to thread properly.`,
   input_schema: {
     type: 'object' as const,
     properties: {
@@ -232,7 +232,7 @@ export const contactsSearchTool: Tool = {
  */
 export const contactsAnalyzeTool: Tool = {
   name: 'contacts_analyze',
-  description: `Analyze the user's relationship with a person over the past year. Returns email frequency/recency/direction, calendar meeting patterns, and relationship strength. Use this FIRST for any people-related task: "message X", "call X", "do I meet with X?", "who is X?", disambiguation when multiple contacts match. Much more useful than contacts_search alone — gives you the context to make smart decisions about who the user means and what their relationship looks like.`,
+  description: `Analyze the user's relationship with a person over the past year. Returns perPersonBreakdown: each person has email count, meeting count, last contact date, relationship strength, AND phone number (from Google Contacts). Sorted by activity. For "message/text X": filter perPersonBreakdown to entries with a phone number, pick top 3 by strength. For "do I meet with X?": use meeting count and pattern. This one tool gives you everything — no need to also call contacts_search.`,
   input_schema: {
     type: 'object' as const,
     properties: {

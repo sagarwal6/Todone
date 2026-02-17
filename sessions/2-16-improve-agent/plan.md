@@ -213,6 +213,26 @@ Switched scan analysis model from Sonnet 4 to Haiku 3.5. ~4x cost reduction. Rev
 
 ---
 
+## Phase 10: Email Tone & Style Tool
+
+**Why:** Email drafts sound generic/corporate. The agent should match the user's actual writing style — per recipient, per email type, or a general default.
+
+**Approach:** Build a `tone_analyze` tool that:
+1. Reads user's recent sent emails (general style, or filtered to a specific recipient)
+2. Extracts: greeting style, sign-off, formality level, average length, punctuation habits, emoji usage
+3. Returns a style profile the agent uses when drafting emails
+4. Cache the profile per-user (general) and per-recipient (specific) to avoid re-analyzing
+
+**Layers:** Per-recipient style > per-email-type style > general user style > sensible defaults
+
+- [ ] Design tool interface and style profile schema
+- [ ] Implement sent email analysis (read last 5-10 sent emails)
+- [ ] Extract style features (greeting, sign-off, length, formality)
+- [ ] Integrate with gmail_draft — agent calls tone_analyze before drafting
+- [ ] Cache style profiles to avoid repeated analysis
+
+---
+
 ## Future: Haiku Routing for Task Execution
 
 Not now — need usage data first. If simple tasks (≤1 tool call) >40% of volume, route to Haiku.

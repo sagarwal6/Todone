@@ -119,18 +119,6 @@ export function PendingDrafts({
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center gap-2 text-sm text-gray-600">
-        <span className="material-symbols-rounded text-amber-500">
-          pending_actions
-        </span>
-        <span>
-          {pendingDraftsList.length === 1
-            ? '1 draft awaiting your review'
-            : `${pendingDraftsList.length} drafts awaiting your review`}
-        </span>
-      </div>
-
       {/* Draft Cards */}
       <div className="space-y-3">
         {pendingDraftsList.map((draft) => {

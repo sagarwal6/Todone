@@ -9,6 +9,7 @@
 
 import { searchEmails } from '../google/gmail';
 import { listEvents } from '../google/calendar';
+import { searchContacts } from '../google/contacts';
 import type { EmailMetadata } from '../google/gmail';
 import type { CalendarEvent } from '../google/calendar';
 import { isAutomatedSender, extractEmailAddress } from './scoring-utils';
@@ -17,8 +18,24 @@ import { isAutomatedSender, extractEmailAddress } from './scoring-utils';
 // Types
 // ============================================================================
 
+/** Per-person breakdown when multiple contacts match a query */
+export interface PersonBreakdown {
+  email: string;
+  displayName: string;
+  phone: string | null;
+  emailCount: number;
+  fromThem: number;
+  toThem: number;
+  lastEmailDate: string | null;
+  meetingCount: number;
+  lastMeetingDate: string | null;
+  strength: 'high' | 'medium' | 'low' | 'none';
+}
+
 export interface ContactRelationship {
   query: string;
+  /** Per-person breakdown sorted by activity (most active first). Use this to rank contacts. */
+  perPersonBreakdown: PersonBreakdown[];
   email: {
     totalEmails: number;
     fromThem: number;
@@ -69,8 +86,8 @@ export async function analyzeContactRelationship(
   const oneYearAgo = new Date(now);
   oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
-  // Run email and calendar queries in parallel
-  const [emailsFrom, emailsTo, calendarEvents] = await Promise.all([
+  // Run email, calendar, and contacts queries in parallel
+  const [emailsFrom, emailsTo, calendarEvents, contactsResults] = await Promise.all([
     // Emails FROM the contact to user (last year)
     searchEmails(accessToken, `from:${query} newer_than:1y`, 50).catch(() => [] as EmailMetadata[]),
     // Emails FROM user TO the contact (last year)
@@ -81,25 +98,74 @@ export async function analyzeContactRelationship(
       timeMax: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       maxResults: 50,
     }).catch(() => [] as CalendarEvent[]),
+    // Google Contacts matching the query (for phone numbers)
+    searchContacts(accessToken, query, 10).catch(() => []),
   ]);
+
+  // Build email-to-phone lookup from contacts
+  const phoneByEmail = new Map<string, string>();
+  const phoneByName = new Map<string, string>();
+  for (const contact of contactsResults) {
+    const phone = contact.phoneNumbers?.[0]?.value || null;
+    if (phone) {
+      // Map by email addresses
+      for (const e of contact.emails) {
+        phoneByEmail.set(e.value.toLowerCase(), phone);
+      }
+      // Map by display name (for fallback matching)
+      if (contact.displayName) {
+        phoneByName.set(contact.displayName.toLowerCase(), phone);
+      }
+    }
+  }
 
   // Filter out automated emails
   const realEmailsFrom = emailsFrom.filter(e => !isAutomatedSender(e.from));
   // User-initiated emails are always "real" — no filtering needed
   const realEmailsTo = emailsTo;
 
-  // Collect matched email addresses
+  // Collect matched email addresses and build per-person email stats
   const matchedEmails = new Set<string>();
   const queryLower = query.toLowerCase();
-  for (const email of [...realEmailsFrom, ...realEmailsTo]) {
+  // Per-email-address stats: { email -> { displayName, fromThem, toThem, directToThem, lastDate } }
+  const perPersonEmails = new Map<string, { displayName: string; fromThem: number; toThem: number; directToThem: number; lastDate: Date | null }>();
+
+  const trackPerson = (addr: string, displayName: string, direction: 'from' | 'to', date: Date, isDirect: boolean) => {
+    const key = addr.toLowerCase();
+    const existing = perPersonEmails.get(key) || { displayName, fromThem: 0, toThem: 0, directToThem: 0, lastDate: null };
+    if (direction === 'from') existing.fromThem++;
+    else {
+      existing.toThem++;
+      if (isDirect) existing.directToThem++;
+    }
+    if (!existing.lastDate || date > existing.lastDate) existing.lastDate = date;
+    // Prefer display name with both first and last name
+    if (displayName.includes(' ') && !existing.displayName.includes(' ')) existing.displayName = displayName;
+    perPersonEmails.set(key, existing);
+  };
+
+  for (const email of realEmailsFrom) {
     const fromAddr = extractEmailAddress(email.from);
     if (fromAddr.toLowerCase().includes(queryLower) || email.from.toLowerCase().includes(queryLower)) {
       matchedEmails.add(fromAddr);
+      // Extract display name: "Andrew Hogue <ahogue@gmail.com>" -> "Andrew Hogue"
+      const nameMatch = email.from.match(/^([^<]+)</);
+      const displayName = nameMatch ? nameMatch[1].trim() : fromAddr;
+      trackPerson(fromAddr, displayName, 'from', new Date(email.date), false);
     }
+  }
+  for (const email of realEmailsTo) {
+    // Count total recipients to determine if this is a direct (1:1) or group email
+    const totalRecipients = (email.to?.length || 0) + (email.cc ? 1 : 0);
+    const isDirect = totalRecipients <= 2; // Just the user and the recipient
+
     for (const toAddr of email.to || []) {
       const addr = extractEmailAddress(toAddr);
       if (addr.toLowerCase().includes(queryLower) || toAddr.toLowerCase().includes(queryLower)) {
         matchedEmails.add(addr);
+        const nameMatch = toAddr.match(/^([^<]+)</);
+        const displayName = nameMatch ? nameMatch[1].trim() : addr;
+        trackPerson(addr, displayName, 'to', new Date(email.date), isDirect);
       }
     }
   }
@@ -171,12 +237,107 @@ export async function analyzeContactRelationship(
     strength = 'low';
   }
 
+  // Build per-person breakdown: combine email stats + calendar per matched email address
+  // Also count calendar meetings per person by checking attendee emails
+  const perPersonMeetings = new Map<string, { count: number; lastDate: Date | null }>();
+  for (const event of relevantEvents) {
+    for (const attendee of event.attendees || []) {
+      const attendeeEmail = attendee.email?.toLowerCase();
+      if (attendeeEmail && perPersonEmails.has(attendeeEmail)) {
+        const existing = perPersonMeetings.get(attendeeEmail) || { count: 0, lastDate: null };
+        existing.count++;
+        const eventDate = new Date(event.start.dateTime || event.start.date || '');
+        if (!existing.lastDate || eventDate > existing.lastDate) existing.lastDate = eventDate;
+        perPersonMeetings.set(attendeeEmail, existing);
+      }
+    }
+  }
+
+  const perPersonBreakdown: PersonBreakdown[] = Array.from(perPersonEmails.entries())
+    .map(([emailAddr, stats]) => {
+      const meetings = perPersonMeetings.get(emailAddr) || { count: 0, lastDate: null };
+      const personEmailCount = stats.fromThem + stats.toThem;
+      const personMeetingCount = meetings.count;
+      // Use direct emails (1:1) + emails from them for strength — group/list emails don't count
+      const directEmailCount = stats.fromThem + stats.directToThem;
+      const directFreqPerMonth = directEmailCount / monthsAnalyzed;
+      const personCalFreqPerMonth = personMeetingCount / monthsAnalyzed;
+
+      let personStrength: PersonBreakdown['strength'] = 'none';
+      if (directEmailCount === 0 && personMeetingCount === 0) {
+        personStrength = 'none';
+      } else if (directFreqPerMonth >= 4 || personCalFreqPerMonth >= 2) {
+        personStrength = 'high';
+      } else if (directFreqPerMonth >= 1 || personCalFreqPerMonth >= 0.5) {
+        personStrength = 'medium';
+      } else {
+        personStrength = 'low';
+      }
+
+      // Look up phone number from contacts (by email, then by display name)
+      const phone = phoneByEmail.get(emailAddr) ||
+        phoneByName.get(stats.displayName.toLowerCase()) ||
+        null;
+
+      return {
+        email: emailAddr,
+        displayName: stats.displayName,
+        phone,
+        emailCount: personEmailCount,
+        fromThem: stats.fromThem,
+        toThem: stats.toThem,
+        lastEmailDate: stats.lastDate?.toISOString() || null,
+        meetingCount: personMeetingCount,
+        lastMeetingDate: meetings.lastDate?.toISOString() || null,
+        strength: personStrength,
+      };
+    })
+    // Sort by: strength (high > medium > low > none), then direct email count + meetings, then recency
+    .sort((a, b) => {
+      const strengthOrder = { high: 3, medium: 2, low: 1, none: 0 };
+      const strengthDiff = strengthOrder[b.strength] - strengthOrder[a.strength];
+      if (strengthDiff !== 0) return strengthDiff;
+      // Prefer direct (1:1) interactions over group email presence
+      const aDirectScore = (a.fromThem + a.meetingCount) * 2 + a.emailCount;
+      const bDirectScore = (b.fromThem + b.meetingCount) * 2 + b.emailCount;
+      if (bDirectScore !== aDirectScore) return bDirectScore - aDirectScore;
+      // Recency
+      const aDate = a.lastEmailDate || a.lastMeetingDate || '';
+      const bDate = b.lastEmailDate || b.lastMeetingDate || '';
+      return bDate.localeCompare(aDate);
+    });
+
+  // Add contacts who have phone numbers but weren't found in email activity
+  // They'll appear at the bottom with strength "none"
+  const breakdownEmails = new Set(perPersonBreakdown.map(p => p.email.toLowerCase()));
+  for (const contact of contactsResults) {
+    const phone = contact.phoneNumbers?.[0]?.value || null;
+    if (!phone) continue;
+    // Check if any of this contact's emails are already in the breakdown
+    const alreadyIncluded = contact.emails.some(e => breakdownEmails.has(e.value.toLowerCase()));
+    if (!alreadyIncluded) {
+      perPersonBreakdown.push({
+        email: contact.emails[0]?.value || '',
+        displayName: contact.displayName,
+        phone,
+        emailCount: 0,
+        fromThem: 0,
+        toThem: 0,
+        lastEmailDate: null,
+        meetingCount: 0,
+        lastMeetingDate: null,
+        strength: 'none',
+      });
+    }
+  }
+
   // Build summary
   const summary = buildSummary(query, totalEmails, realEmailsFrom.length, realEmailsTo.length,
     relevantEvents.length, lastEmail?.date || null, strength, meetingPattern);
 
   return {
     query,
+    perPersonBreakdown,
     email: {
       totalEmails,
       fromThem: realEmailsFrom.length,

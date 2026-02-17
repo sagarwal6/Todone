@@ -51,10 +51,48 @@ function processPhones(text: string): string {
 }
 
 /**
+ * Auto-link bare sms: and tel: URIs that aren't already inside markdown links.
+ * Matches: sms:+1234567890, sms:+1234567890&body=..., tel:+1234567890
+ * Wraps them as [Text/Call](uri) for ReactMarkdown to render as clickable links.
+ */
+function autoLinkProtocols(text: string): string {
+  // Split on existing markdown links to avoid double-wrapping
+  const linkPattern = /\[[^\]]*\]\([^)]*\)/g;
+  const parts: string[] = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = linkPattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(processProtocols(text.slice(lastIndex, match.index)));
+    }
+    parts.push(match[0]);
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(processProtocols(text.slice(lastIndex)));
+  }
+
+  return parts.join('');
+}
+
+/** Wrap bare sms:/tel: URIs in markdown links */
+function processProtocols(text: string): string {
+  return text.replace(
+    /\b(sms|tel):([\d+][\d\-().+]*(?:[&?][^\s)]*)?)/g,
+    (fullMatch, protocol) => {
+      const label = protocol === 'sms' ? 'Send Text' : 'Call';
+      return `[${label}](${fullMatch})`;
+    }
+  );
+}
+
+/**
  * Markdown renderer with Claude.ai-style formatting
  */
 export function Markdown({ content, className = '' }: MarkdownProps) {
-  const processed = autoLinkPhones(content);
+  const processed = autoLinkProtocols(autoLinkPhones(content));
 
   return (
     <div className={`prose prose-sm max-w-none overflow-hidden break-words ${className}`}>

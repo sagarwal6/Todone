@@ -51,6 +51,9 @@ export function QuickReferenceCard({ quickInfo, compact = false }: QuickReferenc
     if (quickInfo.phoneFormatted || quickInfo.phone) {
       items.push(quickInfo.phoneFormatted || quickInfo.phone!);
     }
+    if (quickInfo.contactName) {
+      items.push(quickInfo.contactName);
+    }
     if (quickInfo.hours) {
       items.push(quickInfo.hours);
     }
