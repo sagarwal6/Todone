@@ -196,19 +196,20 @@ export async function runAgenticLoop(context: AgentLoopContext): Promise<AgentRe
 
       iteration++;
 
-      // Call Claude with better error handling
+      // Call Claude with retry for transient errors (429, 529)
       let response;
       try {
         console.log(`=== Anthropic API Call (iteration ${iteration}) ===`);
         const client = getAnthropicClient();
-        // Adaptive max_tokens: early iterations (planning/tool use) need fewer tokens
-        // Later iterations may need full capacity for final response
-        const maxTokens = iteration <= 2 ? 1500 : 2500;
 
-        response = await client.messages.create({
+        // Add cache breakpoint on last user message for incremental conversation caching
+        // This means prior conversation turns are cached across iterations
+        const cachedMessages = addConversationCaching(messages);
+
+        response = await callWithRetry(client, {
           model: config.model,
-          max_tokens: maxTokens,
-          // Enable prompt caching for system prompt (40-50% savings on repeated calls)
+          max_tokens: 4096,
+          // Enable prompt caching: system + tools + conversation all get cache breakpoints
           system: [
             {
               type: 'text',
@@ -216,16 +217,17 @@ export async function runAgenticLoop(context: AgentLoopContext): Promise<AgentRe
               cache_control: { type: 'ephemeral' }
             }
           ],
-          tools: agenticTools,
-          messages,
+          tools: agenticTools as Anthropic.Messages.Tool[],
+          messages: cachedMessages,
         });
         console.log('API call succeeded, model:', response.model);
-      } catch (apiError: any) {
+      } catch (apiError: unknown) {
+        const err = apiError as { constructor?: { name?: string }; message?: string; status?: number; error?: unknown };
         console.error('=== Anthropic API Error ===');
-        console.error('Error type:', apiError?.constructor?.name);
-        console.error('Error message:', apiError?.message);
-        console.error('Status:', apiError?.status);
-        console.error('Error body:', JSON.stringify(apiError?.error, null, 2));
+        console.error('Error type:', err.constructor?.name);
+        console.error('Error message:', err.message);
+        console.error('Status:', err.status);
+        console.error('Error body:', JSON.stringify(err.error, null, 2));
         throw apiError; // Re-throw to be caught by outer handler
       }
 
@@ -245,6 +247,23 @@ export async function runAgenticLoop(context: AgentLoopContext): Promise<AgentRe
 
       // Process response
       const { toolCalls, textContent, stopReason } = parseResponse(response);
+
+      // Handle max_tokens truncation: Claude was cut off mid-response
+      // If there were tool calls, they may be incomplete — continue the loop
+      // by sending what we have back and letting Claude continue
+      if (stopReason === 'max_tokens') {
+        console.log('Response truncated (max_tokens). Continuing conversation.');
+        // Add the truncated response and ask Claude to continue
+        messages.push({
+          role: 'assistant',
+          content: response.content,
+        });
+        messages.push({
+          role: 'user',
+          content: 'Your response was truncated. Please continue from where you left off.',
+        });
+        continue; // Next iteration will pick up
+      }
 
       // Only emit thinking event for intermediate responses (when there are more tool calls)
       // Don't emit for final response - that goes through the complete event
@@ -459,6 +478,87 @@ export async function runAgenticLoop(context: AgentLoopContext): Promise<AgentRe
 
     return failureState;
   }
+}
+
+// ============================================================================
+// API Retry & Caching Helpers
+// ============================================================================
+
+/**
+ * Call Anthropic API with exponential backoff retry for transient errors
+ * Retries on 429 (rate limit) and 529 (overloaded) — all other errors propagate immediately
+ */
+async function callWithRetry(
+  client: Anthropic,
+  params: Anthropic.Messages.MessageCreateParamsNonStreaming,
+  maxRetries: number = 3
+): Promise<Anthropic.Message> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await client.messages.create(params);
+    } catch (error: unknown) {
+      const status = (error as { status?: number }).status;
+      const isRetriable = status === 429 || status === 529;
+
+      if (!isRetriable || attempt === maxRetries) {
+        throw error;
+      }
+
+      // Exponential backoff: 1s, 2s, 4s
+      const delay = Math.pow(2, attempt) * 1000;
+      console.log(`API returned ${status}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  // TypeScript: unreachable, but satisfies return type
+  throw new Error('Retry loop exhausted');
+}
+
+/**
+ * Add cache breakpoints to conversation messages for incremental caching
+ * Places cache_control on the last user message so prior turns are cached
+ * across iterations of the agentic loop
+ */
+function addConversationCaching(messages: Anthropic.MessageParam[]): Anthropic.MessageParam[] {
+  if (messages.length === 0) return messages;
+
+  // Find the last user message and add cache breakpoint
+  const result = messages.map((msg, i) => {
+    // Only cache the last user message
+    if (msg.role !== 'user') return msg;
+
+    // Check if this is the last user message
+    const isLastUser = !messages.slice(i + 1).some(m => m.role === 'user');
+    if (!isLastUser) return msg;
+
+    // Add cache_control to the content
+    if (typeof msg.content === 'string') {
+      return {
+        ...msg,
+        content: [
+          {
+            type: 'text' as const,
+            text: msg.content,
+            cache_control: { type: 'ephemeral' as const },
+          },
+        ],
+      };
+    }
+
+    // Array content: add cache_control to the last block
+    if (Array.isArray(msg.content) && msg.content.length > 0) {
+      const lastIdx = msg.content.length - 1;
+      const content = msg.content.map((block, idx) =>
+        idx === lastIdx ? { ...block, cache_control: { type: 'ephemeral' as const } } : block
+      );
+      return { ...msg, content };
+    }
+
+    return msg;
+  });
+
+  return result;
 }
 
 // ============================================================================

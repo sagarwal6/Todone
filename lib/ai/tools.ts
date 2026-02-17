@@ -287,7 +287,9 @@ export const webFetchTool: Tool = {
     },
     required: ['url'],
   },
-};
+  // Cache breakpoint on last tool — caches all tool definitions (static across iterations)
+  cache_control: { type: 'ephemeral' },
+} as Tool;
 
 /**
  * All available tools for the agentic loop

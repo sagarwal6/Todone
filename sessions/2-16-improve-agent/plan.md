@@ -2,8 +2,8 @@
 
 ## Status
 
-All code phases complete (1, 1b, 2, 3, 4, 5, 6, 7). Phase 8 (end-to-end testing) remains.
-Next step: audit agent loop against Anthropic SDK best practices — this is the core value prop.
+All code phases complete (1, 1b, 2, 3, 4, 5, 6, 7, 9). Phase 8 (end-to-end testing) remains.
+Phase 9 (agent loop audit) complete — added tool caching, max_tokens handling, API retry, conversation caching.
 
 ## Lessons Learned
 
@@ -182,13 +182,34 @@ Switched scan analysis model from Sonnet 4 to Haiku 3.5. ~4x cost reduction. Rev
 
 ---
 
-## Phase 9: Agent Loop Audit Against Anthropic Best Practices
+## Phase 9: Agent Loop Audit Against Anthropic Best Practices (DONE)
 
 **Why:** The agentic loop is the core value prop. Need to verify our implementation follows Anthropic's recommended patterns for tool use, error recovery, context management, and multi-turn reliability.
 
-- [ ] Research Anthropic agent SDK / agent loop best practices (2025)
-- [ ] Compare current `anthropic.ts` implementation against recommendations
-- [ ] Identify gaps and fix
+- [x] Research Anthropic agent SDK / agent loop best practices (2025)
+- [x] Compare current `anthropic.ts` implementation against recommendations
+- [x] Identify gaps and fix
+
+### Gaps Found & Fixed
+
+1. **Tool definition caching** — Added `cache_control` breakpoint on last tool definition. Tools are static across iterations; not caching them wasted ~40% of input tokens per call.
+
+2. **`max_tokens` truncation handling** — If Claude hit the token limit mid-response (stop_reason=`max_tokens`), the loop either treated it as "done" or tried to process incomplete tool JSON. Now detects truncation and continues the conversation so Claude can finish its response.
+
+3. **`max_tokens` too low** — Was 1500 (early) / 2500 (later). Claude needs room for JSON tool_use blocks + reasoning. Increased to flat 4096.
+
+4. **API retry with exponential backoff** — 429 (rate limit) and 529 (overloaded) now retry 3 times with 1s/2s/4s backoff instead of failing the entire agent loop immediately.
+
+5. **Conversation caching** — Added cache breakpoint on last user message in multi-turn. Prior conversation turns are now cached across iterations, saving significant tokens in long agent loops.
+
+### What Was Already Good
+- Error handling: tool errors returned to model (not thrown) ✓
+- Parallel tool execution: read-only via Promise.all ✓
+- Token budget tracking ✓
+- Cancellation support (abort signal + DB check) ✓
+- Tool result truncation (8000 char limit) ✓
+- Saga-style step persistence ✓
+- System prompt caching ✓
 
 ---
 
