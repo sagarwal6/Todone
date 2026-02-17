@@ -40,6 +40,7 @@ export interface EmailMetadata {
     subject: string;
   };
   threadLength?: number;
+  gmailUrl: string;
 }
 
 export interface EmailContent extends EmailMetadata {
@@ -212,6 +213,7 @@ function parseEmailMetadata(message: GmailMessage): EmailMetadata {
     isUnread: message.labelIds?.includes('UNREAD') || false,
     hasAttachments: message.payload ? hasAttachments(message.payload) : false,
     labelIds: message.labelIds || [],  // Include labels for category-based scoring
+    gmailUrl: `https://mail.google.com/mail/u/0/#inbox/${message.id}`,
     // Include raw headers for scoring layer
     rawHeaders: {
       from: fromHeader,
