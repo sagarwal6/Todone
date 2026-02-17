@@ -465,7 +465,7 @@ async function analyzeContext(
   const client = getAnthropicClient();
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-haiku-4-5-20251001',
     max_tokens: 8000,
     system: getInsightAnalysisSystemPrompt(),
     messages: [
@@ -480,7 +480,7 @@ async function analyzeContext(
   const scanCacheUsage = response.usage as { cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
   logCost({
     callType: 'scan',
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-haiku-4-5-20251001',
     inputTokens: response.usage.input_tokens,
     outputTokens: response.usage.output_tokens,
     cacheReadTokens: scanCacheUsage.cache_read_input_tokens,
