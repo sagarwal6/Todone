@@ -19,16 +19,19 @@ All actions (send email, create event) require explicit user confirmation in Goo
 
 - **Framework**: Next.js 16 + React 18 + TypeScript (strict)
 - **Styling**: Tailwind CSS + MD3 color tokens (CSS variables in `globals.css`)
-- **AI**: Gemini 2.0 Flash (research), Claude Sonnet 4 (agentic tasks)
+- **AI**: Gemini 2.0 Flash (research), Claude Sonnet 4 (agentic tasks), Claude Haiku 3.5 (insight scan)
 - **Auth**: NextAuth + Google OAuth
 - **Database**: Supabase (Postgres + RLS) for all data; localStorage as cache only
 
 ## Key Architecture
 
 ### Agentic Loop (`/lib/ai/anthropic.ts`)
-- Tools: `gmail_search`, `gmail_read`, `gmail_draft`, `calendar_list`, `calendar_create`, `contacts_search`, `web_search`
+- Tools: `gmail_search`, `gmail_read`, `gmail_draft`, `calendar_list`, `calendar_create`, `contacts_search`, `contacts_analyze`, `web_search`, `web_fetch`
+- Read-only tools execute in parallel; write tools (drafts) run sequentially after
 - SSE streaming for progress; saga-style persistence in `agent_steps` table
 - Token budget: 150k per task; prompt caching enabled
+- Per-call cost logging to `logs/ai-costs.jsonl`
+- System prompt uses principles (not prescriptive rules) — behavioral guidance lives in tool descriptions
 
 ### Key Directories
 - `/lib/ai/` - Agentic loop, tools, execution
@@ -38,7 +41,10 @@ All actions (send email, create event) require explicit user confirmation in Goo
 - `/contexts/AgentContext.tsx` - Global agent state (runs in background)
 
 ### Insight Scan
-Scans inbox/calendar for actionable items. Emails pre-filtered by scoring before LLM. Actions: `draft_response`, `meeting_prep`, `follow_up`.
+Scans inbox/calendar for actionable items. Emails pre-filtered by scoring before LLM (Haiku 3.5). Actions: `draft_response`, `meeting_prep`, `follow_up`.
+
+### Contact Analysis (`/lib/email/contacts-analysis.ts`)
+`contacts_analyze` tool scans 1 year of email + calendar to build relationship profiles (frequency, recency, direction, meeting patterns). Used for disambiguation and people-related tasks.
 
 ## Code Conventions
 
@@ -71,7 +77,7 @@ No half-done work. Every feature must be:
 
 - **Visual**: Google Inbox / MD3 inspired, clean, minimal clutter
 - **UX**: Content over chrome, progressive disclosure, optimistic UI, mobile-first
-- **Agent personality**: Elite executive assistant, facts first, no hand-holding
+- **Agent personality**: Elite executive assistant, facts first, no hand-holding. Keep working until confident — never fabricate.
 - **Data sources**: When user says "check my emails", MUST search emails - never guess
 
 ## Git Workflow

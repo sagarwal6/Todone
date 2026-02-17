@@ -1,5 +1,22 @@
 # Agent Improvements: Core Fixes & Token Optimization
 
+## Status
+
+All code phases complete (1, 1b, 2, 3, 4, 5, 6, 7). Phase 8 (end-to-end testing) remains.
+Next step: audit agent loop against Anthropic SDK best practices — this is the core value prop.
+
+## Lessons Learned
+
+1. **Prescriptive prompts don't scale.** Phase 1 added 20 rules for 12 test failures. Rules contradicted each other, everything was "CRITICAL", and long-tail tasks had no rules. Phase 1b replaced them with 6 principles — the model reasons better from principles than rulebooks.
+
+2. **Principles need a stopping condition.** "Use tools liberally" is vague. "Keep working until you'd bet money on your answer" gives the model a clear bar. Equally important: "if you can't find it after exhausting tools, say so — never fabricate."
+
+3. **Contact intelligence > contact lookup.** `contacts_search` returns name/phone/email but no relationship context. `contacts_analyze` scans 1 year of email + calendar and returns frequency, recency, direction, meeting patterns. This is how the agent knows which "Andrew" you mean.
+
+4. **Tool descriptions are the real prompt.** The model chooses tools based on descriptions. Putting behavioral guidance in tool descriptions (search strategy, disambiguation logic, when NOT to use a tool) is more effective than system prompt rules.
+
+5. **Don't add tools — use existing ones better.** The agent had all the data sources it needed. The gap was persistence: doing one search and presenting mediocre results vs. re-searching, cross-referencing, and filling gaps until confident.
+
 ## Context
 
 Testing revealed 12 issues with the agent across 7 test tasks. The agent does good research but produces cluttered, verbose output, picks wrong communication methods, has too-narrow search scopes, and doesn't make results actionable (tappable links, scannable lists). Most fixes are system prompt changes (cheap, cached). Two require code changes (Markdown auto-linking, Gmail URLs).
@@ -162,6 +179,16 @@ Switched scan analysis model from Sonnet 4 to Haiku 3.5. ~4x cost reduction. Rev
 - [ ] Long-tail tasks work without specific prompt rules
 - [ ] Cost logs for all AI call types
 - [ ] Token usage comparison before/after prompt restructure
+
+---
+
+## Phase 9: Agent Loop Audit Against Anthropic Best Practices
+
+**Why:** The agentic loop is the core value prop. Need to verify our implementation follows Anthropic's recommended patterns for tool use, error recovery, context management, and multi-turn reliability.
+
+- [ ] Research Anthropic agent SDK / agent loop best practices (2025)
+- [ ] Compare current `anthropic.ts` implementation against recommendations
+- [ ] Identify gaps and fix
 
 ---
 
