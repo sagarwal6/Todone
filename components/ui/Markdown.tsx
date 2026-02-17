@@ -1,6 +1,7 @@
 'use client';
 
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface MarkdownProps {
   content: string;
@@ -8,12 +9,30 @@ interface MarkdownProps {
 }
 
 /**
+ * Auto-link bare phone numbers in text.
+ * Matches formats: (123) 456-7890, 123-456-7890, +1 123-456-7890, 1-800-207-7847
+ * Skips numbers already inside markdown links [text](url)
+ */
+function autoLinkPhones(text: string): string {
+  return text.replace(
+    /(?<!\[)(?<!\]\()(\+?1?[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})(?!\]|\))/g,
+    (match) => {
+      const digits = match.replace(/\D/g, '');
+      return `[${match}](tel:${digits})`;
+    }
+  );
+}
+
+/**
  * Markdown renderer with Claude.ai-style formatting
  */
 export function Markdown({ content, className = '' }: MarkdownProps) {
+  const processed = autoLinkPhones(content);
+
   return (
     <div className={`prose prose-sm max-w-none overflow-hidden break-words ${className}`}>
       <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
         components={{
         // Headers
         h1: ({ children }) => (
@@ -65,13 +84,17 @@ export function Markdown({ content, className = '' }: MarkdownProps) {
             {children}
           </em>
         ),
-        // Links - use window.open() to prevent PWA standalone mode from navigating away
+        // Links - tel:/sms: navigate directly, others open in new tab
         a: ({ href, children }) => (
           <a
             href={href}
             onClick={(e) => {
               e.preventDefault();
-              if (href) window.open(href, '_blank', 'noopener,noreferrer');
+              if (href?.startsWith('tel:') || href?.startsWith('sms:')) {
+                window.location.href = href;
+              } else if (href) {
+                window.open(href, '_blank', 'noopener,noreferrer');
+              }
             }}
             className="text-inbox-accent hover:underline"
           >
@@ -106,7 +129,7 @@ export function Markdown({ content, className = '' }: MarkdownProps) {
         ),
         }}
       >
-        {content}
+        {processed}
       </ReactMarkdown>
     </div>
   );
