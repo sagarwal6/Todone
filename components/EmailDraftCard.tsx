@@ -3,11 +3,9 @@
 /**
  * EmailDraftCard Component - Inbox-style Clean Design
  *
- * Displays email draft for review following this hierarchy:
- * 1. What Claude did (summary)
- * 2. Original email (collapsible context)
- * 3. Draft reply (click to edit)
- * 4. Actions (Reject / Edit / Send)
+ * Two modes based on threadId:
+ * - New message (no threadId): To/Subject/Body editable + "Compose in Gmail" (pre-filled)
+ * - Reply (has threadId): Original email + copyable draft + "Open Thread in Gmail"
  *
  * Follows Google Inbox principles: content-first, typography-driven hierarchy,
  * minimal chrome, no unnecessary boxes or borders.
@@ -93,29 +91,27 @@ interface EmailDraftCardProps {
   onConfirm: (draftId: string, editedData?: EmailDraft) => Promise<void>;
   onReject: (draftId: string, feedback?: string) => Promise<void>;
   isLoading?: boolean;
-  agentSummary?: string;
   /** Called when user opens the draft in Gmail */
   onOpenInGmail?: (draftId: string) => void;
 }
 
 export function EmailDraftCard({
   draft,
-  taskId,
-  onConfirm,
   onReject,
   isLoading = false,
-  agentSummary,
   onOpenInGmail,
 }: EmailDraftCardProps) {
   const { data: session } = useSession();
   const emailData = draft.data as EmailDraft;
   const userEmail = session?.user?.email || undefined;
+  const isReply = !!emailData.threadId;
 
   const [isEditing, setIsEditing] = useState(false);
   const [editedData, setEditedData] = useState<EmailDraft>(emailData);
   const [showOriginal, setShowOriginal] = useState(false);
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [rejectFeedback, setRejectFeedback] = useState('');
+  const [copied, setCopied] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-resize textarea
@@ -126,22 +122,22 @@ export function EmailDraftCard({
     }
   }, [editedData.body, isEditing]);
 
-  const handleConfirm = useCallback(async () => {
-    await onConfirm(draft.id, isEditing ? editedData : undefined);
-  }, [draft.id, isEditing, editedData, onConfirm]);
-
   const handleOpenInGmail = useCallback(() => {
-    // If we have a threadId, open the thread directly (user clicks Reply in Gmail)
-    // This is the preferred approach for replies - Gmail handles threading automatically
-    if (emailData.threadId) {
-      openGmailThread(emailData.threadId, userEmail);
+    if (isReply) {
+      openGmailThread(emailData.threadId!, userEmail);
     } else {
-      // No threadId = new email, use compose URL with pre-filled content
       const draftToOpen = isEditing ? editedData : emailData;
       openGmailCompose(draftToOpen);
     }
     onOpenInGmail?.(draft.id);
-  }, [isEditing, editedData, emailData, userEmail, draft.id, onOpenInGmail]);
+  }, [isReply, isEditing, editedData, emailData, userEmail, draft.id, onOpenInGmail]);
+
+  const handleCopyReply = useCallback(async () => {
+    const textToCopy = isEditing ? editedData.body : emailData.body;
+    await navigator.clipboard.writeText(textToCopy);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [isEditing, editedData.body, emailData.body]);
 
   const handleReject = useCallback(async () => {
     await onReject(draft.id, rejectFeedback || undefined);
@@ -159,25 +155,9 @@ export function EmailDraftCard({
     setEditedData(emailData);
   };
 
-  // Generate summary if not provided
-  const summary = agentSummary ||
-    `Drafted a reply to ${emailData.originalEmail?.fromName || emailData.to[0]}`;
-
   return (
     <div className="space-y-0">
-      {/* Section 1: What Claude Did */}
-      <div className="flex items-start gap-3 pb-4">
-        <div className="w-8 h-8 rounded-full bg-inbox-accent-light flex items-center justify-center flex-shrink-0">
-          <span className="material-symbols-rounded text-base text-inbox-accent">auto_awesome</span>
-        </div>
-        <div className="flex-1 pt-1">
-          <p className="text-[15px] leading-relaxed text-inbox-text-primary">
-            {summary}
-          </p>
-        </div>
-      </div>
-
-      {/* Section 2: Original Email (Collapsible) */}
+      {/* Original Email (Collapsible) — shown in both modes */}
       {emailData.originalEmail && (
         <div className="border-t border-black/[0.06] py-4">
           <button
@@ -218,76 +198,81 @@ export function EmailDraftCard({
         </div>
       )}
 
-      {/* Section 3: Draft Reply */}
+      {/* Draft section — differs by mode */}
       <div className="border-t border-black/[0.06] py-4">
         <div className="flex items-center gap-2 mb-3">
           <span className="text-[11px] font-medium uppercase tracking-wider text-inbox-text-tertiary">
-            Your draft reply
+            {isReply ? 'Suggested reply' : 'Your draft reply'}
           </span>
         </div>
 
-        {/* To field */}
-        <div className="flex items-start gap-2 mb-2">
-          <span className="text-[13px] text-inbox-text-tertiary w-16 pt-0.5 flex-shrink-0">To</span>
-          {isEditing ? (
-            <input
-              type="text"
-              value={editedData.to.join(', ')}
-              onChange={(e) =>
-                setEditedData({
-                  ...editedData,
-                  to: e.target.value.split(',').map((s) => s.trim()),
-                })
-              }
-              className="flex-1 text-[14px] text-inbox-text-primary bg-transparent border-b border-inbox-accent outline-none py-0.5 -my-0.5"
-            />
-          ) : (
-            <span className="text-[14px] text-inbox-text-primary">
-              {emailData.to.join(', ')}
-            </span>
-          )}
-        </div>
+        {/* To / CC / Subject — only for new compose (not replies) */}
+        {!isReply && (
+          <>
+            {/* To field */}
+            <div className="flex items-start gap-2 mb-2">
+              <span className="text-[13px] text-inbox-text-tertiary w-16 pt-0.5 flex-shrink-0">To</span>
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={editedData.to.join(', ')}
+                  onChange={(e) =>
+                    setEditedData({
+                      ...editedData,
+                      to: e.target.value.split(',').map((s) => s.trim()),
+                    })
+                  }
+                  className="flex-1 text-[14px] text-inbox-text-primary bg-transparent border-b border-inbox-accent outline-none py-0.5 -my-0.5"
+                />
+              ) : (
+                <span className="text-[14px] text-inbox-text-primary">
+                  {emailData.to.join(', ')}
+                </span>
+              )}
+            </div>
 
-        {/* CC field (only show if has values) */}
-        {(emailData.cc?.length ?? 0) > 0 && (
-          <div className="flex items-start gap-2 mb-2">
-            <span className="text-[13px] text-inbox-text-tertiary w-16 pt-0.5 flex-shrink-0">Cc</span>
-            {isEditing ? (
-              <input
-                type="text"
-                value={editedData.cc?.join(', ') || ''}
-                onChange={(e) =>
-                  setEditedData({
-                    ...editedData,
-                    cc: e.target.value.split(',').map((s) => s.trim()),
-                  })
-                }
-                className="flex-1 text-[14px] text-inbox-text-primary bg-transparent border-b border-inbox-accent outline-none py-0.5 -my-0.5"
-              />
-            ) : (
-              <span className="text-[14px] text-inbox-text-primary">
-                {emailData.cc?.join(', ')}
-              </span>
+            {/* CC field (only show if has values) */}
+            {(emailData.cc?.length ?? 0) > 0 && (
+              <div className="flex items-start gap-2 mb-2">
+                <span className="text-[13px] text-inbox-text-tertiary w-16 pt-0.5 flex-shrink-0">Cc</span>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    value={editedData.cc?.join(', ') || ''}
+                    onChange={(e) =>
+                      setEditedData({
+                        ...editedData,
+                        cc: e.target.value.split(',').map((s) => s.trim()),
+                      })
+                    }
+                    className="flex-1 text-[14px] text-inbox-text-primary bg-transparent border-b border-inbox-accent outline-none py-0.5 -my-0.5"
+                  />
+                ) : (
+                  <span className="text-[14px] text-inbox-text-primary">
+                    {emailData.cc?.join(', ')}
+                  </span>
+                )}
+              </div>
             )}
-          </div>
-        )}
 
-        {/* Subject field */}
-        <div className="flex items-start gap-2 mb-4">
-          <span className="text-[13px] text-inbox-text-tertiary w-16 pt-0.5 flex-shrink-0">Subject</span>
-          {isEditing ? (
-            <input
-              type="text"
-              value={editedData.subject}
-              onChange={(e) => setEditedData({ ...editedData, subject: e.target.value })}
-              className="flex-1 text-[14px] font-medium text-inbox-text-primary bg-transparent border-b border-inbox-accent outline-none py-0.5 -my-0.5"
-            />
-          ) : (
-            <span className="text-[14px] font-medium text-inbox-text-primary">
-              {emailData.subject}
-            </span>
-          )}
-        </div>
+            {/* Subject field */}
+            <div className="flex items-start gap-2 mb-4">
+              <span className="text-[13px] text-inbox-text-tertiary w-16 pt-0.5 flex-shrink-0">Subject</span>
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={editedData.subject}
+                  onChange={(e) => setEditedData({ ...editedData, subject: e.target.value })}
+                  className="flex-1 text-[14px] font-medium text-inbox-text-primary bg-transparent border-b border-inbox-accent outline-none py-0.5 -my-0.5"
+                />
+              ) : (
+                <span className="text-[14px] font-medium text-inbox-text-primary">
+                  {emailData.subject}
+                </span>
+              )}
+            </div>
+          </>
+        )}
 
         {/* Body */}
         <div className="relative">
@@ -317,9 +302,16 @@ export function EmailDraftCard({
             </div>
           )}
         </div>
+
+        {/* Reply mode: explanation text */}
+        {isReply && (
+          <p className="text-[12px] text-inbox-text-tertiary mt-3">
+            Todone can read but not send emails on your behalf. Copy the reply text, then open the thread in Gmail to paste and send it.
+          </p>
+        )}
       </div>
 
-      {/* Section 4: Actions */}
+      {/* Actions */}
       <div className="border-t border-black/[0.06] pt-4">
         {showRejectInput ? (
           <div className="space-y-3 animate-fade-in">
@@ -393,23 +385,67 @@ export function EmailDraftCard({
             >
               Edit
             </button>
-            <button
-              onClick={handleOpenInGmail}
-              disabled={isLoading}
-              className="
-                flex items-center gap-2
-                px-5 py-2.5 text-[14px] font-medium
-                bg-inbox-accent text-white
-                rounded-full
-                hover:bg-inbox-accent-hover hover:shadow-md
-                active:scale-[0.98]
-                transition-all duration-100
-                disabled:opacity-50 disabled:pointer-events-none
-              "
-            >
-              <span>{emailData.threadId ? 'Reply in Gmail' : 'Compose in Gmail'}</span>
-              <span className="material-symbols-rounded text-lg">open_in_new</span>
-            </button>
+
+            {isReply ? (
+              <>
+                {/* Reply mode: Copy + Open Thread */}
+                <button
+                  onClick={handleCopyReply}
+                  disabled={isLoading}
+                  className="
+                    flex items-center gap-2
+                    px-5 py-2.5 text-[14px] font-medium
+                    border border-inbox-accent text-inbox-accent
+                    rounded-full
+                    hover:bg-inbox-accent/5
+                    active:scale-[0.98]
+                    transition-all duration-100
+                    disabled:opacity-50 disabled:pointer-events-none
+                  "
+                >
+                  <span className="material-symbols-rounded text-lg">
+                    {copied ? 'check' : 'content_copy'}
+                  </span>
+                  <span>{copied ? 'Copied!' : 'Copy Reply'}</span>
+                </button>
+                <button
+                  onClick={handleOpenInGmail}
+                  disabled={isLoading}
+                  className="
+                    flex items-center gap-2
+                    px-5 py-2.5 text-[14px] font-medium
+                    bg-inbox-accent text-white
+                    rounded-full
+                    hover:bg-inbox-accent-hover hover:shadow-md
+                    active:scale-[0.98]
+                    transition-all duration-100
+                    disabled:opacity-50 disabled:pointer-events-none
+                  "
+                >
+                  <span>Open Thread in Gmail</span>
+                  <span className="material-symbols-rounded text-lg">open_in_new</span>
+                </button>
+              </>
+            ) : (
+              /* New compose mode: single Compose in Gmail button */
+              <button
+                onClick={handleOpenInGmail}
+                disabled={isLoading}
+                className="
+                  flex items-center gap-2
+                  px-5 py-2.5 text-[14px] font-medium
+                  bg-inbox-accent text-white
+                  rounded-full
+                  hover:bg-inbox-accent-hover hover:shadow-md
+                  active:scale-[0.98]
+                  transition-all duration-100
+                  disabled:opacity-50 disabled:pointer-events-none
+                "
+              >
+                <span>Compose in Gmail</span>
+                <span className="material-symbols-rounded text-lg">open_in_new</span>
+              </button>
+            )}
           </div>
         )}
       </div>

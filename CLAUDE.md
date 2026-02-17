@@ -7,7 +7,8 @@ AI-powered task assistant that helps users get things done by connecting to thei
 ### Google API Access (Read-Only Only)
 - `gmail.readonly`, `calendar.readonly`, `contacts.readonly` — no write scopes
 - Scopes defined in `lib/google/auth.ts` `GOOGLE_SCOPES` (single source of truth, imported by NextAuth)
-- **Email replies**: AI prepares draft, user clicks "Reply in Gmail" to open thread and reply there
+- **New emails**: AI prepares draft, user clicks "Compose in Gmail" to open pre-filled compose
+- **Email replies**: AI prepares suggested reply text, user copies it and clicks "Open Thread in Gmail" to paste and send (Gmail compose URLs can't deep-link into a reply with pre-filled content)
 - **Calendar events**: AI prepares details, user clicks "Create in Calendar" to open Google Calendar
 - All write actions are URL-based redirects, never API writes
 - Never add `gmail.compose`, `gmail.send`, or `calendar.events` scopes without explicit approval
@@ -141,6 +142,12 @@ ENCRYPTION_SECRET
 
 ### React Callbacks
 - Avoid state in `useCallback` deps that changes frequently - use refs instead
+
+### Agent Contact Disambiguation
+- System prompt principles guide disambiguation — don't hardcode "calendar always wins" or "email always wins"
+- The right signal depends on context: imminent meeting, recent email thread, topic match
+- Agent must NEVER fabricate email addresses from names — only use verified addresses from contacts, email history, or calendar attendee data
+- `EmailDraftCard` has two modes: compose (no threadId) vs reply (has threadId) — see `components/EmailDraftCard.tsx`
 
 ### Security / Logging
 - Never log API keys, tokens (access/refresh), or their prefixes

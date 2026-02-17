@@ -64,6 +64,12 @@ interface ProcessedStep {
 }
 
 /**
+ * Tools that have their own dedicated UI cards (EmailDraftCard, CalendarDraftCard).
+ * Hide these from the progress steps to avoid duplicate display.
+ */
+const TOOLS_WITH_DEDICATED_CARDS = new Set(['gmail_draft', 'calendar_create']);
+
+/**
  * Process events into a list of steps with their status.
  * Single-pass: steps appear as 'running' when tool_start arrives,
  * then transition to 'completed' when tool_result arrives.
@@ -75,6 +81,8 @@ function processSteps(events: AgentProgressEvent[]): ProcessedStep[] {
   // Single pass: process events in order
   for (const event of events) {
     if (event.type === 'tool_start') {
+      // Skip tools that have dedicated UI cards
+      if (TOOLS_WITH_DEDICATED_CARDS.has(event.tool)) continue;
       // Only add step if we haven't seen this tool yet
       if (!stepsByTool.has(event.tool)) {
         const step: ProcessedStep = {
@@ -113,14 +121,16 @@ export function AgentProgress({
     if (liveSteps.length > 0) {
       return liveSteps;
     }
-    // Convert persisted steps to ProcessedStep format
+    // Convert persisted steps to ProcessedStep format (excluding tools with dedicated cards)
     if (persistedSteps && persistedSteps.length > 0) {
-      return persistedSteps.map(ps => ({
-        tool: ps.tool,
-        detail: ps.detail,
-        status: 'completed' as const,
-        durationMs: ps.durationMs,
-      }));
+      return persistedSteps
+        .filter(ps => !TOOLS_WITH_DEDICATED_CARDS.has(ps.tool))
+        .map(ps => ({
+          tool: ps.tool,
+          detail: ps.detail,
+          status: 'completed' as const,
+          durationMs: ps.durationMs,
+        }));
     }
     return [];
   }, [liveSteps, persistedSteps]);

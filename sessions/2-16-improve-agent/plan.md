@@ -2,7 +2,7 @@
 
 ## Status
 
-All code phases complete (1, 1b, 2, 3, 4, 5, 6, 7, 9). Phase 8 (end-to-end testing) remains.
+All code phases complete (1, 1b, 2, 3, 4, 5, 6, 7, 9, 11). Phase 8 (end-to-end testing) remains.
 Phase 9 (agent loop audit) complete — added tool caching, max_tokens handling, API retry, conversation caching.
 
 ## Lessons Learned
@@ -230,6 +230,36 @@ Switched scan analysis model from Sonnet 4 to Haiku 3.5. ~4x cost reduction. Rev
 - [ ] Extract style features (greeting, sign-off, length, formality)
 - [ ] Integrate with gmail_draft — agent calls tone_analyze before drafting
 - [ ] Cache style profiles to avoid repeated analysis
+
+---
+
+## Phase 11: EmailDraftCard — Compose vs Reply Split + Agent Disambiguation (DONE)
+
+**Why:** Two problems surfaced:
+1. **Reply UX broken** — For replies to existing threads, "Reply in Gmail" just opened the thread with no reference to the draft we prepared. Gmail compose URLs can't deep-link into a reply with pre-filled content.
+2. **Agent picked wrong contact** — "message peter i'm running 10 min late" matched Peter Harbison (phone in contacts, no recent activity) instead of Peter Yang (meeting in 28 minutes). Agent also fabricated an email address (`peter.yang@gmail.com`).
+
+### Changes
+
+**`components/EmailDraftCard.tsx`** — Split into two modes based on `threadId`:
+- **New message** (no threadId): Shows To/CC/Subject/Body (editable) + "Compose in Gmail" → opens pre-filled compose URL. Unchanged behavior.
+- **Reply** (has threadId): Shows original email (collapsible) + suggested reply body (editable) + subtle explanation ("Todone can read but not send emails...") + "Copy Reply" button (with checkmark confirmation) + "Open Thread in Gmail" button. No To/Subject fields (Gmail handles those in-thread).
+
+**`lib/ai/anthropic.ts`** — System prompt principle updates:
+- Principle 3: "Right person first, then right channel" — disambiguate the person using context clues (imminent meeting, recent email thread) before choosing SMS vs email. If contacts_analyze top result doesn't match contextual signal, do a second lookup.
+- Principle 4: Cross-reference rule — if contacts and calendar return different people for the same first name, weigh recency and relevance. Don't default to a contact with zero recent activity.
+- Principle 5: Never construct email addresses from names — only use verified addresses from contacts, email history, or calendar attendee data.
+
+**`lib/ai/tools.ts`** — Tool description updates:
+- `gmail_draft`: "to" field MUST use a verified email address — never guess/construct from a name.
+- `contacts_analyze`: Cross-reference with calendar_list before assuming the top result is correct.
+
+### Testing
+- [x] "message peter i'm running 10 min late" (new compose, no threadId) → shows compose flow with To/Subject/Body + "Compose in Gmail"
+- [x] Email reply task (has threadId) → shows copyable reply + "Copy Reply" + "Open Thread in Gmail" + explanation
+- [x] Agent correctly identifies Peter Yang (imminent meeting) over Peter Harbison (no recent activity)
+- [x] Agent uses verified email from calendar attendee data, doesn't fabricate addresses
+- [x] Build passes
 
 ---
 
