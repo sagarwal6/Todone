@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Research, Action, SourceReference, QuickInfo, OptionCard, UIType, SuggestedFollowUp } from './types';
+import { logCost } from './ai/cost-logger';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
@@ -200,6 +201,17 @@ Remember: Return isPersonal: true for personal tasks that don't need research.`;
 
     const response = await result.response;
     const text = response.text();
+
+    // Log Gemini cost
+    const geminiUsage = response.usageMetadata;
+    if (geminiUsage) {
+      logCost({
+        callType: 'research',
+        model: 'gemini-2.0-flash',
+        inputTokens: geminiUsage.promptTokenCount || 0,
+        outputTokens: geminiUsage.candidatesTokenCount || 0,
+      });
+    }
 
     // Extract JSON from the response
     const jsonMatch = text.match(/\{[\s\S]*\}/);

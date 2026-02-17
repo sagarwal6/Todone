@@ -23,5 +23,8 @@ public/sw.js
 public/swe-worker-*.js
 public/workbox-*.js
 
+# Cost logs
+logs/
+
 # macOS
 .DS_Store

@@ -14,6 +14,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { v4 as uuidv4 } from 'uuid';
 import { agenticTools, READ_ONLY_TOOLS } from './tools';
 import { executeTool } from './execute-tool';
+import { logCost } from './cost-logger';
 import type {
   AgentLoopContext,
   AgentResult,
@@ -228,8 +229,19 @@ export async function runAgenticLoop(context: AgentLoopContext): Promise<AgentRe
         throw apiError; // Re-throw to be caught by outer handler
       }
 
-      // Track tokens
+      // Track tokens and log cost
       totalTokens += response.usage.input_tokens + response.usage.output_tokens;
+      const cacheUsage = response.usage as { cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
+      logCost({
+        callType: 'agent',
+        model: config.model,
+        taskId,
+        iteration,
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+        cacheReadTokens: cacheUsage.cache_read_input_tokens,
+        cacheCreationTokens: cacheUsage.cache_creation_input_tokens,
+      });
 
       // Process response
       const { toolCalls, textContent, stopReason } = parseResponse(response);
@@ -621,7 +633,7 @@ async function persistStep(taskId: string, step: AgentStep): Promise<void> {
 /**
  * Update a step in the database
  */
-async function updateStep(taskId: string, step: AgentStep): Promise<void> {
+async function updateStep(_taskId: string, step: AgentStep): Promise<void> {
   await supabaseAdmin
     .from('agent_steps')
     .update({

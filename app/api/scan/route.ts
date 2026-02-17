@@ -9,6 +9,7 @@ import { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import Anthropic from '@anthropic-ai/sdk';
+import { logCost } from '@/lib/ai/cost-logger';
 import { v4 as uuidv4, validate as isValidUUID } from 'uuid';
 import { buildScanContext } from '@/lib/scan/metadata';
 import {
@@ -473,6 +474,17 @@ async function analyzeContext(
         content: getInsightAnalysisUserPrompt(context),
       },
     ],
+  });
+
+  // Log cost
+  const scanCacheUsage = response.usage as { cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
+  logCost({
+    callType: 'scan',
+    model: 'claude-sonnet-4-20250514',
+    inputTokens: response.usage.input_tokens,
+    outputTokens: response.usage.output_tokens,
+    cacheReadTokens: scanCacheUsage.cache_read_input_tokens,
+    cacheCreationTokens: scanCacheUsage.cache_creation_input_tokens,
   });
 
   // Extract text content
