@@ -123,7 +123,7 @@ export const gmailDraftTool: Tool = {
  */
 export const calendarListTool: Tool = {
   name: 'calendar_list',
-  description: `List calendar events in a time range (default: next 7 days). Returns ID, title, times, location, attendees.`,
+  description: `List calendar events in a time range. Default: next 7 days. For patterns/recurring: use last 90 days. Returns ID, title, times, location, attendees.`,
   input_schema: {
     type: 'object' as const,
     properties: {
