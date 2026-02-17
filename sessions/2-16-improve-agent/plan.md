@@ -104,15 +104,11 @@ Testing deferred to Phase 8 — test everything together after all code phases a
 
 ---
 
-## Phase 4: Parallel Tool Execution
+## Phase 4: Parallel Tool Execution (DONE)
 
-**Why:** Tools execute sequentially even when Claude returns multiple tool_use blocks. Parallelizing read-only tools cuts latency ~2x.
+**Commit:** `fe14fd7`
 
-**Files:** `/lib/ai/anthropic.ts`
-
-- [ ] Split tool calls into read-only (parallel via `Promise.all`) and write (sequential)
-- [ ] Emit `tool_start` events before parallel execution
-- [ ] Commit
+Read-only tools execute via `Promise.all`, write tools sequentially after. Results reassembled in original call order.
 
 ### Testing
 - [ ] Multi-tool tasks noticeably faster
@@ -121,15 +117,11 @@ Testing deferred to Phase 8 — test everything together after all code phases a
 
 ---
 
-## Phase 5: Cost & Token Logging
+## Phase 5: Cost & Token Logging (DONE)
 
-**Why:** Need per-task cost data for pricing and Haiku routing decisions.
+**Commit:** `2ed5e32`
 
-**Files:** `/lib/ai/cost-logger.ts` (new), `/lib/ai/types.ts`, `/lib/ai/anthropic.ts`, `/app/api/scan/route.ts`, `/lib/gemini.ts`, `.gitignore`
-
-- [ ] `logCost()` — JSONL logger with model pricing, cache tracking, per-call breakdown
-- [ ] Hook into agent loop, scan analysis, Gemini research, Gemini chat
-- [ ] Commit
+`logCost()` writes JSONL to `logs/ai-costs.jsonl` (gitignored). Hooked into agent loop (with cache tracking), insight scan, and Gemini research. Pricing table for Sonnet 4, Haiku 3.5, Gemini Flash.
 
 ### Testing
 - [ ] JSONL lines appear with reasonable numbers for each AI call type
@@ -156,12 +148,11 @@ Testing deferred to Phase 8 — test everything together after all code phases a
 
 ---
 
-## Phase 7: Haiku for Insight Scan
+## Phase 7: Haiku for Insight Scan (DONE)
 
-**Why:** Scan analysis is structured categorization — Haiku handles it at ~12x lower cost.
+**Commit:** `41fd104`
 
-- [ ] Switch model in `analyzeContext` to `claude-haiku-4-5-20251001`
-- [ ] Commit, compare quality to Sonnet baseline, revert if needed
+Switched scan analysis model from Sonnet 4 to Haiku 3.5. ~4x cost reduction. Revert if quality degrades.
 
 ---
 
