@@ -12,7 +12,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { v4 as uuidv4 } from 'uuid';
-import { agenticTools } from './tools';
+import { agenticTools, READ_ONLY_TOOLS } from './tools';
 import { executeTool } from './execute-tool';
 import type {
   AgentLoopContext,
@@ -278,16 +278,23 @@ export async function runAgenticLoop(context: AgentLoopContext): Promise<AgentRe
         };
       }
 
-      // Process tool calls
+      // Process tool calls — read-only tools run in parallel, write tools run sequentially after
       const toolResults: Anthropic.MessageParam = {
         role: 'user',
         content: [],
       };
 
-      for (const toolCall of toolCalls) {
+      // Collect results keyed by tool_use_id to preserve ordering
+      const resultsByCallId = new Map<string, ContentBlock>();
+
+      // Split into read-only (parallelizable) and write (sequential) batches
+      const readCalls = toolCalls.filter(tc => READ_ONLY_TOOLS.has(tc.name));
+      const writeCalls = toolCalls.filter(tc => !READ_ONLY_TOOLS.has(tc.name));
+
+      // Helper: execute a single tool call with full lifecycle (step, progress, result)
+      const executeOneToolCall = async (toolCall: { id: string; name: string; input: Record<string, unknown> }) => {
         attemptedSteps.push(toolCall.name);
 
-        // Create step record
         const step: AgentStep = {
           id: uuidv4(),
           stepNumber: steps.length + 1,
@@ -301,10 +308,7 @@ export async function runAgenticLoop(context: AgentLoopContext): Promise<AgentRe
         };
         steps.push(step);
 
-        // Persist step to database
         await persistStep(taskId, step);
-
-        // Emit tool start
         await onProgress({
           type: 'tool_start',
           tool: toolCall.name,
@@ -313,8 +317,6 @@ export async function runAgenticLoop(context: AgentLoopContext): Promise<AgentRe
         });
 
         const startTime = Date.now();
-
-        // Execute tool
         const { result, pendingDraft } = await executeTool(
           toolCall.name,
           toolCall.input,
@@ -327,10 +329,8 @@ export async function runAgenticLoop(context: AgentLoopContext): Promise<AgentRe
           },
           config
         );
-
         const duration = Date.now() - startTime;
 
-        // Update step
         step.completedAt = new Date();
         step.durationMs = duration;
 
@@ -339,7 +339,6 @@ export async function runAgenticLoop(context: AgentLoopContext): Promise<AgentRe
           step.toolOutput = result.data;
           succeededSteps.push(toolCall.name);
 
-          // Handle pending draft
           if (pendingDraft) {
             pendingDrafts.push(pendingDraft);
             await onProgress({
@@ -356,10 +355,7 @@ export async function runAgenticLoop(context: AgentLoopContext): Promise<AgentRe
           failedSteps.push({ tool: toolCall.name, error: result.error });
         }
 
-        // Update step in database
         await updateStep(taskId, step);
-
-        // Emit tool result
         await onProgress({
           type: 'tool_result',
           tool: toolCall.name,
@@ -368,17 +364,34 @@ export async function runAgenticLoop(context: AgentLoopContext): Promise<AgentRe
           timestamp: Date.now(),
         });
 
-        // Add tool result to messages (with truncation to avoid token explosion)
         const resultContent = result.success
-          ? truncateToolResult(JSON.stringify(result.data), 8000) // ~2000 tokens max per tool result
+          ? truncateToolResult(JSON.stringify(result.data), 8000)
           : `Error: ${result.error}`;
 
-        (toolResults.content as ContentBlock[]).push({
+        resultsByCallId.set(toolCall.id, {
           type: 'tool_result',
           tool_use_id: toolCall.id,
           content: resultContent,
           is_error: !result.success,
         });
+      };
+
+      // Execute read-only tools in parallel
+      if (readCalls.length > 0) {
+        await Promise.all(readCalls.map(executeOneToolCall));
+      }
+
+      // Execute write tools sequentially (after all reads complete)
+      for (const writeCall of writeCalls) {
+        await executeOneToolCall(writeCall);
+      }
+
+      // Assemble results in original tool call order
+      for (const toolCall of toolCalls) {
+        const block = resultsByCallId.get(toolCall.id);
+        if (block) {
+          (toolResults.content as ContentBlock[]).push(block);
+        }
       }
 
       // Add assistant message with tool uses
