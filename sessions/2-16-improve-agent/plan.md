@@ -23,28 +23,18 @@ Testing revealed 12 issues with the agent across 7 test tasks. The agent does go
 
 ---
 
-## Phase 1: System Prompt Overhaul
+## Phase 1: System Prompt Overhaul (DONE)
 
-**Why:** Addresses 10 of 12 issues. No code changes, no risk, cached so minimal token cost.
+**Commit:** `e54c262`
 
-**Files:** `/lib/ai/anthropic.ts` (system prompt), `/lib/ai/tools.ts` (calendar_list description)
-
-- [ ] **1a. Add MINIMUM VIABLE ACTION section** (#10) — do least work needed; "message Rajan" = contacts_search only
-- [ ] **1b. Add CHOOSING COMMUNICATION METHOD section** (#2) — text/sms for casual, email for formal; never email when text would do
-- [ ] **1c. Add CALENDAR SEARCH RANGES section** (#3) — patterns: 90 days; next event: 30 days; free slots: that day only
-- [ ] **1c-tools. Update `calendar_list` tool description** in `tools.ts` — mention 90-day range for patterns
-- [ ] **1d. Add CALENDAR EVENT TYPES section** (#9) — all-day events don't block time; only time-specific events count
-- [ ] **1e. Add AMBIGUOUS NAMES section** (#6) — show ALL matches, don't pick one
-- [ ] **1f. Add EMAIL SEARCH STRATEGY section** (#7, #8) — prioritize recent; translate intent to operators; triage = today + recent unanswered
-- [ ] **1g. Add VERIFY BEFORE PROPOSING section** (#11) — show what you found, confirm, then propose
-- [ ] **1h. Replace OUTPUT FORMAT section** (#4, #12) — scannable one-line-per-item lists with Gmail links; ⚡ for time-sensitive
-- [ ] **1i. Add CONNECT THE DOTS section** — cross-reference calendar meetings with related emails
-- [ ] **1j. Add AI MOVE section** — optional one-line power-user tip after task completion; must require a different tool (Claude chat, ChatGPT, Cursor, etc.) and be 10x scale/depth beyond what Todone did; skip if no genuinely clever angle; format: "💡 **AI Move:** [workflow in specific tool]"
-- [ ] **Phase 1 commit** — `npm run lint && npm run typecheck && npm run build`
+Added 20 sections / ~4000 tokens of prescriptive rules addressing issues #1-12. Worked for the specific test cases but created a new problem: rules contradict each other, everything is "CRITICAL", and long-tail tasks hit cases without rules. See Phase 1b.
 
 ### Phase 1 Testing
-- [ ] Test 1: "Message [friend] I'm running 10 min late" → phone/sms link, NOT email
-- [ ] Test 2: "Call clipper about the overcharge" → phone should be tappable (also Phase 2)
+- [~] Test 1: "Message andrew I'm running 10 min late" → **Issues found:**
+  - Phone numbers use `tel:` (opens FaceTime) instead of `sms:` (opens Messages) for "message" tasks
+  - Agent pre-selects a contact ("Text Andrew Hogue and Call") instead of just showing the list
+  - Should check calendar to disambiguate (if meeting with an Andrew today, that's probably who they mean)
+- [ ] Test 2: "Call clipper about the overcharge" → phone should be tappable
 - [ ] Test 3: "What emails need my attention today?" → scannable list with links, includes recent unanswered
 - [ ] Test 4: "Do I meet with Andrew regularly?" → show ALL Andrews with patterns
 - [ ] Test 5: "Check my email from Tim about working together" → find recent Tim first
@@ -53,149 +43,137 @@ Testing revealed 12 issues with the agent across 7 test tasks. The agent does go
 
 ---
 
-## Phase 2: Auto-Link Phone Numbers & URLs in Markdown
+## Phase 2: Auto-Link Phone Numbers & URLs (DONE)
 
-**Why:** Phone numbers and URLs in agent body text aren't tappable. Critical for mobile UX.
+**Commit:** `2e06435`
 
-**Files:** `/components/ui/Markdown.tsx`, `package.json`
+## Phase 3: Clickable Email Sources (DONE)
 
-- [ ] **2a. Install `remark-gfm`** — `npm install remark-gfm`
-- [ ] **2b. Add `autoLinkPhones()` preprocessor** — regex to wrap bare phone numbers in `[number](tel:digits)`, skip already-linked
-- [ ] **2c. Update `<a>` handler** — `tel:` and `sms:` URIs use `window.location.href` (direct nav), others open new tab
-- [ ] **2d. Add `remarkGfm` plugin** — enables bare URL auto-linking in Markdown output
-- [ ] **Phase 2 commit** — `npm run lint && npm run typecheck && npm run build`
-
-### Phase 2 Testing
-- [ ] Phone in body text → tappable, opens dialer on mobile
-- [ ] URL in body text → tappable, opens in new tab
-- [ ] `sms:` links from agent → opens texting app
-- [ ] Existing markdown links still work (no double-linking)
-- [ ] Phone numbers already in `[text](tel:)` format not double-wrapped
+**Commit:** `52aff4f`
 
 ---
 
-## Phase 3: Clickable Email Sources
+## Phase 1b: Prompt Restructure — Principles Over Prescriptions
 
-**Why:** When agent references emails, user should tap to open in Gmail.
+**Why:** The Phase 1 prompt grew to ~4000 tokens / 20 sections by adding a specific rule for every test failure. Rules contradict each other, everything marked "CRITICAL" competes for attention, and the long tail of user requests hits cases we never wrote rules for. Sonnet 4 is smart enough to reason about most of these — we should trust the model and give it principles, not a rulebook.
 
-**Files:** `/lib/google/gmail.ts`, `/lib/ai/anthropic.ts` (prompt already done in Phase 1h)
+**Goal:** Cut prompt from ~4000 tokens to ~1500 tokens. Improve long-tail quality by leaning on model reasoning. Move tool-specific logic into tool descriptions where it belongs.
 
-- [ ] **3a. Add `gmailUrl` to `EmailMetadata` interface** in `gmail.ts`
-- [ ] **3b. Set `gmailUrl` in `parseEmailMetadata`** — `https://mail.google.com/mail/u/0/#inbox/${message.id}`
-- [ ] **Phase 3 commit** — `npm run lint && npm run typecheck && npm run build`
+### Architecture — 3 layers
 
-### Phase 3 Testing
-- [ ] Agent references email → email name is clickable Gmail link
-- [ ] Click opens correct message in Gmail
-- [ ] On mobile: opens Gmail app if installed
+| Layer | Where | What goes here |
+|-------|-------|----------------|
+| **Identity** | System prompt (~200 tokens) | Who you are, tone, safety constraints |
+| **Principles** | System prompt (~300 tokens) | 5-7 guiding principles that cover the long tail |
+| **Tool intelligence** | Tool descriptions in `tools.ts` | Each tool knows when/how to be used; model reasons from there |
+
+### Draft principles
+1. **Personal data first** — Calendar → Email → Web. Never guess when you can look it up.
+2. **Match intent** — "message" = text, "call" = call, "email" = email draft. Read the task.
+3. **Disambiguate before acting** — Multiple matches? Use context (calendar, email recency) to rank. If still unclear, show options and ask.
+4. **Concise & scannable** — Facts first. One line per item. No filler, no preambles, no repeating yourself.
+5. **Verify before proposing** — Show what you found, confirm, then build on it.
+6. **Be proactive** — Act, don't describe what you could do.
+
+### What moves to tool descriptions
+The model picks tools based on their descriptions. Put the intelligence there:
+- `gmail_search` — search strategy (recent first, translate intent to operators, triage = today + unanswered)
+- `calendar_list` — ranges (patterns: 90 days, free slots: that day), all-day events are informational
+- `contacts_search` — disambiguation strategy (check calendar + email recency if multiple matches)
+- `gmail_draft` — only for formal/detailed/group comms, never for a quick "message"
+
+### What stays in system prompt (short)
+- Identity + tone (elite EA, concise, facts first)
+- The 6 principles
+- Output format (scannable lists, link format, quickinfo JSON)
+- Safety (read-only, drafts only, redaction notice)
+- Date/time/user context (dynamic)
+
+### What gets deleted (model already knows)
+- All BAD/GOOD example pairs — the model understands from principles
+- 6x "CRITICAL" sections — principles replace these
+- Redundant restatements across sections
+- Edge cases the model can reason about (sms: vs tel:, all-day events, etc.)
+
+### Steps
+- [x] **1b-1. Rewrite system prompt** — 285 lines → 40 lines, ~4000 tokens → ~595 tokens
+- [x] **1b-2. Enrich tool descriptions** — gmail_search, calendar_list, contacts_search, gmail_draft updated with behavioral guidance
+- [x] **1b-3. Commit** — committed with Phase 6
+
+Testing deferred to Phase 8 — test everything together after all code phases are done.
 
 ---
 
 ## Phase 4: Parallel Tool Execution
 
-**Why:** Tools execute sequentially even when Claude returns multiple tool_use blocks. Parallelizing read-only tools cuts latency ~2x on multi-tool tasks.
+**Why:** Tools execute sequentially even when Claude returns multiple tool_use blocks. Parallelizing read-only tools cuts latency ~2x.
 
-**Files:** `/lib/ai/anthropic.ts` (tool execution loop, ~line 441)
+**Files:** `/lib/ai/anthropic.ts`
 
-- [ ] **4a. Import `READ_ONLY_TOOLS`** from `./tools` (already exported)
-- [ ] **4b. Split tool calls** — separate read-only (safe to parallelize) from write tools (sequential)
-- [ ] **4c. Execute read-only tools with `Promise.all`** — same per-tool logic (persist, emit, execute, update), just concurrent
-- [ ] **4d. Execute write tools sequentially after** — gmail_draft, calendar_create need confirmation
-- [ ] **4e. Emit all `tool_start` events before parallel execution** — so UI shows them as concurrent
-- [ ] **Phase 4 commit** — `npm run lint && npm run typecheck && npm run build`
+- [ ] Split tool calls into read-only (parallel via `Promise.all`) and write (sequential)
+- [ ] Emit `tool_start` events before parallel execution
+- [ ] Commit
 
-### Phase 4 Testing
-- [ ] Multi-tool tasks complete noticeably faster
-- [ ] Tool results still appear correctly in UI
+### Testing
+- [ ] Multi-tool tasks noticeably faster
 - [ ] Write tools still execute after read tools
 - [ ] Error in one parallel tool doesn't block others
-- [ ] SSE events stream correctly (tool_start before tool_result for each)
 
 ---
 
 ## Phase 5: Cost & Token Logging
 
-**Why:** Need to see what each task type costs for pricing, Haiku routing decisions, and budget tuning. Currently only a single `total_tokens_used` number — no input/output breakdown, no cache hits, no cost, scans track nothing.
+**Why:** Need per-task cost data for pricing and Haiku routing decisions.
 
-**Files:** `/lib/ai/cost-logger.ts` (new), `/lib/ai/types.ts`, `/lib/ai/anthropic.ts`, `/app/api/scan/route.ts`, `/app/api/chat/route.ts`, `/lib/gemini.ts`, `.gitignore`
+**Files:** `/lib/ai/cost-logger.ts` (new), `/lib/ai/types.ts`, `/lib/ai/anthropic.ts`, `/app/api/scan/route.ts`, `/lib/gemini.ts`, `.gitignore`
 
-- [ ] **5a. Add `CostLogEntry` type** to `types.ts` — timestamp, type, model, userId, tokens, cost, cache, iterations, toolNames, duration
-- [ ] **5b. Create `/lib/ai/cost-logger.ts`** — `logCost()` appends JSONL to `logs/cost.jsonl`; `estimateCost()` and `estimateCacheSavings()` with model pricing table
-- [ ] **5c. Track detailed token usage in agentic loop** — replace single `totalTokens +=` with input/output/cacheCreate/cacheRead accumulators
-- [ ] **5d. Log agent task cost** — call `logCost()` with full breakdown when task completes (type: `'agent'`)
-- [ ] **5e. Log scan analysis cost** — call `logCost()` in `analyzeContext` after API call (type: `'scan'`)
-- [ ] **5f. Log Gemini research cost** — call `logCost()` in `lib/gemini.ts` after `generateContent` (type: `'research'`)
-- [ ] **5g. Log Gemini chat cost** — call `logCost()` in `/app/api/chat/route.ts` after `generateContent` (type: `'chat'`)
-- [ ] **5h. Add `logs/` to `.gitignore`**
-- [ ] **Phase 5 commit** — `npm run lint && npm run typecheck && npm run build`
+- [ ] `logCost()` — JSONL logger with model pricing, cache tracking, per-call breakdown
+- [ ] Hook into agent loop, scan analysis, Gemini research, Gemini chat
+- [ ] Commit
 
-### Phase 5 Testing
-- [ ] Run a few tasks → verify JSONL lines appear in `logs/cost.jsonl` with reasonable numbers
-- [ ] Verify cache read tokens are non-zero (prompt caching working)
-- [ ] Verify scan cost logs appear after insight scan
-- [ ] Verify Gemini research/chat logs appear
-- [ ] `jq` analysis commands work on the file
+### Testing
+- [ ] JSONL lines appear with reasonable numbers for each AI call type
+- [ ] Cache read tokens are non-zero
 
 ---
 
-## Phase 6: Haiku for Insight Scan Analysis
+## Phase 6: `contacts_analyze` Tool (DONE)
 
-**Why:** Scan analysis is structured categorization — Haiku 4.5 handles it well at ~12x lower cost ($0.037/scan → $0.003/scan).
+**Commit:** committed with Phase 1b
 
-**Files:** `/app/api/scan/route.ts` (`analyzeContext` function)
+**What was built:**
+- Created `/lib/email/scoring-utils.ts` — extracted `extractEmailAddress`, `parseEmailList`, `isAutomatedSender` to avoid circular deps
+- Created `/lib/email/contacts-analysis.ts` — `analyzeContactRelationship()`: scans 1 year of email (from/to) + calendar, computes frequency/recency/direction/meeting patterns/relationship strength
+- Tool definition with rich description telling model to use it FIRST for any people-related task
+- Handler + 45s timeout in execute-tool.ts
+- System prompt principle #2 updated: "Know the person" — use contacts_analyze before acting on people tasks
+- Returns structured data: email counts, frequency/month, who initiates, recent subjects, meeting pattern detection (weekly/biweekly/monthly), relationship strength (high/medium/low/none), and one-line summary
 
-- [ ] **6a. Switch model to Haiku** — change `'claude-sonnet-4-20250514'` to `'claude-haiku-4-5-20251001'` in `analyzeContext`
-- [ ] **Phase 6 commit** — `npm run lint && npm run typecheck && npm run build`
-
-### Phase 6 Testing
-- [ ] Run 3 scans with Haiku, compare output quality to Sonnet baseline
-- [ ] Verify: correct action types, reasonable priorities, valid JSON output
-- [ ] Check greeting/portrait quality — should still feel personal, not generic
-- [ ] Verify cost.jsonl shows lower scan costs
-- [ ] If quality drops: revert (one line change)
-
----
-
-## Phase 7: Verify & Optimize
-
-### End-to-end testing (mobile PWA)
-- [ ] Tappable phones/URLs/email links throughout
-- [ ] Concise output, no filler
-- [ ] Correct communication method choices
-- [ ] Calendar patterns detected with 90-day range
-- [ ] Scannable list format for email triage
-- [ ] ⚡ urgency flags on time-sensitive items
-- [ ] Calendar+email cross-references when relevant
-- [ ] Multi-tool tasks feel faster (parallel execution)
-- [ ] Cost logs appearing for all 4 AI call types
-
-### Token monitoring
-- [ ] Compare token usage before/after on same tasks
-- [ ] Test 1 ("message Rajan") should drop from ~4 tool calls to 1
-- [ ] System prompt growth (+150 tokens) offset by fewer tool calls and shorter responses
-- [ ] Compare scan cost: Haiku vs Sonnet in cost.jsonl
-
-### Pre-commit
-- [ ] `npm run lint && npm run typecheck && npm run build`
+### Testing
+- [ ] "Message Andrew" with many matches → ranks by email activity
+- [ ] "Do I meet with X regularly?" → shows meeting pattern from contact analysis
+- [ ] Automated senders filtered, result under 8000 chars
 
 ---
 
-## Future Investigation: Haiku Routing for Task Execution
+## Phase 7: Haiku for Insight Scan
 
-**Not implementing now** — flagging for future consideration once we have usage data from Phase 5.
+**Why:** Scan analysis is structured categorization — Haiku handles it at ~12x lower cost.
 
-### Idea
-Route simple, single-tool tasks to Haiku 4.5 instead of Sonnet 4. Examples:
-- "What's Rajan's number?" → contacts_search → one-line answer
-- "When's my next dentist appointment?" → calendar_list → one-line answer
+- [ ] Switch model in `analyzeContext` to `claude-haiku-4-5-20251001`
+- [ ] Commit, compare quality to Sonnet baseline, revert if needed
 
-### Why not now
-- We don't yet know how reliably we can classify task complexity upfront
-- A wrong classification (sending a complex task to Haiku) would produce a bad result
-- Need usage data to understand the distribution of simple vs complex tasks
-- The "MINIMUM VIABLE ACTION" prompt changes may already reduce Sonnet costs enough
+---
 
-### When to revisit
-- After 2-4 weeks of usage data with the new prompt
-- If simple tasks (≤1 tool call) represent >40% of tasks, the savings justify the complexity
-- Could use a lightweight classifier: if task matches known simple patterns (contact lookup, single calendar check), route to Haiku; otherwise default to Sonnet
+## Phase 8: End-to-End Verification
+
+- [ ] All test cases pass on mobile PWA
+- [ ] Long-tail tasks work without specific prompt rules
+- [ ] Cost logs for all AI call types
+- [ ] Token usage comparison before/after prompt restructure
+
+---
+
+## Future: Haiku Routing for Task Execution
+
+Not now — need usage data first. If simple tasks (≤1 tool call) >40% of volume, route to Haiku.

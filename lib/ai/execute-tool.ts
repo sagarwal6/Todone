@@ -20,6 +20,8 @@ import * as contacts from '../google/contacts';
 import * as web from './web';
 // Import email scoring
 import { scoreEmails, getTierSummary } from '../email/scoring';
+// Import contact analysis
+import { analyzeContactRelationship } from '../email/contacts-analysis';
 // Import audit logging
 import { logAuditEvent } from '../supabase/server';
 import type { EmailMetadataWithHeaders } from '../email/types';
@@ -191,9 +193,11 @@ async function executeToolInternal(
     case 'calendar_create':
       return executeCalendarCreate(input, context);
 
-    // Contacts tool
+    // Contacts tools
     case 'contacts_search':
       return executeContactsSearch(input, context);
+    case 'contacts_analyze':
+      return executeContactsAnalyze(input, context);
 
     // Web tools
     case 'web_search':
@@ -545,6 +549,51 @@ async function executeContactsSearch(
       },
     },
   };
+}
+
+async function executeContactsAnalyze(
+  input: Record<string, unknown>,
+  context: ToolContext
+): Promise<{ result: ToolResult }> {
+  if (!context.accessToken) {
+    return {
+      result: {
+        success: false,
+        error: 'Gmail/Calendar access not available. User needs to grant permissions.',
+        retriable: false,
+      },
+    };
+  }
+
+  const query = input.query as string;
+
+  // Audit: log query (not results)
+  logAuditEvent(context.userId, context.taskId, 'contacts_analyze', { query }).catch(() => {});
+
+  try {
+    const relationship = await analyzeContactRelationship(
+      context.accessToken,
+      query,
+      context.userEmail || '',
+    );
+
+    return {
+      result: {
+        success: true,
+        data: relationship,
+      },
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('Contacts analyze error:', errorMessage);
+    return {
+      result: {
+        success: false,
+        error: `Contact analysis failed: ${errorMessage}`,
+        retriable: true,
+      },
+    };
+  }
 }
 
 // ============================================================================

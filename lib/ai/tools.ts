@@ -13,7 +13,7 @@ import type { Tool } from '@anthropic-ai/sdk/resources/messages';
  */
 export const gmailSearchTool: Tool = {
   name: 'gmail_search',
-  description: `Search Gmail. Supports: from:, to:, subject:, in:inbox, is:unread, is:starred, has:attachment, after:, before:, newer_than:. Use "in:inbox" to search only inbox (excludes sent/trash/spam). Results are pre-scored by priority: HIGH tier = direct 1:1 emails (prioritize these first), MEDIUM = relevant but not urgent, LOW/skipped = bulk mail/newsletters. Always mention HIGH tier emails prominently.`,
+  description: `Search Gmail inbox. Prioritize recent emails: start with newer_than:6m, broaden only if needed. Translate user intent to Gmail operators — don't use their exact words as the query. For email triage ("what needs attention?"): search in:inbox newer_than:1d for today, then is:unread newer_than:5d for unanswered. Results are pre-scored: HIGH = direct 1:1 (mention first), MEDIUM = relevant, LOW/skip = bulk. Supports: from:, to:, subject:, in:inbox, is:unread, has:attachment, newer_than:, after:, before:.`,
   input_schema: {
     type: 'object' as const,
     properties: {
@@ -61,7 +61,7 @@ export const gmailReadTool: Tool = {
  */
 export const gmailDraftTool: Tool = {
   name: 'gmail_draft',
-  description: `Create email draft for user review (NOT sent automatically). For replies: MUST include thread_id, message_id (from gmail_read), and original_email. This makes the draft appear as a reply in the thread.`,
+  description: `Create email draft for user review (NOT sent automatically). Use for formal, detailed, or group communications — NOT for casual "message/text someone" tasks (use sms: link instead). For replies: MUST include thread_id, message_id (from gmail_read), and original_email to thread properly.`,
   input_schema: {
     type: 'object' as const,
     properties: {
@@ -123,7 +123,7 @@ export const gmailDraftTool: Tool = {
  */
 export const calendarListTool: Tool = {
   name: 'calendar_list',
-  description: `List calendar events in a time range. Default: next 7 days. For patterns/recurring: use last 90 days. Returns ID, title, times, location, attendees.`,
+  description: `List calendar events. Default: next 7 days. For patterns/recurring ("do I meet with X regularly?"): search last 90 days. For free slots: search just that day. All-day events (birthdays, holidays) are informational — they don't block time. When checking availability, only count events with specific start/end times. Also useful for disambiguation: if user says "message Andrew" and has a meeting with an Andrew today, that's likely who they mean.`,
   input_schema: {
     type: 'object' as const,
     properties: {
@@ -207,7 +207,7 @@ export const calendarCreateTool: Tool = {
  */
 export const contactsSearchTool: Tool = {
   name: 'contacts_search',
-  description: `Search Google Contacts by name/email. Returns name, emails, phone numbers, organization.`,
+  description: `Search Google Contacts by name/email. Returns name, emails, phone numbers, organization. For "message/text X": look up phone and provide sms: link. For "call X": provide tel: link. If multiple matches for a name, use calendar_list (meeting today?) and gmail_search (recent activity) to disambiguate — show ranked list with context, don't pre-select.`,
   input_schema: {
     type: 'object' as const,
     properties: {
@@ -220,6 +220,25 @@ export const contactsSearchTool: Tool = {
         description: 'Maximum contacts to return (1-20). Default: 10',
         minimum: 1,
         maximum: 20,
+      },
+    },
+    required: ['query'],
+  },
+};
+
+/**
+ * Contacts Analyze Tool
+ * Analyze relationship history with a contact across email and calendar
+ */
+export const contactsAnalyzeTool: Tool = {
+  name: 'contacts_analyze',
+  description: `Analyze the user's relationship with a person over the past year. Returns email frequency/recency/direction, calendar meeting patterns, and relationship strength. Use this FIRST for any people-related task: "message X", "call X", "do I meet with X?", "who is X?", disambiguation when multiple contacts match. Much more useful than contacts_search alone — gives you the context to make smart decisions about who the user means and what their relationship looks like.`,
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      query: {
+        type: 'string',
+        description: 'Person name or email to analyze. For disambiguation, call this once per candidate. Examples: "Andrew", "jane@company.com"',
       },
     },
     required: ['query'],
@@ -280,6 +299,7 @@ export const agenticTools: Tool[] = [
   calendarListTool,
   calendarCreateTool,
   contactsSearchTool,
+  contactsAnalyzeTool,
   webSearchTool,
   webFetchTool,
 ];
@@ -300,6 +320,7 @@ export const READ_ONLY_TOOLS = new Set([
   'gmail_read',
   'calendar_list',
   'contacts_search',
+  'contacts_analyze',
   'web_search',
   'web_fetch',
 ]);

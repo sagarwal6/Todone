@@ -11,11 +11,38 @@ interface MarkdownProps {
 /**
  * Auto-link bare phone numbers in text.
  * Matches formats: (123) 456-7890, 123-456-7890, +1 123-456-7890, 1-800-207-7847
- * Skips numbers already inside markdown links [text](url)
+ * Skips numbers inside markdown links [text](url) by splitting on link boundaries first.
  */
 function autoLinkPhones(text: string): string {
+  // Split text into markdown links and non-link segments
+  // This prevents matching phone numbers inside [link text](url)
+  const linkPattern = /\[[^\]]*\]\([^)]*\)/g;
+  const parts: string[] = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = linkPattern.exec(text)) !== null) {
+    // Add non-link text before this match (will be processed)
+    if (match.index > lastIndex) {
+      parts.push(processPhones(text.slice(lastIndex, match.index)));
+    }
+    // Add the link as-is (no processing)
+    parts.push(match[0]);
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining non-link text
+  if (lastIndex < text.length) {
+    parts.push(processPhones(text.slice(lastIndex)));
+  }
+
+  return parts.join('');
+}
+
+/** Wrap bare phone numbers in tel: links */
+function processPhones(text: string): string {
   return text.replace(
-    /(?<!\[)(?<!\]\()(\+?1?[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})(?!\]|\))/g,
+    /(\+?1?[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/g,
     (match) => {
       const digits = match.replace(/\D/g, '');
       return `[${match}](tel:${digits})`;
@@ -33,6 +60,12 @@ export function Markdown({ content, className = '' }: MarkdownProps) {
     <div className={`prose prose-sm max-w-none overflow-hidden break-words ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        urlTransform={(url) => {
+          // Allow tel: and sms: protocols (blocked by default sanitization)
+          if (url.startsWith('tel:') || url.startsWith('sms:')) return url;
+          // Keep default behavior for everything else (allows http, https, mailto)
+          return url;
+        }}
         components={{
         // Headers
         h1: ({ children }) => (
@@ -84,23 +117,22 @@ export function Markdown({ content, className = '' }: MarkdownProps) {
             {children}
           </em>
         ),
-        // Links - tel:/sms: navigate directly, others open in new tab
-        a: ({ href, children }) => (
-          <a
-            href={href}
-            onClick={(e) => {
-              e.preventDefault();
-              if (href?.startsWith('tel:') || href?.startsWith('sms:')) {
-                window.location.href = href;
-              } else if (href) {
-                window.open(href, '_blank', 'noopener,noreferrer');
-              }
-            }}
-            className="text-inbox-accent hover:underline"
-          >
-            {children}
-          </a>
-        ),
+        // Links - tel:/sms: let browser handle natively, others open in new tab
+        a: ({ href, children }) => {
+          const isProtocolLink = href?.startsWith('tel:') || href?.startsWith('sms:');
+          return (
+            <a
+              href={href}
+              onClick={isProtocolLink ? undefined : (e) => {
+                e.preventDefault();
+                if (href) window.open(href, '_blank', 'noopener,noreferrer');
+              }}
+              className="text-inbox-accent hover:underline"
+            >
+              {children}
+            </a>
+          );
+        },
         // Code
         code: ({ className, children, ...props }) => {
           const isInline = !className;

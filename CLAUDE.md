@@ -139,6 +139,7 @@ ENCRYPTION_SECRET
 ### Security / Logging
 - Never log API keys, tokens (access/refresh), or their prefixes
 - Never log user email addresses, email subjects, sender names, or email content
+- Never put real contact names, phone numbers, or email addresses in code (prompts, examples, tests) — use generic placeholders
 - Operational logs (counts, tiers, scores, status booleans) are fine
 - No debug/test API endpoints in production — all routes must check authentication
 - Debug endpoints were removed in the 2/15 security review — do not recreate them

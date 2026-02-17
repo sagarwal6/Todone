@@ -13,6 +13,11 @@ import type {
   RawEmailHeaders,
   EmailMetadataWithHeaders,
 } from './types';
+import {
+  extractEmailAddress,
+  parseEmailList,
+  isAutomatedSender,
+} from './scoring-utils';
 
 // ============================================================================
 // Score Modifiers
@@ -175,119 +180,7 @@ export function extractDomain(email: string): string {
   return match ? match[1].toLowerCase().trim() : '';
 }
 
-/**
- * Extract email address from a formatted string like "Name <email@domain.com>"
- */
-function extractEmailAddress(formatted: string): string {
-  const match = formatted.match(/<([^>]+)>/);
-  return match ? match[1].toLowerCase().trim() : formatted.toLowerCase().trim();
-}
-
-/**
- * Parse a comma-separated list of email addresses
- */
-function parseEmailList(list: string | undefined): string[] {
-  if (!list) return [];
-  return list.split(',').map((e) => e.trim()).filter(Boolean);
-}
-
-/**
- * Check if the sender appears to be automated (noreply, platform emails, etc.)
- */
-function isAutomatedSender(from: string, replyTo?: string): boolean {
-  const fromEmail = extractEmailAddress(from).toLowerCase();
-  const replyToEmail = replyTo ? extractEmailAddress(replyTo).toLowerCase() : null;
-
-  // Check for noreply patterns
-  const noReplyPatterns = [
-    /^no[-_]?reply@/i,
-    /^donotreply@/i,
-    /^noreply@/i,
-    /^notifications?@/i,
-    /^alerts?@/i,
-    /^mailer[-_]?daemon@/i,
-    /^postmaster@/i,
-  ];
-
-  if (noReplyPatterns.some((pattern) => pattern.test(fromEmail))) {
-    return true;
-  }
-
-  // Check for platform/service sender patterns (team@, hello@, matching@, etc.)
-  const platformSenderPatterns = [
-    /^team@/i,
-    /^hello@/i,
-    /^hi@/i,
-    /^support@/i,
-    /^help@/i,
-    /^info@/i,
-    /^contact@/i,
-    /^matching@/i,
-    /^founders?@/i,
-    /^community@/i,
-    /^newsletter@/i,
-    /^digest@/i,
-    /^updates?@/i,
-    /^news@/i,
-    /^mail@/i,
-    /^email@/i,
-    /^members?@/i,
-    /^apply@/i,
-    /^admissions?@/i,
-    /^outreach@/i,
-    /^partnerships?@/i,
-    /^events?@/i,
-    /^invites?@/i,
-    /^connect@/i,
-    /^network@/i,
-    /^daily@/i,
-    /^weekly@/i,
-    /^alerts?@/i,
-    /^transactions?@/i,
-    /^billing@/i,
-    /^payments?@/i,
-    /^receipts?@/i,
-    /^orders?@/i,
-  ];
-
-  if (platformSenderPatterns.some((pattern) => pattern.test(fromEmail))) {
-    return true;
-  }
-
-  // Also check the sender display name for newsletter patterns
-  // 'from' param is the full sender string like "AI Health Apps Daily <daily@example.com>"
-  const senderNameLower = from.toLowerCase();
-  const newsletterNamePatterns = [
-    /daily\s*(digest|apps?|news|update)/i,
-    /weekly\s*(digest|apps?|news|update|roundup)/i,
-    /\bdigest\b/i,
-    /\bnewsletter\b/i,
-    /transaction\s*alerts?/i,
-    /\balerts?\s*and\b/i,
-    /\bai\s+(health\s+)?apps?\b/i,  // "AI Apps", "AI Health Apps"
-    // Goal-tracking/habit services
-    /smart\s*goals?/i,              // "smart goals" services
-    /weekly\s*(goals?|recap|summary|check[\s-]*in)/i, // "weekly goals", "weekly check-in"
-    /goal\s*(track|tracker|tracking|setting)/i, // "goal tracking"
-    /\bhabit\b.*\b(track|log|check)/i, // "habit tracker", "habit log"
-    /accountability/i,              // accountability services
-    /\bobjectives?\b/i,             // OKR-style emails
-  ];
-  if (newsletterNamePatterns.some((pattern) => pattern.test(senderNameLower))) {
-    return true;
-  }
-
-  // If Reply-To exists and differs significantly from From, it's likely automated
-  if (replyToEmail && replyToEmail !== fromEmail) {
-    const fromDomain = extractDomain(from);
-    const replyToDomain = extractDomain(replyTo || '');
-    if (fromDomain !== replyToDomain) {
-      return true;
-    }
-  }
-
-  return false;
-}
+// extractEmailAddress, parseEmailList, isAutomatedSender imported from scoring-utils.ts
 
 /**
  * Check if the sender domain is a known platform/service (not personal email)

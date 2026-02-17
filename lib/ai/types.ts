@@ -105,6 +105,7 @@ export const DEFAULT_AGENT_CONFIG: AgentConfig = {
     calendar_list: 5_000,
     calendar_create: 10_000,
     contacts_search: 5_000,
+    contacts_analyze: 45_000,
     web_search: 15_000,
     web_fetch: 20_000,
   },
