@@ -144,14 +144,17 @@ export function ConversationPanel({ task, onClose, onAddChatMessage, onComplete,
     // Only auto-start if:
     // 1. Explicitly requested via autoStartAgent prop, OR
     // 2. No in-memory agent state AND waiting for a response AND agent hasn't already worked
+    //    (but NOT for insight tasks — those should only auto-start via explicit prop,
+    //     e.g. meetings auto-start but emails wait for user direction)
     const noAgentStateYet = agentProgress.length === 0 && !agentResult && !agentError;
-    const shouldAutoStart = autoStartAgent || (noAgentStateYet && waitingForResponse && !agentAlreadyWorked);
+    const implicitAutoStart = task.source !== 'insight' && noAgentStateYet && waitingForResponse && !agentAlreadyWorked;
+    const shouldAutoStart = autoStartAgent || implicitAutoStart;
 
     if (shouldAutoStart && !isRunning) {
       handleStartAgent();
       onAgentStarted?.();
     }
-  }, [autoStartAgent, isRunning, agentProgress.length, agentResult, agentError, task.chatMessages, task.agentQuickInfo, handleStartAgent, onAgentStarted]);
+  }, [autoStartAgent, isRunning, agentProgress.length, agentResult, agentError, task.chatMessages, task.agentQuickInfo, task.source, handleStartAgent, onAgentStarted]);
 
   // Load messages when task changes
   useEffect(() => {

@@ -119,11 +119,26 @@ export async function executeTool(
       ? AbortSignal.any([context.abortSignal, timeoutController.signal])
       : timeoutController.signal;
 
+    // Race the tool execution against the timeout/abort signal
+    // This ensures timeouts actually work even if internal code doesn't check the signal
+    // (e.g., meeting_prep's parallel fetches don't pass abort signal to HTTP requests)
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      const onAbort = () => reject(new DOMException('Tool execution aborted', 'AbortError'));
+      if (combinedSignal.aborted) {
+        onAbort();
+        return;
+      }
+      combinedSignal.addEventListener('abort', onAbort, { once: true });
+    });
+
     try {
-      const result = await executeToolInternal(toolName, input, {
-        ...context,
-        abortSignal: combinedSignal,
-      });
+      const result = await Promise.race([
+        executeToolInternal(toolName, input, {
+          ...context,
+          abortSignal: combinedSignal,
+        }),
+        timeoutPromise,
+      ]);
 
       clearTimeout(timeoutId);
       return result;

@@ -8,7 +8,7 @@
  * Designed to feel like a capable assistant doing real work for you.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { AgentProgressEvent } from '@/lib/ai/types';
 import type { AgentStepSummary } from '@/lib/types';
 
@@ -20,6 +20,10 @@ interface AgentProgressProps {
   hasCompletedResult?: boolean;
   /** Persisted steps from previous agent run (used when events are empty) */
   persistedSteps?: AgentStepSummary[];
+  /** Allow collapsing to a single summary line */
+  collapsible?: boolean;
+  /** Start in collapsed state (requires collapsible) */
+  defaultCollapsed?: boolean;
 }
 
 /**
@@ -112,7 +116,10 @@ export function AgentProgress({
   onCancel,
   hasCompletedResult = false,
   persistedSteps,
+  collapsible = false,
+  defaultCollapsed = false,
 }: AgentProgressProps) {
+  const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   // Process events into display steps (from live events)
   const liveSteps = useMemo(() => processSteps(events), [events]);
 
@@ -201,6 +208,22 @@ export function AgentProgress({
   const borderColor = isCompleted ? 'border-green-200' : 'border-inbox-accent/20';
   const bgColor = isCompleted ? 'bg-green-50/30' : 'bg-inbox-accent/5';
 
+  // Collapsed summary view
+  if (collapsible && isCollapsed && isCompleted) {
+    return (
+      <button
+        onClick={() => setIsCollapsed(false)}
+        className={`w-full rounded-lg border ${borderColor} ${bgColor} px-3 py-2 flex items-center gap-2 hover:bg-green-50/60 transition-colors`}
+      >
+        <span className="material-symbols-rounded text-green-600 text-[14px]">check_circle</span>
+        <span className="text-[12px] text-green-700">
+          Completed — {steps.length} {steps.length === 1 ? 'step' : 'steps'}
+        </span>
+        <span className="material-symbols-rounded text-green-600/60 text-[16px] ml-auto">expand_more</span>
+      </button>
+    );
+  }
+
   return (
     <div className={`rounded-lg border ${borderColor} ${bgColor} overflow-hidden`}>
       {/* Header - compact */}
@@ -218,14 +241,24 @@ export function AgentProgress({
             </>
           )}
         </div>
-        {isRunning && onCancel && (
-          <button
-            onClick={onCancel}
-            className="text-[11px] text-inbox-text-tertiary hover:text-inbox-text-secondary transition-colors"
-          >
-            Cancel
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {isRunning && onCancel && (
+            <button
+              onClick={onCancel}
+              className="text-[11px] text-inbox-text-tertiary hover:text-inbox-text-secondary transition-colors"
+            >
+              Cancel
+            </button>
+          )}
+          {collapsible && isCompleted && (
+            <button
+              onClick={() => setIsCollapsed(true)}
+              className="text-inbox-text-tertiary hover:text-inbox-text-secondary transition-colors"
+            >
+              <span className="material-symbols-rounded text-[16px]">expand_less</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Steps list - compact */}

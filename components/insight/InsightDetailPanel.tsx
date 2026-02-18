@@ -16,10 +16,13 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useSession } from 'next-auth/react';
 import type { InsightAction, DraftResponseContext, MeetingPrepContext } from '@/lib/scan/types';
 import type { LocalActionState } from '@/hooks/useInsightScan';
+import type { ChatMessage } from '@/lib/types';
 import { QuickReferenceCard } from '@/components/QuickReferenceCard';
+import { Markdown } from '@/components/ui/Markdown';
 import { openGmailThread } from '@/lib/email/gmail-links';
 import { useAgentContext } from '@/contexts/AgentContext';
 import { AgentProgress } from '@/components/AgentProgress';
+import { v4 as uuidv4 } from 'uuid';
 
 interface InsightDetailPanelProps {
   action: InsightAction;
@@ -28,6 +31,7 @@ interface InsightDetailPanelProps {
   onDismiss: (actionId: string) => Promise<boolean>;
   onClose: () => void;
   getEmailContent?: (messageId: string) => EmailContent | null;
+  onChatUpdate?: (actionId: string, messages: ChatMessage[]) => void;
 }
 
 interface EmailContent {
@@ -178,6 +182,7 @@ export default function InsightDetailPanel({
   onDismiss,
   onClose,
   getEmailContent,
+  onChatUpdate,
 }: InsightDetailPanelProps) {
   const { data: session } = useSession();
   const userEmail = session?.user?.email || undefined;
@@ -197,6 +202,12 @@ export default function InsightDetailPanel({
   // Meeting prep state (separate from email)
   const [meetingInput, setMeetingInput] = useState('');
   const [isExecutingMeeting, setIsExecutingMeeting] = useState(false);
+
+  // Follow-up chat state
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -286,10 +297,10 @@ export default function InsightDetailPanel({
     }
   }, [emailContent]);
 
-  // Auto-execute meeting prep when panel opens
+  // Auto-execute meeting prep when panel opens (skip if already completed/failed)
   const hasAutoExecutedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (isMeeting && !isExecutingMeeting && hasAutoExecutedRef.current !== action.id) {
+    if (isMeeting && !isExecutingMeeting && !isCompleted && !hasFailed && hasAutoExecutedRef.current !== action.id) {
       hasAutoExecutedRef.current = action.id;
       const timer = setTimeout(async () => {
         setIsExecutingMeeting(true);
@@ -307,7 +318,7 @@ export default function InsightDetailPanel({
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [isMeeting, action.id, isExecutingMeeting, onExecute]);
+  }, [isMeeting, action.id, isExecutingMeeting, isCompleted, hasFailed, onExecute]);
 
   // Copy draft text to clipboard
   const handleCopyDraft = useCallback(async () => {
@@ -415,6 +426,98 @@ export default function InsightDetailPanel({
     setHasDraftGenerated(false);
     setError(null);
   }, []);
+
+  // Initialize chat from persisted state when action changes
+  useEffect(() => {
+    setChatMessages(actionState?.result?.chatMessages || []);
+    setChatInput('');
+  }, [action.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Scroll chat to bottom on new messages
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages]);
+
+  // Build context summary for chat API from action result
+  const buildChatContext = useCallback(() => {
+    const parts: string[] = [];
+    if (isMeeting) {
+      parts.push(`Meeting: ${subject}`);
+      if (attendees.length > 0) parts.push(`Attendees: ${attendees.join(', ')}`);
+      if (actionResult?.message) parts.push(`Prep result:\n${actionResult.message}`);
+    } else {
+      parts.push(`Email subject: ${subject}`);
+      parts.push(`From: ${senderName}`);
+      if (actionResult?.pendingDrafts?.[0]?.content) {
+        parts.push(`Draft reply:\n${actionResult.pendingDrafts[0].content}`);
+      }
+      if (actionResult?.message) parts.push(`Agent notes:\n${actionResult.message}`);
+    }
+    return parts.join('\n\n');
+  }, [isMeeting, subject, senderName, attendees, actionResult]);
+
+  // Send follow-up chat message
+  const handleSendChat = useCallback(async () => {
+    if (!chatInput.trim() || isChatLoading) return;
+
+    const userMessage: ChatMessage = {
+      id: uuidv4(),
+      role: 'user',
+      content: chatInput.trim(),
+      timestamp: Date.now(),
+    };
+
+    const updatedMessages = [...chatMessages, userMessage];
+    setChatMessages(updatedMessages);
+    setChatInput('');
+    setIsChatLoading(true);
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskId: action.id,
+          taskTitle: subject,
+          taskResearch: { markdown: buildChatContext() },
+          message: userMessage.content,
+          history: chatMessages,
+        }),
+      });
+
+      const data = await response.json();
+
+      const assistantMessage: ChatMessage = {
+        id: uuidv4(),
+        role: 'assistant',
+        content: data.reply || 'Sorry, I could not process that request.',
+        timestamp: Date.now(),
+      };
+
+      const allMessages = [...updatedMessages, assistantMessage];
+      setChatMessages(allMessages);
+      onChatUpdate?.(action.id, allMessages);
+    } catch {
+      const errorMessage: ChatMessage = {
+        id: uuidv4(),
+        role: 'assistant',
+        content: 'Sorry, something went wrong. Please try again.',
+        timestamp: Date.now(),
+      };
+      const allMessages = [...updatedMessages, errorMessage];
+      setChatMessages(allMessages);
+      onChatUpdate?.(action.id, allMessages);
+    } finally {
+      setIsChatLoading(false);
+    }
+  }, [chatInput, isChatLoading, chatMessages, action.id, subject, buildChatContext, onChatUpdate]);
+
+  const handleChatKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendChat();
+    }
+  }, [handleSendChat]);
 
   return (
     <div className="h-full flex flex-col bg-inbox-bg-primary">
@@ -544,6 +647,18 @@ export default function InsightDetailPanel({
             {/* Meeting prep results */}
             {isCompleted && actionResult && (
               <div className="space-y-4 border-t border-gray-200 pt-5 mt-5">
+                {/* Collapsible agent steps */}
+                {(agentProgress.length > 0 || isAgentRunning) && (
+                  <AgentProgress
+                    events={agentProgress}
+                    isRunning={false}
+                    currentStep={null}
+                    hasCompletedResult
+                    collapsible
+                    defaultCollapsed
+                  />
+                )}
+
                 <div className="flex items-center gap-2 text-green-600">
                   <span className="material-symbols-rounded text-xl">check_circle</span>
                   <span className="text-[14px] font-medium">Prep complete</span>
@@ -558,6 +673,69 @@ export default function InsightDetailPanel({
                 {actionResult.quickInfo && Object.keys(actionResult.quickInfo).length > 0 && (
                   <QuickReferenceCard quickInfo={actionResult.quickInfo} />
                 )}
+
+                {/* Inline action pills */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={onClose}
+                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-full text-[13px] font-medium text-gray-700 transition-colors"
+                  >
+                    Done
+                  </button>
+                  <button
+                    onClick={handleExecuteMeeting}
+                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-full text-[13px] font-medium text-gray-500 transition-colors flex items-center gap-1.5"
+                  >
+                    <span className="material-symbols-rounded text-sm">refresh</span>
+                    Re-prep
+                  </button>
+                </div>
+
+                {/* Follow-up chat messages */}
+                {chatMessages.map((msg) => (
+                  <div key={msg.id} className="mb-2">
+                    <div className={`flex items-start gap-2.5 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                      <div className={`
+                        w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0
+                        ${msg.role === 'user'
+                          ? 'bg-inbox-accent text-white'
+                          : 'bg-inbox-accent/10 text-inbox-accent'
+                        }
+                      `}>
+                        <span className="material-symbols-rounded text-[14px]">
+                          {msg.role === 'user' ? 'person' : 'auto_awesome'}
+                        </span>
+                      </div>
+                      <div className={`flex-1 min-w-0 ${msg.role === 'user' ? 'flex justify-end' : 'pt-0.5'}`}>
+                        {msg.role === 'user' ? (
+                          <div className="max-w-[85%] px-3.5 py-2.5 rounded-2xl text-[13px] bg-inbox-accent text-white">
+                            {msg.content}
+                          </div>
+                        ) : (
+                          <div className="text-[13px]">
+                            <Markdown content={msg.content} />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Chat loading indicator */}
+                {isChatLoading && (
+                  <div className="flex items-start gap-2.5 mb-2">
+                    <div className="w-7 h-7 rounded-full bg-inbox-accent/10 flex items-center justify-center flex-shrink-0">
+                      <span className="material-symbols-rounded text-[14px] text-inbox-accent">auto_awesome</span>
+                    </div>
+                    <div className="flex gap-1 pt-2.5">
+                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  </div>
+                )}
+
+                <div ref={chatEndRef} />
               </div>
             )}
           </div>
@@ -666,20 +844,38 @@ export default function InsightDetailPanel({
             )}
 
             {isCompleted && (
-              <div className="flex gap-3">
+              <div className="flex gap-2 items-center">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={handleChatKeyDown}
+                  placeholder="Ask a follow-up..."
+                  disabled={isChatLoading}
+                  className="
+                    flex-1 px-4 py-2.5
+                    text-[14px] text-gray-900
+                    bg-white border border-gray-200 rounded-lg
+                    focus:outline-none focus:ring-2 focus:ring-inbox-accent/20 focus:border-inbox-accent
+                    placeholder:text-gray-400
+                    disabled:opacity-50
+                    transition-all
+                  "
+                />
                 <button
-                  onClick={onClose}
-                  className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 rounded-lg text-[14px] font-medium text-gray-700 transition-colors"
+                  onClick={handleSendChat}
+                  disabled={!chatInput.trim() || isChatLoading}
+                  className="
+                    w-10 h-10 rounded-full
+                    bg-inbox-accent text-white
+                    flex items-center justify-center
+                    disabled:opacity-38 disabled:cursor-not-allowed
+                    hover:bg-inbox-accent-hover
+                    transition-colors flex-shrink-0
+                  "
+                  aria-label="Send"
                 >
-                  Done
-                </button>
-                <button
-                  onClick={handleExecuteMeeting}
-                  className="py-3 px-4 bg-gray-100 hover:bg-gray-200 rounded-lg text-[14px] font-medium text-gray-500 transition-colors flex items-center gap-1.5"
-                  title="Research again with fresh data"
-                >
-                  <span className="material-symbols-rounded text-base">refresh</span>
-                  Re-prep
+                  <span className="material-symbols-rounded text-lg">arrow_upward</span>
                 </button>
               </div>
             )}
@@ -920,6 +1116,105 @@ export default function InsightDetailPanel({
                 )}
               </div>
             </div>
+
+            {/* Follow-up chat after draft is generated */}
+            {hasDraftGenerated && (
+              <div className="mt-3 space-y-2">
+                {/* Collapsible agent steps */}
+                {(agentProgress.length > 0) && (
+                  <AgentProgress
+                    events={agentProgress}
+                    isRunning={false}
+                    currentStep={null}
+                    hasCompletedResult
+                    collapsible
+                    defaultCollapsed
+                  />
+                )}
+
+                {/* Chat messages */}
+                {chatMessages.map((msg) => (
+                  <div key={msg.id} className="mb-1">
+                    <div className={`flex items-start gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                      <div className={`
+                        w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0
+                        ${msg.role === 'user'
+                          ? 'bg-inbox-accent text-white'
+                          : 'bg-inbox-accent/10 text-inbox-accent'
+                        }
+                      `}>
+                        <span className="material-symbols-rounded text-[12px]">
+                          {msg.role === 'user' ? 'person' : 'auto_awesome'}
+                        </span>
+                      </div>
+                      <div className={`flex-1 min-w-0 ${msg.role === 'user' ? 'flex justify-end' : 'pt-0.5'}`}>
+                        {msg.role === 'user' ? (
+                          <div className="max-w-[85%] px-3 py-2 rounded-2xl text-[12px] bg-inbox-accent text-white">
+                            {msg.content}
+                          </div>
+                        ) : (
+                          <div className="text-[12px]">
+                            <Markdown content={msg.content} />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Chat loading */}
+                {isChatLoading && (
+                  <div className="flex items-start gap-2 mb-1">
+                    <div className="w-6 h-6 rounded-full bg-inbox-accent/10 flex items-center justify-center flex-shrink-0">
+                      <span className="material-symbols-rounded text-[12px] text-inbox-accent">auto_awesome</span>
+                    </div>
+                    <div className="flex gap-1 pt-2">
+                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  </div>
+                )}
+
+                {/* Chat input */}
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={handleChatKeyDown}
+                    placeholder="Ask a follow-up..."
+                    disabled={isChatLoading}
+                    className="
+                      flex-1 px-3 py-2
+                      text-[13px] text-gray-900
+                      bg-white border border-gray-200 rounded-lg
+                      focus:outline-none focus:ring-2 focus:ring-inbox-accent/20 focus:border-inbox-accent
+                      placeholder:text-gray-400
+                      disabled:opacity-50
+                      transition-all
+                    "
+                  />
+                  <button
+                    onClick={handleSendChat}
+                    disabled={!chatInput.trim() || isChatLoading}
+                    className="
+                      w-8 h-8 rounded-full
+                      bg-inbox-accent text-white
+                      flex items-center justify-center
+                      disabled:opacity-38 disabled:cursor-not-allowed
+                      hover:bg-inbox-accent-hover
+                      transition-colors flex-shrink-0
+                    "
+                    aria-label="Send"
+                  >
+                    <span className="material-symbols-rounded text-base">arrow_upward</span>
+                  </button>
+                </div>
+
+                <div ref={chatEndRef} />
+              </div>
+            )}
 
             {/* Error message */}
             {error && (

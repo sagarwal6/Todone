@@ -2,7 +2,8 @@
 
 ## Status
 
-All code phases complete (1, 1b, 2, 3, 4, 5, 6, 7, 9, 11, 12, 13, 14, 15). Phase 8 (end-to-end testing) in progress.
+All code phases complete (1, 1b, 2, 3, 4, 5, 6, 7, 9, 11, 12, 13, 14, 15, 16). Phase 8 (end-to-end testing) in progress.
+Phase 16 (insight panel refactor) complete — meetings use ConversationPanel, emails keep InsightDetailPanel, stale actions time out.
 Phase 15 (gmail_triage compound tool) complete — server-side search+score+preview in one call, saves 2-3 agent iterations per triage task.
 Phase 15 also included scoring fixes: self-sent emails deprioritized (-20), mailing lists no longer get DIRECT_RECIPIENT bonus, "morning/evening brief" pattern added to marketing detection.
 
@@ -488,6 +489,52 @@ gmail_triage: {
 - [ ] "Email from Tim about the project" → agent should still use `gmail_search` (specific query, not triage)
 - [ ] Verify cost: triage tasks should drop from 3-5 iterations to 1-2
 - [ ] Verify thread previews include action items, attachments, links
+
+---
+
+## Phase 16: Insight Panel Refactor — Meetings Use ConversationPanel (DONE)
+
+**Why:** Insight actions (meeting preps, email drafts) had a custom InsightDetailPanel UI that duplicated functionality already in ConversationPanel (agent progress, QuickReferenceCard, chat). Meeting prep results should show the same rich UI as regular tasks.
+
+### Architecture Change
+
+**Meetings:** Click insight item → create hidden task (`source: 'insight'`) → ConversationPanel (same UI as regular tasks: agent progress, results, QuickReferenceCard, chat). Agent auto-starts immediately.
+
+**Emails:** Click insight item → InsightDetailPanel (shows email body, "Draft for me" / "Write it myself" toggle, reply textarea). Task + agent only created when user initiates a draft. This preserves user control — can't predict whether they want to draft, write, or just read.
+
+### Key Decisions
+
+1. **Split by action type, not unified panel.** Original plan was to use ConversationPanel for everything. But emails need specific UI (email body display, draft/write mode toggle, reply textarea) that ConversationPanel doesn't have. Meetings work great in ConversationPanel; emails need InsightDetailPanel.
+
+2. **Don't call `scan.executeAction` for emails on click.** The old code called it immediately, which set action state to `in_progress` ("Drafting..." spinner) before the user chose what to do. Now emails only execute when user clicks "Draft" or types a reply.
+
+3. **Insight tasks skip ConversationPanel's implicit auto-start.** ConversationPanel has a heuristic: "fresh task with no messages → auto-start agent." This fired for newly created email insight tasks even when we didn't want it to. Fix: `task.source === 'insight'` tasks only auto-start via explicit `autoStartAgent` prop, not the implicit heuristic.
+
+4. **Stale action timeout (3 min).** Actions stuck in `in_progress` (from failed agents, page refreshes, or the old code path that executed without starting an agent) now time out after 3 minutes. Legacy actions without a `startedAt` timestamp are timed out immediately. Checked every 15 seconds.
+
+### Files Modified
+| File | Change |
+|------|--------|
+| `app/page.tsx` | Split `handleInsightActionClick` by type: meetings create task + ConversationPanel, emails set `selectedInsightActionId` + InsightDetailPanel. Added `handleEmailExecute` for InsightDetailPanel's onExecute. Right panel renders InsightDetailPanel for emails, ConversationPanel for meetings. |
+| `components/insight/InsightView.tsx` | Simplified to pure list — removed internal detail panel rendering, split-view layout, ResizeObserver, `externalDetail`/`onCreateTask`/`onSelectAction` props. Now just calls `onActionClick(action)` and parent handles everything. |
+| `components/insight/index.ts` | Kept InsightDetailPanel export |
+| `components/ConversationPanel.tsx` | Insight tasks (`task.source === 'insight'`) skip implicit auto-start heuristic — only start via explicit `autoStartAgent` prop |
+| `hooks/useInsightScan.ts` | Added `startedAt` timestamp to `LocalActionState`. Added stale action timeout effect (3 min for timestamped, immediate for legacy). |
+| `components/insight/InsightDetailPanel.tsx` | Unchanged — retained for email actions |
+
+### Deleted Components (pre-existing, already removed before this phase)
+- `InsightActionCard.tsx`, `InsightPanel.tsx`, `InsightScanButton.tsx`, `OfferBundle.tsx`, `OfferItem.tsx`, `PrepDetailView.tsx`, `QuickWinCard.tsx`
+
+### Testing
+- [x] Click meeting → ConversationPanel with agent running → results with QuickReferenceCard
+- [x] Already-prepped meeting → shows existing task's ConversationPanel
+- [x] Click email → InsightDetailPanel with email body + "Draft for me" / "Write it myself"
+- [x] Email doesn't auto-draft on click (no spinner, no agent start)
+- [x] Close right panel → back to insight list (insightSelected stays true)
+- [x] Regular tasks unaffected
+- [x] 3-pane layout: TaskList | InsightView | right panel
+- [x] Stale "Preparing..."/"Drafting..." actions time out
+- [x] Build: lint, typecheck, build pass
 
 ---
 

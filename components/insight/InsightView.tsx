@@ -1,30 +1,18 @@
 'use client';
 
 /**
- * InsightView Component - Split Panel Layout
+ * InsightView Component - Pure List
  *
- * Shows Proactive todos list. When an item is selected, splits into:
- * - Left: Proactive todos list (narrower)
- * - Right: Detail panel
- *
- * On narrow screens, detail takes over.
+ * Shows Proactive todos list. When an item is clicked,
+ * parent handles creating/selecting the task and showing ConversationPanel.
  */
 
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { useEffect, useMemo, useCallback } from 'react';
 import { useInsightScan } from '@/hooks/useInsightScan';
 import InsightItem from './InsightItem';
-import InsightDetailPanel from './InsightDetailPanel';
-import PrepDetailView from './PrepDetailView';
-import type { InsightAction } from '@/lib/scan/types';
-import type { Task } from '@/lib/types';
-
-// Sub-view state for InsightView
-type InsightSubView =
-  | { type: 'list' }
-  | { type: 'prep'; task: Task };
+import type { InsightAction, MeetingPrepContext } from '@/lib/scan/types';
 
 import type { LocalActionState } from '@/hooks/useInsightScan';
-import type { AgentQuickInfo } from '@/lib/types';
 
 // Type for the scan object from useInsightScan
 export interface ScanObject {
@@ -37,7 +25,7 @@ export interface ScanObject {
   emailsScanned: number;
   eventsScanned: number;
   actionStates: Record<string, LocalActionState>;
-  startScan: (force?: boolean) => Promise<void>;
+  startScan: (force?: boolean, options?: { protectedSenders?: string[] }) => Promise<void>;
   executeAction: (id: string, input?: string, mode?: 'draft' | 'write') => Promise<{ success: boolean; taskId?: string; taskTitle?: string; customPrompt?: string; error?: string }>;
   dismissAction: (id: string) => Promise<boolean>;
   getEmailContent: (id: string) => { id: string; from: string; subject: string; body: string; date: string } | null;
@@ -45,75 +33,36 @@ export interface ScanObject {
   setActionResult: (id: string, result: LocalActionState['result']) => void;
   setActionFailed: (id: string, error: string) => void;
   getActionTaskId: (id: string) => string | undefined;
+  updateActionChatMessages: (actionId: string, messages: import('@/lib/types').ChatMessage[]) => void;
 }
 
 interface InsightViewProps {
   onClose?: () => void;
-  onCreateTask?: (title: string, customPrompt?: string, actionId?: string) => void;
-  onSelectTask?: (meetingTitle: string) => void;
-  tasks?: Task[];
-  // External control of selection (for 3-pane layout)
-  selectedActionId?: string | null;
-  onSelectAction?: (actionId: string | null) => void;
-  // If true, don't render detail panel (parent will render it)
-  externalDetail?: boolean;
-  // External scan object (if provided, InsightView won't create its own)
+  onActionClick?: (action: InsightAction) => void;
+  tasks?: import('@/lib/types').Task[];
   scan?: ScanObject;
+  selectedActionId?: string | null;
 }
 
 export default function InsightView({
   onClose,
-  onCreateTask,
-  onSelectTask,
+  onActionClick,
   tasks = [],
-  selectedActionId: externalSelectedId,
-  onSelectAction,
-  externalDetail = false,
   scan: externalScan,
+  selectedActionId,
 }: InsightViewProps) {
   const internalScan = useInsightScan();
   const scan = externalScan || internalScan;
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [containerWidth, setContainerWidth] = useState(0);
-
-  // Track container width for responsive behavior
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContainerWidth(entry.contentRect.width);
-      }
-    });
-
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, []);
-
-  // Sub-view state: list (default) or prep detail
-  const [subView, setSubView] = useState<InsightSubView>({ type: 'list' });
-
-  // Selected action ID for detail panel - use external if provided, otherwise internal
-  const [internalSelectedId, setInternalSelectedId] = useState<string | null>(null);
-  const selectedActionId = externalSelectedId !== undefined ? externalSelectedId : internalSelectedId;
-  const setSelectedActionId = onSelectAction || setInternalSelectedId;
-
-  // Determine if we have enough space for split view (list + detail)
-  // When externalDetail is true, we never show detail internally
-  const canShowSplitView = !externalDetail && containerWidth >= 600;
 
   // Group actions by type (meetings vs emails), filtering out organization suggestions
-  const { meetingActions, emailActions, allActions } = useMemo(() => {
+  const { meetingActions, emailActions } = useMemo(() => {
     const meetings: Array<{ action: InsightAction; isPriority: boolean }> = [];
     const emails: Array<{ action: InsightAction; isPriority: boolean }> = [];
-    const all: InsightAction[] = [];
 
     // Helper to categorize action
     const addAction = (action: InsightAction, isPriority: boolean) => {
       // Skip organization/smart_label actions entirely
       if (action.type === 'smart_label') return;
-
-      all.push(action);
 
       if (action.type === 'meeting_prep') {
         meetings.push({ action, isPriority });
@@ -151,64 +100,41 @@ export default function InsightView({
       return new Date(aStart).getTime() - new Date(bStart).getTime();
     });
 
-    return { meetingActions: meetings, emailActions: emails, allActions: all };
+    return { meetingActions: meetings, emailActions: emails };
   }, [scan.quickWin, scan.bundles]);
-
-  // Find selected action
-  const selectedAction = useMemo(() => {
-    if (!selectedActionId) return null;
-    return allActions.find(a => a.id === selectedActionId) || null;
-  }, [selectedActionId, allActions]);
-
-  // NOTE: Removed auto-close effect. Panel now stays open during and after execution.
-  // Action status is tracked in actionStates, not by removal from list.
 
   const hasContent = meetingActions.length > 0 || emailActions.length > 0;
 
-  // Wrapper to handle action execution and task creation
-  const handleExecuteAction = async (actionId: string, userInput?: string, replyMode?: 'draft' | 'write') => {
-    const result = await scan.executeAction(actionId, userInput, replyMode);
-    if (result.success && result.taskTitle && onCreateTask) {
-      // Pass actionId so parent can track mapping
-      onCreateTask(result.taskTitle, result.customPrompt, actionId);
-    }
-    return result;
-  };
-
-  // Handle viewing an already-prepped meeting - switch to prep detail view
-  const handleViewPrep = useCallback((meetingTitle: string) => {
-    // Find the task by matching title pattern "Prepare for: {meetingTitle}"
-    const matchingTask = tasks.find(t =>
-      t.title === `Prepare for: ${meetingTitle}` ||
-      t.title.includes(meetingTitle)
-    );
-    if (matchingTask) {
-      setSubView({ type: 'prep', task: matchingTask });
-    }
-  }, [tasks]);
-
-  // Handle going back to list from prep detail
-  const handleBackToList = useCallback(() => {
-    setSubView({ type: 'list' });
-    setSelectedActionId(null);
-  }, []);
-
-  // Handle opening full task from prep detail
-  const handleOpenFullTask = useCallback(() => {
-    if (subView.type === 'prep' && onSelectTask) {
-      onSelectTask(subView.task.title);
-    }
-  }, [subView, onSelectTask]);
-
-  // Handle item selection - show detail panel
+  // Handle item selection - notify parent
   const handleSelectItem = useCallback((actionId: string) => {
-    setSelectedActionId(actionId);
-  }, []);
+    // Find the action object
+    const allActions: InsightAction[] = [];
+    if (scan.quickWin) allActions.push(scan.quickWin);
+    for (const bundle of scan.bundles) {
+      for (const item of bundle.items) {
+        allActions.push(item);
+      }
+    }
+    const action = allActions.find(a => a.id === actionId);
+    if (action && onActionClick) {
+      onActionClick(action);
+    }
+  }, [onActionClick, scan.quickWin, scan.bundles]);
 
-  // Handle panel close
-  const handleClosePanel = useCallback(() => {
-    setSelectedActionId(null);
-  }, []);
+  // Resolve actionState, falling back to prepped action's state for already-prepped meetings
+  const getResolvedActionState = useCallback((action: InsightAction): LocalActionState | null => {
+    const state = scan.getActionState(action.id);
+    if (state) return state;
+
+    // For already-prepped meetings, fall back to the previous prep's state
+    if (action.type === 'meeting_prep') {
+      const preppedId = (action.context as MeetingPrepContext)?.preppedActionId;
+      if (preppedId) {
+        return scan.getActionState(preppedId);
+      }
+    }
+    return null;
+  }, [scan]);
 
   // Extract protected senders from active "Reply to X" tasks
   const protectedSenders = useMemo(() => {
@@ -237,151 +163,109 @@ export default function InsightView({
     scan.startScan(true, { protectedSenders }); // force=true bypasses cache
   };
 
-  // Render prep detail view if selected
-  if (subView.type === 'prep') {
-    return (
-      <PrepDetailView
-        task={subView.task}
-        onBack={handleBackToList}
-        onOpenFullTask={handleOpenFullTask}
-      />
-    );
-  }
-
-  // Determine layout mode
-  // When externalDetail is true, we never show detail internally (parent renders it)
-  const showDetailPanel = !externalDetail && selectedAction !== null;
-  const showListAndDetail = showDetailPanel && canShowSplitView;
-  const showDetailOnly = showDetailPanel && !canShowSplitView;
-
-  // Render the Proactive todos list with split panel when item selected
+  // Render the Proactive todos list
   return (
-    <div ref={containerRef} className="h-full flex bg-inbox-bg-primary">
-      {/* List column - hide on narrow screens when detail is showing */}
-      {(!showDetailOnly) && (
-        <div
-          className={`
-            flex flex-col overflow-hidden border-r border-gray-200
-            ${showListAndDetail ? 'w-[320px] flex-shrink-0' : 'flex-1'}
-          `}
-        >
-          {/* Scrollable list content */}
-          <div className="flex-1 overflow-y-auto">
-            {/* Scanning State */}
-            {(scan.phase === 'scanning' || scan.phase === 'analyzing') && (
-              <ScanProgress
-                phase={scan.phase}
-                emailsScanned={scan.emailsScanned}
-                eventsScanned={scan.eventsScanned}
-              />
-            )}
+    <div className="h-full flex flex-col bg-inbox-bg-primary">
+      {/* Scrollable list content */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Scanning State */}
+        {(scan.phase === 'scanning' || scan.phase === 'analyzing') && (
+          <ScanProgress
+            phase={scan.phase}
+            emailsScanned={scan.emailsScanned}
+            eventsScanned={scan.eventsScanned}
+          />
+        )}
 
-            {/* Error State */}
-            {scan.phase === 'error' && (
-              <ErrorState
-                error={scan.error || 'Something went wrong'}
-                onRetry={scan.startScan}
-              />
-            )}
+        {/* Error State */}
+        {scan.phase === 'error' && (
+          <ErrorState
+            error={scan.error || 'Something went wrong'}
+            onRetry={scan.startScan}
+          />
+        )}
 
-            {/* Complete State - Grouped by Type */}
-            {scan.phase === 'complete' && (
-              <div className={showListAndDetail ? '' : 'max-w-2xl mx-auto'}>
-                {/* Section Header - "Proactive todos" */}
-                <div className="px-3 py-3 flex items-center gap-3">
-                  <span className="material-symbols-rounded text-inbox-accent text-lg">auto_awesome</span>
-                  <span className="text-inbox-body font-medium text-inbox-text-primary flex-1">Proactive todos</span>
-                  <button
-                    onClick={handleRefresh}
-                    className="p-1 rounded-full hover:bg-inbox-bg-hover transition-colors"
-                    title="Refresh"
-                  >
-                    <span className="material-symbols-rounded text-inbox-text-tertiary text-base">refresh</span>
-                  </button>
-                </div>
+        {/* Complete State - Grouped by Type */}
+        {scan.phase === 'complete' && (
+          <div className="max-w-2xl mx-auto">
+            {/* Section Header - "Proactive todos" */}
+            <div className="px-3 py-3 flex items-center gap-3">
+              <span className="material-symbols-rounded text-inbox-accent text-lg">auto_awesome</span>
+              <span className="text-inbox-body font-medium text-inbox-text-primary flex-1">Proactive todos</span>
+              <button
+                onClick={handleRefresh}
+                className="p-1 rounded-full hover:bg-inbox-bg-hover transition-colors"
+                title="Refresh"
+              >
+                <span className="material-symbols-rounded text-inbox-text-tertiary text-base">refresh</span>
+              </button>
+            </div>
 
-                {/* Greeting - subtle context line */}
-                {scan.greeting && (
-                  <div className="px-3 pb-3 text-inbox-caption text-inbox-text-tertiary">
-                    {scan.greeting}
-                  </div>
-                )}
-
-                {/* Meetings Section */}
-                {meetingActions.length > 0 && (
-                  <div>
-                    <div className="px-3 py-2 bg-[#E8EAED]">
-                      <span className="text-[12px] font-semibold text-[#3C4043] uppercase tracking-wider">
-                        Meetings
-                      </span>
-                    </div>
-                    <div className="divide-y divide-inbox-divider">
-                      {meetingActions.map(({ action, isPriority }) => (
-                        <InsightItem
-                          key={action.id}
-                          action={action}
-                          actionState={scan.getActionState(action.id)}
-                          isPriority={isPriority}
-                          isSelected={action.id === selectedActionId}
-                          onSelect={handleSelectItem}
-                          onDismiss={scan.dismissAction}
-                          onViewPrep={handleViewPrep}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Emails Section */}
-                {emailActions.length > 0 && (
-                  <div>
-                    <div className="px-3 py-2 bg-[#E8EAED]">
-                      <span className="text-[12px] font-semibold text-[#3C4043] uppercase tracking-wider">
-                        Emails
-                      </span>
-                    </div>
-                    <div className="divide-y divide-inbox-divider">
-                      {emailActions.map(({ action, isPriority }) => (
-                        <InsightItem
-                          key={action.id}
-                          action={action}
-                          actionState={scan.getActionState(action.id)}
-                          isPriority={isPriority}
-                          isSelected={action.id === selectedActionId}
-                          onSelect={handleSelectItem}
-                          onDismiss={scan.dismissAction}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Empty State */}
-                {!hasContent && <EmptyState onRetry={scan.startScan} />}
+            {/* Greeting - subtle context line */}
+            {scan.greeting && (
+              <div className="px-3 pb-3 text-inbox-caption text-inbox-text-tertiary">
+                {scan.greeting}
               </div>
             )}
 
-            {/* Idle State */}
-            {scan.phase === 'idle' && (
-              <IdleState onStartScan={scan.startScan} />
+            {/* Meetings Section */}
+            {meetingActions.length > 0 && (
+              <div>
+                <div className="px-3 py-2 bg-[#E8EAED]">
+                  <span className="text-[12px] font-semibold text-[#3C4043] uppercase tracking-wider">
+                    Meetings
+                  </span>
+                </div>
+                <div className="divide-y divide-inbox-divider">
+                  {meetingActions.map(({ action, isPriority }) => (
+                    <InsightItem
+                      key={action.id}
+                      action={action}
+                      actionState={getResolvedActionState(action)}
+                      isPriority={isPriority}
+                      isSelected={action.id === selectedActionId}
+                      onSelect={handleSelectItem}
+                      onDismiss={scan.dismissAction}
+                    />
+                  ))}
+                </div>
+              </div>
             )}
-          </div>
-        </div>
-      )}
 
-      {/* Detail panel - appears alongside list on wide screens, replaces on narrow */}
-      {showDetailPanel && selectedAction && (
-        <div className="flex-1 min-w-0">
-          <InsightDetailPanel
-            action={selectedAction}
-            actionState={scan.getActionState(selectedAction.id)}
-            onExecute={handleExecuteAction}
-            onDismiss={scan.dismissAction}
-            onClose={handleClosePanel}
-            getEmailContent={scan.getEmailContent}
-          />
-        </div>
-      )}
+            {/* Emails Section */}
+            {emailActions.length > 0 && (
+              <div>
+                <div className="px-3 py-2 bg-[#E8EAED]">
+                  <span className="text-[12px] font-semibold text-[#3C4043] uppercase tracking-wider">
+                    Emails
+                  </span>
+                </div>
+                <div className="divide-y divide-inbox-divider">
+                  {emailActions.map(({ action, isPriority }) => (
+                    <InsightItem
+                      key={action.id}
+                      action={action}
+                      actionState={scan.getActionState(action.id)}
+                      isPriority={isPriority}
+                      isSelected={action.id === selectedActionId}
+                      onSelect={handleSelectItem}
+                      onDismiss={scan.dismissAction}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Empty State */}
+            {!hasContent && <EmptyState onRetry={scan.startScan} />}
+          </div>
+        )}
+
+        {/* Idle State */}
+        {scan.phase === 'idle' && (
+          <IdleState onStartScan={scan.startScan} />
+        )}
+      </div>
     </div>
   );
 }

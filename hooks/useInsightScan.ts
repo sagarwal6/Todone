@@ -23,7 +23,7 @@ import type {
   DraftResponseContext,
 } from '@/lib/scan/types';
 
-import type { AgentQuickInfo } from '@/lib/types';
+import type { AgentQuickInfo, ChatMessage } from '@/lib/types';
 
 // Email content cache
 export interface EmailContent {
@@ -58,9 +58,12 @@ export interface LocalActionState {
     message?: string;
     quickInfo?: AgentQuickInfo;
     pendingDrafts?: PendingDraft[];
+    chatMessages?: ChatMessage[];
     error?: string;
   };
   taskId?: string;
+  /** Timestamp when action entered in_progress — used for stale timeout */
+  startedAt?: number;
 }
 
 // Extended state with email cache and action states
@@ -378,6 +381,7 @@ export function useInsightScan() {
         ...prev.actionStates,
         [actionId]: {
           status: 'in_progress',
+          startedAt: Date.now(),
         },
       },
     }));
@@ -673,10 +677,80 @@ export function useInsightScan() {
   }, []);
 
   /**
+   * Update chat messages for an action (follow-up chat in insight detail panel)
+   * Persists to local state and syncs to Supabase
+   */
+  const updateActionChatMessages = useCallback((actionId: string, chatMessages: ChatMessage[]): void => {
+    setState(prev => {
+      const existing = prev.actionStates[actionId];
+      if (!existing) return prev;
+
+      const updatedResult = {
+        ...existing.result,
+        chatMessages,
+      };
+
+      // Sync to database in background
+      syncActionStateToDatabase(actionId, existing.status, updatedResult);
+
+      return {
+        ...prev,
+        actionStates: {
+          ...prev.actionStates,
+          [actionId]: {
+            ...existing,
+            result: updatedResult,
+          },
+        },
+      };
+    });
+  }, []);
+
+  /**
    * Get the taskId associated with an action (for result tracking)
    */
   const getActionTaskId = useCallback((actionId: string): string | undefined => {
     return state.actionStates[actionId]?.taskId;
+  }, [state.actionStates]);
+
+  // Time out stale in_progress actions (3 minutes)
+  useEffect(() => {
+    const STALE_TIMEOUT_MS = 3 * 60 * 1000;
+    const interval = setInterval(() => {
+      const now = Date.now();
+      let hasStale = false;
+
+      for (const [, actionState] of Object.entries(state.actionStates)) {
+        if (
+          actionState.status === 'in_progress' &&
+          (!actionState.startedAt || now - actionState.startedAt > STALE_TIMEOUT_MS)
+        ) {
+          hasStale = true;
+          break;
+        }
+      }
+
+      if (hasStale) {
+        setState(prev => {
+          const updated = { ...prev.actionStates };
+          for (const [actionId, actionState] of Object.entries(updated)) {
+            if (
+              actionState.status === 'in_progress' &&
+              (!actionState.startedAt || now - actionState.startedAt > STALE_TIMEOUT_MS)
+            ) {
+              updated[actionId] = {
+                ...actionState,
+                status: 'failed',
+                result: { error: 'Timed out' },
+              };
+            }
+          }
+          return { ...prev, actionStates: updated };
+        });
+      }
+    }, 15_000); // Check every 15 seconds
+
+    return () => clearInterval(interval);
   }, [state.actionStates]);
 
   return {
@@ -692,6 +766,7 @@ export function useInsightScan() {
     setActionResult,
     setActionFailed,
     getActionTaskId,
+    updateActionChatMessages,
     reconcileWithTasks,
   };
 }

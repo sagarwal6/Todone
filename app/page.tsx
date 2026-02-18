@@ -15,7 +15,7 @@ import { useTasks } from '@/hooks/useTasks';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useInsightScan } from '@/hooks/useInsightScan';
 import { useAgentContext } from '@/contexts/AgentContext';
-import type { InsightAction } from '@/lib/scan/types';
+import type { InsightAction, MeetingPrepContext } from '@/lib/scan/types';
 import type { PendingDraft as AgentPendingDraft, EmailDraft, CalendarEventDraft, AgentProgressEvent } from '@/lib/ai/types';
 import type { PendingDraft as LocalPendingDraft } from '@/hooks/useInsightScan';
 import type { AgentStepSummary } from '@/lib/types';
@@ -214,6 +214,7 @@ function AuthenticatedHome() {
   }, [tasks]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [insightSelected, setInsightSelected] = useState(false);
+  // For email insight actions — show InsightDetailPanel instead of ConversationPanel
   const [selectedInsightActionId, setSelectedInsightActionId] = useState<string | null>(null);
   const [showCapture, setShowCapture] = useState(false);
   const [captureVoice, setCaptureVoice] = useState(false);
@@ -221,14 +222,11 @@ function AuthenticatedHome() {
 
   const selectedTask = selectedTaskId ? tasks.find(t => t.id === selectedTaskId) || null : null;
   const isTaskSelected = selectedTaskId !== null && selectedTask !== null;
-  const isPanelOpen = isTaskSelected || insightSelected;
 
-  // Find selected insight action for 3-pane layout
+  // Find selected insight action for email detail panel
   const selectedInsightAction = useMemo(() => {
     if (!selectedInsightActionId) return null;
-    // Check quickWin
     if (scan.quickWin?.id === selectedInsightActionId) return scan.quickWin;
-    // Check bundles
     for (const bundle of scan.bundles) {
       const found = bundle.items.find(item => item.id === selectedInsightActionId);
       if (found) return found;
@@ -236,8 +234,25 @@ function AuthenticatedHome() {
     return null;
   }, [selectedInsightActionId, scan.quickWin, scan.bundles]);
 
-  // Determine if we should show 3-pane layout (insight + detail selected)
-  const isThreePaneLayout = insightSelected && selectedInsightAction !== null;
+  // Has a right panel open (task ConversationPanel or email InsightDetailPanel)
+  const hasRightPanel = isTaskSelected || selectedInsightAction !== null;
+  const isPanelOpen = hasRightPanel || insightSelected;
+
+  // Compute highlight for the insight list: either the email action or the meeting's mapped action
+  const activeInsightActionId = useMemo(() => {
+    // Direct email selection
+    if (selectedInsightActionId) return selectedInsightActionId;
+    // Meeting task selection — find which action maps to it
+    if (selectedTaskId) {
+      for (const [actionId, taskId] of insightActionTaskMapRef.current.entries()) {
+        if (taskId === selectedTaskId) return actionId;
+      }
+    }
+    return null;
+  }, [selectedInsightActionId, selectedTaskId]);
+
+  // 3-pane: insight list visible + right panel (either ConversationPanel or InsightDetailPanel)
+  const isThreePaneLayout = insightSelected && hasRightPanel;
 
   const counts: Record<ViewMode, number> = {
     active: activeTasks.length,
@@ -256,6 +271,11 @@ function AuthenticatedHome() {
 
     // On desktop, regular tasks use ConversationPanel to start the agent.
     // On mobile, we stay on the task list, so we start the agent here directly.
+    // For insight tasks shown in ConversationPanel, let ConversationPanel handle auto-start.
+    if (task.source === 'insight' && selectedTaskId === task.id) {
+      // ConversationPanel is visible for this task — it will handle auto-start
+      return;
+    }
     if (task.source !== 'insight' && !isMobile) return;
 
     // Check if agent is already running
@@ -317,7 +337,7 @@ function AuthenticatedHome() {
 
     // Clear the auto-start flag
     setAutoStartAgentTaskId(null);
-  }, [autoStartAgentTaskId, tasks, agent, scan, setAgentQuickInfo, addChatMessage, isMobile]);
+  }, [autoStartAgentTaskId, tasks, agent, scan, setAgentQuickInfo, addChatMessage, isMobile, selectedTaskId]);
 
   // Watch for insight task completion and update scan action states
   useEffect(() => {
@@ -360,6 +380,89 @@ function AuthenticatedHome() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [insightTasks.length]);
 
+  // Handle insight action click — meetings create task + ConversationPanel, emails open InsightDetailPanel
+  const handleInsightActionClick = useCallback(async (action: InsightAction) => {
+    // Emails: show InsightDetailPanel directly (no task creation yet)
+    if (action.type !== 'meeting_prep') {
+      setSelectedTaskId(null); // Clear any meeting ConversationPanel
+      setSelectedInsightActionId(action.id);
+      return;
+    }
+
+    // Meetings: create/find task → show ConversationPanel
+    setSelectedInsightActionId(null); // Clear any email detail panel
+
+    // 1. Check if action already has a task via our map
+    const existingTaskId = insightActionTaskMapRef.current.get(action.id);
+    if (existingTaskId) {
+      const existingTask = tasks.find(t => t.id === existingTaskId);
+      if (existingTask) {
+        setSelectedTaskId(existingTaskId);
+        return;
+      }
+    }
+
+    // 2. Check if action has a taskId in scan actionStates
+    const actionState = scan.actionStates[action.id];
+    if (actionState?.taskId) {
+      const existingTask = tasks.find(t => t.id === actionState.taskId);
+      if (existingTask) {
+        insightActionTaskMapRef.current.set(action.id, actionState.taskId);
+        setSelectedTaskId(actionState.taskId);
+        return;
+      }
+    }
+
+    // 3. For already-prepped meetings, check if task exists by title match
+    const meetingCtx = action.context as MeetingPrepContext;
+    if (meetingCtx?.alreadyPrepped) {
+      const preppedId = meetingCtx.preppedActionId;
+      if (preppedId) {
+        const preppedTaskId = insightActionTaskMapRef.current.get(preppedId);
+        if (preppedTaskId) {
+          const existingTask = tasks.find(t => t.id === preppedTaskId);
+          if (existingTask) {
+            insightActionTaskMapRef.current.set(action.id, preppedTaskId);
+            setSelectedTaskId(preppedTaskId);
+            return;
+          }
+        }
+      }
+      // Also try title match
+      const titleMatch = tasks.find(t =>
+        t.source === 'insight' &&
+        t.title.includes(meetingCtx.title || action.headline)
+      );
+      if (titleMatch) {
+        insightActionTaskMapRef.current.set(action.id, titleMatch.id);
+        setSelectedTaskId(titleMatch.id);
+        return;
+      }
+    }
+
+    // 4. New meeting — execute and create task, auto-start agent
+    const result = await scan.executeAction(action.id);
+    if (result.success && result.taskTitle) {
+      const newTask = addTask(result.taskTitle, result.customPrompt, 'insight');
+      insightActionTaskMapRef.current.set(action.id, newTask.id);
+      setAutoStartAgentTaskId(newTask.id);
+      setSelectedTaskId(newTask.id);
+    }
+  }, [tasks, scan, addTask]);
+
+  // Handler for InsightDetailPanel executing an email action (Draft for me / Write it myself)
+  const handleEmailExecute = useCallback(async (actionId: string, userInput?: string, replyMode?: 'draft' | 'write') => {
+    const result = await scan.executeAction(actionId, userInput, replyMode);
+    if (result.success && result.taskTitle) {
+      // Create hidden task with 'insight' source
+      const newTask = addTask(result.taskTitle, result.customPrompt, 'insight');
+      insightActionTaskMapRef.current.set(actionId, newTask.id);
+      // Auto-start the agent for this email task
+      setAutoStartAgentTaskId(newTask.id);
+    }
+    return result;
+  }, [scan, addTask]);
+
   const handleAddTask = useCallback(async (title: string) => {
     const newTask = addTask(title);
     setShowCapture(false);
@@ -378,11 +481,13 @@ function AuthenticatedHome() {
   const handleShowDetails = useCallback((taskId: string) => {
     // Toggle selection - clicking same task again closes detail view
     setInsightSelected(false);
+    setSelectedInsightActionId(null);
     setSelectedTaskId(prev => prev === taskId ? null : taskId);
   }, []);
 
   const handleShowInsights = useCallback(() => {
     setSelectedTaskId(null);
+    setSelectedInsightActionId(null);
     setInsightSelected(true);
     // Start scan with protected senders if idle
     if (scan.phase === 'idle') {
@@ -390,25 +495,17 @@ function AuthenticatedHome() {
     }
   }, [scan, protectedSenders]);
 
-  // Find and select a task by meeting title (for "View prep" in insight scan)
-  const handleSelectPrepTask = useCallback((meetingTitle: string) => {
-    // Task title pattern: "Prepare for: {meetingTitle}"
-    const matchingTask = tasks.find(t =>
-      t.title === `Prepare for: ${meetingTitle}` ||
-      t.title.includes(meetingTitle)
-    );
-    if (matchingTask) {
-      setInsightSelected(false);
-      setSelectedTaskId(matchingTask.id);
-    } else {
-      // If no matching task found, just close the insight panel
-      setInsightSelected(false);
-    }
-  }, [tasks]);
-
   const handleClosePanel = useCallback(() => {
     setSelectedTaskId(null);
+    setSelectedInsightActionId(null);
     setInsightSelected(false);
+  }, []);
+
+  // Close right panel but stay in insights list
+  const handleCloseRightPanelInInsight = useCallback(() => {
+    setSelectedTaskId(null);
+    setSelectedInsightActionId(null);
+    // Keep insightSelected true so user returns to insight list
   }, []);
 
   const currentTasks = viewMode === 'active'
@@ -419,6 +516,47 @@ function AuthenticatedHome() {
 
   // Mobile Layout - Inbox style
   if (isMobile) {
+    // Task detail (meeting ConversationPanel) takes priority over insights view
+    if (isTaskSelected && selectedTask) {
+      return (
+        <div
+          className="fixed inset-0 z-50 bg-inbox-bg-primary flex flex-col animate-slide-in-from-right"
+          style={{ paddingTop: 'env(safe-area-inset-top)' }}
+        >
+          {/* Detail header with back arrow + title */}
+          <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3 border-b border-inbox-divider">
+            <button
+              onClick={viewMode === 'insights' ? handleCloseRightPanelInInsight : handleClosePanel}
+              className="p-2 -ml-2 rounded-full text-inbox-text-secondary hover:bg-inbox-bg-hover transition-colors"
+              aria-label="Back"
+            >
+              <MaterialIcon name="arrow_back" size={24} />
+            </button>
+            <h2 className="flex-1 text-inbox-body font-medium text-inbox-text-primary truncate">
+              {selectedTask.title}
+            </h2>
+          </div>
+          {/* Full ConversationPanel */}
+          <div className="flex-1 overflow-hidden">
+            <ConversationPanel
+              task={selectedTask}
+              onClose={viewMode === 'insights' ? handleCloseRightPanelInInsight : handleClosePanel}
+              onAddChatMessage={addChatMessage}
+              onComplete={completeTask}
+              onArchive={archiveTask}
+              onDelete={deleteTask}
+              onTogglePin={togglePin}
+              onUpdateQuickInfo={setAgentQuickInfo}
+              onUpdateAgentSteps={setAgentSteps}
+              autoStartAgent={autoStartAgentTaskId === selectedTask.id}
+              onAgentStarted={() => setAutoStartAgentTaskId(null)}
+              isMobile
+            />
+          </div>
+        </div>
+      );
+    }
+
     // Show full-screen InsightView when insights tab is selected
     if (viewMode === 'insights') {
       return (
@@ -442,29 +580,9 @@ function AuthenticatedHome() {
           <div className="flex-1 overflow-hidden">
             <InsightView
               onClose={() => setViewMode('active')}
-              onCreateTask={(title, customPrompt, actionId) => {
-                // Create task with 'insight' source so it's hidden from main task list
-                const newTask = addTask(title, customPrompt, 'insight');
-                // Track actionId → taskId mapping for completion callback
-                if (actionId) {
-                  insightActionTaskMapRef.current.set(actionId, newTask.id);
-                }
-                // Stay in insights view - task runs in background
-                // Auto-start the agent for this task
-                setAutoStartAgentTaskId(newTask.id);
-              }}
-              onSelectTask={(taskTitle) => {
-                // Called from "Open full task" in peek panel
-                const matchingTask = tasks.find(t =>
-                  t.title === taskTitle ||
-                  t.title.includes(taskTitle)
-                );
-                if (matchingTask) {
-                  setViewMode('active');
-                  setSelectedTaskId(matchingTask.id);
-                }
-              }}
+              onActionClick={handleInsightActionClick}
               tasks={tasks}
+              selectedActionId={activeInsightActionId}
             />
           </div>
           <FullScreenCapture
@@ -476,47 +594,6 @@ function AuthenticatedHome() {
             onSave={handleAddTask}
             startWithVoice={captureVoice}
           />
-        </div>
-      );
-    }
-
-    // Full-screen task detail view (replaces BottomSheet)
-    if (isTaskSelected && selectedTask) {
-      return (
-        <div
-          className="fixed inset-0 z-50 bg-inbox-bg-primary flex flex-col animate-slide-in-from-right"
-          style={{ paddingTop: 'env(safe-area-inset-top)' }}
-        >
-          {/* Detail header with back arrow + title */}
-          <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3 border-b border-inbox-divider">
-            <button
-              onClick={handleClosePanel}
-              className="p-2 -ml-2 rounded-full text-inbox-text-secondary hover:bg-inbox-bg-hover transition-colors"
-              aria-label="Back"
-            >
-              <MaterialIcon name="arrow_back" size={24} />
-            </button>
-            <h2 className="flex-1 text-inbox-body font-medium text-inbox-text-primary truncate">
-              {selectedTask.title}
-            </h2>
-          </div>
-          {/* Full ConversationPanel */}
-          <div className="flex-1 overflow-hidden">
-            <ConversationPanel
-              task={selectedTask}
-              onClose={handleClosePanel}
-              onAddChatMessage={addChatMessage}
-              onComplete={completeTask}
-              onArchive={archiveTask}
-              onDelete={deleteTask}
-              onTogglePin={togglePin}
-              onUpdateQuickInfo={setAgentQuickInfo}
-              onUpdateAgentSteps={setAgentSteps}
-              autoStartAgent={autoStartAgentTaskId === selectedTask.id}
-              onAgentStarted={() => setAutoStartAgentTaskId(null)}
-              isMobile
-            />
-          </div>
         </div>
       );
     }
@@ -700,7 +777,7 @@ function AuthenticatedHome() {
           </div>
         </div>
 
-        {/* Middle Panel - InsightView (in 3-pane layout, just the list) */}
+        {/* Middle Panel - InsightView (list only) */}
         {insightSelected && (
           <div className={`
             flex flex-col bg-inbox-bg-primary border-r border-inbox-divider
@@ -708,57 +785,31 @@ function AuthenticatedHome() {
           `}>
             <InsightView
               onClose={handleClosePanel}
-              onCreateTask={(title, customPrompt, actionId) => {
-                // Create task with 'insight' source so it's hidden from main task list
-                const newTask = addTask(title, customPrompt, 'insight');
-                // Track actionId → taskId mapping for completion callback
-                if (actionId) {
-                  insightActionTaskMapRef.current.set(actionId, newTask.id);
-                }
-                // Stay in Heads up section - panel stays open
-                // Agent runs in background via AgentContext
-                // Auto-start the agent for this task (runs in background)
-                setAutoStartAgentTaskId(newTask.id);
-              }}
-              onSelectTask={handleSelectPrepTask}
+              onActionClick={handleInsightActionClick}
               tasks={tasks}
               scan={scan}
-              selectedActionId={selectedInsightActionId}
-              onSelectAction={setSelectedInsightActionId}
-              externalDetail={true}
+              selectedActionId={activeInsightActionId}
             />
           </div>
         )}
 
-        {/* Right Panel - Task Details OR Insight Detail */}
-        {(isTaskSelected || isThreePaneLayout) && (
+        {/* Right Panel - ConversationPanel for meetings, InsightDetailPanel for emails */}
+        {hasRightPanel && (
           <div className="flex-1 min-w-0 h-full overflow-hidden bg-inbox-bg-primary">
-            {isThreePaneLayout && selectedInsightAction ? (
+            {selectedInsightAction && selectedInsightAction.type !== 'meeting_prep' ? (
               <InsightDetailPanel
                 action={selectedInsightAction}
                 actionState={scan.getActionState(selectedInsightAction.id)}
-                onExecute={async (actionId, userInput, replyMode) => {
-                  const result = await scan.executeAction(actionId, userInput, replyMode);
-                  if (result.success && result.taskTitle) {
-                    // Create hidden task with 'insight' source
-                    const newTask = addTask(result.taskTitle, result.customPrompt, 'insight');
-                    // Track actionId → taskId mapping for completion callback
-                    insightActionTaskMapRef.current.set(actionId, newTask.id);
-                    // NOTE: Panel stays open - we do NOT clear selectedInsightActionId
-                    // The action state is tracked in scan.actionStates
-                    // Auto-start the agent for this task (runs in background)
-                    setAutoStartAgentTaskId(newTask.id);
-                  }
-                  return result;
-                }}
+                onExecute={handleEmailExecute}
                 onDismiss={scan.dismissAction}
-                onClose={() => setSelectedInsightActionId(null)}
+                onClose={handleCloseRightPanelInInsight}
                 getEmailContent={scan.getEmailContent}
+                onChatUpdate={scan.updateActionChatMessages}
               />
             ) : selectedTask ? (
               <ConversationPanel
                 task={selectedTask}
-                onClose={handleClosePanel}
+                onClose={insightSelected ? handleCloseRightPanelInInsight : handleClosePanel}
                 onAddChatMessage={addChatMessage}
                 onComplete={completeTask}
                 onArchive={archiveTask}
@@ -766,7 +817,7 @@ function AuthenticatedHome() {
                 onTogglePin={togglePin}
                 onUpdateQuickInfo={setAgentQuickInfo}
                 onUpdateAgentSteps={setAgentSteps}
-                                autoStartAgent={autoStartAgentTaskId === selectedTask.id}
+                autoStartAgent={autoStartAgentTaskId === selectedTask.id}
                 onAgentStarted={() => setAutoStartAgentTaskId(null)}
               />
             ) : null}

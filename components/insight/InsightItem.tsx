@@ -24,7 +24,6 @@ interface InsightItemProps {
   isSelected?: boolean;
   onSelect: (actionId: string) => void;
   onDismiss: (actionId: string) => Promise<boolean>;
-  onViewPrep?: (meetingTitle: string) => void;
 }
 
 /**
@@ -115,7 +114,6 @@ export default function InsightItem({
   isSelected,
   onSelect,
   onDismiss,
-  onViewPrep,
 }: InsightItemProps) {
   const [isDismissing, setIsDismissing] = useState(false);
 
@@ -129,17 +127,10 @@ export default function InsightItem({
 
   const { senderName, subject, timeAgo, suggestion } = getDisplayInfo(action);
 
-  // Handle row click - select or view prep
+  // Handle row click - always open in detail panel
   const handleRowClick = useCallback(() => {
-    // If already prepped, navigate to the task
-    if (isAlreadyPrepped && meetingContext?.title && onViewPrep) {
-      onViewPrep(meetingContext.title);
-      return;
-    }
-
-    // Otherwise, select this item to show in panel
     onSelect(action.id);
-  }, [isAlreadyPrepped, meetingContext?.title, onViewPrep, onSelect, action.id]);
+  }, [onSelect, action.id]);
 
   const handleDismiss = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent row click
