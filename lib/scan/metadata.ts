@@ -543,8 +543,8 @@ function findEventsNeedingPrep(
     const startTime = new Date(event.start.dateTime || event.start.date || '').getTime();
     const hoursUntil = (startTime - now) / (1000 * 60 * 60);
 
-    // Only consider events 0-48 hours out
-    if (hoursUntil < 0 || hoursUntil > 48) continue;
+    // Consider events up to 7 days out (168 hours)
+    if (hoursUntil < 0 || hoursUntil > 168) continue;
 
     // Must have attendees (not just self)
     const externalAttendees = (event.attendees || []).filter(a => !a.self);

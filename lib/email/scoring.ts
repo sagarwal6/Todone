@@ -40,6 +40,8 @@ const SCORE_MODIFIERS = {
   MANY_RECIPIENTS: -3,       // 5+ recipients
   MARKETING_SUBJECT: -4,     // Subject matches promo patterns
 
+  SELF_SENT: -20,            // User sent to themselves (reminder, not actionable inbox item)
+
   // These often co-occur, so values are reduced to prevent over-penalizing
   MAILING_LIST: -6,          // Has List-Unsubscribe header (was -8)
   AUTOMATED_SENDER: -4,      // noreply sender or generic prefix (was -6)
@@ -90,6 +92,7 @@ const MARKETING_PATTERNS = [
   /\bdaily\b.*\b(apps?|news|update)/i, // "Daily Apps", "Daily News"
   /\bweekly\b.*\b(apps?|news|update|roundup)/i, // "Weekly Update"
   /\bdigest\b/i,                    // any "digest"
+  /\b(morning|evening|daily|weekly)\s*brief\b/i, // "morning brief", "evening brief", "daily brief"
   // Note: Removed "alerts" and "notifications" - too aggressive, catches legitimate business alerts
   // Goal-tracking/habit services
   /smart\s*goals?/i,                // "smart goals", "Smart Goal"
@@ -343,6 +346,10 @@ export function extractSignals(
   // Extract Gmail category
   const gmailCategory = extractGmailCategory(labelIds);
 
+  // Self-sent: user emailing themselves (reminders, notes-to-self)
+  const fromEmailAddr = extractEmailAddress(rawHeaders.from).toLowerCase();
+  const isSelfSent = fromEmailAddr === userEmailLower;
+
   // Detect likely human sender (no automation flags)
   // This helps prioritize genuine human correspondence over receipts/notifications
   // Note: Don't check isHtmlOnly here - real people often send HTML-formatted emails
@@ -352,6 +359,7 @@ export function extractSignals(
     isDirect,
     isCc: isInCc,
     isBcc: isInBcc,
+    isSelfSent,
     isMailingList,
     isAutomated,
     isPlatform,
@@ -380,10 +388,12 @@ export function getScoreBreakdown(signals: EmailSignals): { modifier: string; va
   const breakdown: { modifier: string; value: number }[] = [];
 
   // Positive signals
-  if (signals.isDirect) {
+  // Don't award DIRECT/ONE_TO_ONE for mailing lists — mass emails send to individual
+  // addresses but aren't meaningfully "direct" human correspondence
+  if (signals.isDirect && !signals.isMailingList) {
     breakdown.push({ modifier: 'DIRECT_RECIPIENT', value: SCORE_MODIFIERS.DIRECT_RECIPIENT });
   }
-  if (signals.isOneToOne) {
+  if (signals.isOneToOne && !signals.isMailingList) {
     breakdown.push({ modifier: 'ONE_TO_ONE', value: SCORE_MODIFIERS.ONE_TO_ONE });
   }
   if (signals.isThread) {
@@ -403,6 +413,9 @@ export function getScoreBreakdown(signals: EmailSignals): { modifier: string; va
   }
 
   // Negative signals
+  if (signals.isSelfSent) {
+    breakdown.push({ modifier: 'SELF_SENT', value: SCORE_MODIFIERS.SELF_SENT });
+  }
   if (signals.isCc) {
     breakdown.push({ modifier: 'CC_RECIPIENT', value: SCORE_MODIFIERS.CC_RECIPIENT });
   }

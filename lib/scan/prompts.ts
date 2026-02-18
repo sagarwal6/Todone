@@ -478,41 +478,58 @@ function getMeetingPrepPrompt(action: InsightAction): string {
 
   return `Prepare the user for their upcoming meeting.
 
-MEETING CONTEXT:
-- Title: ${ctx.title}
-- Starts in: ${ctx.hoursUntil} hours (${ctx.start})
-- Attendees: ${ctx.attendees.join(', ')}
-${ctx.description ? `- Description: ${ctx.description}` : ''}
+MEETING: "${ctx.title}" at ${ctx.start} (in ${ctx.hoursUntil} hours)
+ATTENDEES: ${ctx.attendees.join(', ')}
+${ctx.description ? `DESCRIPTION: ${ctx.description}` : ''}
 
-INSTRUCTIONS:
+STEP 1: Call meeting_prep with the attendees. It returns per-attendee research with relationship strength, recent thread IDs, scheduling context, and web research.
 
-STEP 1: Check email history
-- Search Gmail for emails with each attendee
-- Count how many emails exist with them (approximate)
-- Note: If <5 emails with someone, they're an UNFAMILIAR CONTACT
+STEP 2: This is the most important step — go DEEP on the person:
 
-STEP 2: For UNFAMILIAR CONTACTS, do deep research
-For anyone the user doesn't email with regularly, find:
-- Their LinkedIn profile (search: "[name] [company] linkedin")
-- Recent news about them or their company (search: "[name]" or "[company] news")
-- Their X/Twitter profile if findable (search: "[name] twitter" or "[name] X")
-- Any recent LinkedIn posts they wrote (often in search results)
-- Their role, background, what they care about
+FOR NEW CONTACTS (relationship: "new"):
+The user is meeting this person for the first time. They need to KNOW them before walking in — not click through to LinkedIn.
+- web_search each company/org the person founded, led, or worked at. For EACH one, get: what it does, scale/outcome (IPO? acquired? raised $X?), the person's role there.
+- web_search "[person name] interview OR podcast OR talk OR article" for their thinking, opinions, what they care about
+- web_search "[their current org] news" for recent developments
+- If meeting_prep returned a LinkedIn URL, web_fetch it to extract their full career narrative
+- The brief must tell the person's STORY — not a list of job titles
 
-STEP 3: For FAMILIAR contacts
-- Summarize recent email threads and context
-- Note any pending items or open questions
+FOR FAMILIAR CONTACTS (relationship: "familiar" or "close"):
+- The meeting_prep result includes recentConversations (up to 8 threads for heavy correspondents) with full thread content, action items, attachments, and links already extracted
+- Synthesize ALL conversations into a coherent picture: what projects are active, what's pending, what needs decisions
+- If there are action items, highlight which are still open vs resolved
+- If there are attachments or shared links, mention them as context ("they shared [deck.pdf] last week", "the proposal at [url]")
+- Group related threads by topic/project if there are many
+- If more context is needed (high email volume, conversations reference older work), gmail_search for older threads
+- The prep IS the email context — the user knows who this person is
 
-STEP 4: Compile the prep brief
-Provide a structured summary:
-1. **Who you're meeting** - Name, role, company, relationship status (new contact vs. existing)
-2. **Background** - For unfamiliar contacts: their career, company, recent activity
-3. **Context** - What you've discussed before OR why they might be meeting
-4. **Talking points** - 2-3 suggested topics based on context
-5. **Links** - Include LinkedIn/X profile URLs you found
+STEP 3: Present the final brief. Adapt format to the relationship:
 
-Be thorough for new contacts - the user needs to walk in prepared.
-Be brief for familiar contacts - just surface relevant context.`;
+FIRST MEETING — the brief should read like a mini-profile:
+- **Context** — one sentence on how the meeting was set up (not a timeline)
+- **[Person Name]** — their story. Current role. Then walk through their career: for EACH notable role/company, a sentence on what the company does and what they did there. Include outcomes (IPO, acquisition, funding, scale). This section should be 8-15 lines — substantial. End with education if notable. Include [LinkedIn](url).
+- **[Their Organization]** — what it does, model, scale. Recent news (funding, deals, expansions) with [source](url) links. [Website](url).
+- **Talking points** — 4-5 specific topics based on research, not generic
+- **Contact & logistics** — email, phone, EA, location, duration
+
+ONGOING RELATIONSHIP — lead with what's active:
+- **What you've been discussing** — synthesize the recentConversations data. What's the project/deal/topic? Include [thread links](gmail_url) so user can jump in.
+- **Open items** — action items from recent threads, pending decisions, unanswered questions, deadlines
+- **Shared materials** — mention any attachments (docs, decks, spreadsheets) and links shared recently — these are likely relevant to the meeting
+- **Talking points** — based on what needs resolution
+
+RECURRING MEETING:
+- **Since last time** — synthesize recentConversations: what's happened, what's changed, any shared docs/links
+- **Open items** — action items from recent threads carried forward, pending decisions
+- **Shared materials** — recent attachments and links that may be relevant
+- **Agenda** — what to cover
+
+RULES:
+- The user should NOT need to click any link to understand the person — the research should BE in the brief
+- Never just list company names — always include what the company does
+- Scheduling details (rescheduled 3 times, EA coordinated) get ONE sentence, not a timeline
+- Include [clickable links](url) for deep-dives: LinkedIn, company sites, news articles, [email threads](https://mail.google.com/mail/u/0/#inbox/THREAD_ID)
+- The brief can be long — thoroughness beats brevity for meeting prep`;
 }
 
 function getFollowUpPrompt(action: InsightAction): string {

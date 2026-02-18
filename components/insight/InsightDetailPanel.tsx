@@ -666,12 +666,22 @@ export default function InsightDetailPanel({
             )}
 
             {isCompleted && (
-              <button
-                onClick={onClose}
-                className="w-full py-3 bg-gray-100 hover:bg-gray-200 rounded-lg text-[14px] font-medium text-gray-700 transition-colors"
-              >
-                Done
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={onClose}
+                  className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 rounded-lg text-[14px] font-medium text-gray-700 transition-colors"
+                >
+                  Done
+                </button>
+                <button
+                  onClick={handleExecuteMeeting}
+                  className="py-3 px-4 bg-gray-100 hover:bg-gray-200 rounded-lg text-[14px] font-medium text-gray-500 transition-colors flex items-center gap-1.5"
+                  title="Research again with fresh data"
+                >
+                  <span className="material-symbols-rounded text-base">refresh</span>
+                  Re-prep
+                </button>
+              </div>
             )}
 
             {!isInProgress && !isExecutingMeeting && !isCompleted && !hasFailed && (

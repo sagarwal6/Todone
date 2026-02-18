@@ -19,6 +19,7 @@ export interface EmailSignals {
   isHtmlOnly: boolean;        // pure HTML email with no meaningful text (newsletters)
   isPersonalDomain: boolean;  // from gmail.com, outlook.com, etc. (likely real person)
   isHumanSender: boolean;     // no automation flags (not automated, not platform, not mailing list, not HTML-only)
+  isSelfSent: boolean;        // user sent this to themselves (reminder)
   isOneToOne: boolean;        // exactly 1 sender, 1 recipient
   recipientCount: number;     // total To + CC recipients
   isThread: boolean;          // part of an existing conversation

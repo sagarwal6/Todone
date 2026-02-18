@@ -2,9 +2,9 @@
 
 ## Status
 
-All code phases complete (1, 1b, 2, 3, 4, 5, 6, 7, 9, 11, 12, 13). Phase 8 (end-to-end testing) in progress.
-Phase 12 (email triage & scoring fixes) complete — server-side triage broadening, scoring improvements, UI bug fixes.
-Phase 13 (calendar pattern detection) complete — recurring meeting scoring, pagination, timezone fix, title normalization.
+All code phases complete (1, 1b, 2, 3, 4, 5, 6, 7, 9, 11, 12, 13, 14, 15). Phase 8 (end-to-end testing) in progress.
+Phase 15 (gmail_triage compound tool) complete — server-side search+score+preview in one call, saves 2-3 agent iterations per triage task.
+Phase 15 also included scoring fixes: self-sent emails deprioritized (-20), mailing lists no longer get DIRECT_RECIPIENT bonus, "morning/evening brief" pattern added to marketing detection.
 
 ## Lessons Learned
 
@@ -368,6 +368,157 @@ Switched scan analysis model from Sonnet 4 to Haiku 3.5. ~4x cost reduction. Rev
 
 ---
 
+---
+
+## Phase 14: Meeting Prep — Deep Research & Agent Tool
+
+**Status: Complete**
+
+### Problem
+Meeting prep existed in the insight scan pipeline (`meeting_prep` action type) but produced weak results. The prompt told the agent to search emails and do web research, but the agent didn't go deep enough — no structured person research, no company info, no actionable links. Also no dedicated tool, so "prep for my 2pm meeting" required the agent to figure it out from scratch.
+
+### Solution
+1. **New `meeting_prep` compound tool** — server-side orchestration that runs `contacts_analyze` + multiple web searches per attendee in parallel. More reliable than hoping the agent chains 8-10 tool calls correctly.
+2. **Simplified scan prompt** — `getMeetingPrepPrompt()` now just tells the agent to call the tool.
+
+### Key Design Decisions
+- **Parallel execution per attendee** (Promise.all) — 3-person meeting doesn't take 3x as long
+- **Adaptive depth**: familiar contacts (HIGH/MEDIUM strength) get communication context only; unfamiliar contacts (LOW/NONE) get deep web research (LinkedIn, Twitter, company news)
+- **Company research** only for unfamiliar contacts with identifiable company domain
+- **120s timeout** — compound tool needs more time than individual tools
+- **8000 char limit** — truncates bios/company info to fit tool result cap
+
+### Files Modified
+| File | Change |
+|------|--------|
+| `lib/ai/tools.ts` | Added `meetingPrepTool` definition, added to `agenticTools` and `READ_ONLY_TOOLS` |
+| `lib/ai/execute-tool.ts` | Added `executeMeetingPrep()` with per-attendee parallel research |
+| `lib/scan/prompts.ts` | Simplified `getMeetingPrepPrompt()` to use the tool |
+| `lib/ai/types.ts` | Added `meeting_prep: 120_000` timeout |
+
+### Testing
+- [ ] Insight scan: trigger scan with upcoming meeting with external attendees → meeting_prep card appears → click "Do this" → agent calls meeting_prep tool → returns structured brief
+- [ ] Direct task: "Prep for my meeting with [name] tomorrow" → agent finds meeting on calendar → calls meeting_prep → presents research
+- [ ] Familiar contact: shows communication history, skips deep web research
+- [ ] Unfamiliar contact: shows LinkedIn, Twitter, company info, recent news
+- [ ] Multiple attendees: researched in parallel, results under 8000 chars
+- [ ] No meeting found: agent says so, doesn't fabricate
+
+---
+
+## Phase 15: `gmail_triage` Compound Tool — Server-Side Search + Read (DONE)
+
+**Status: Complete**
+
+### Problem
+Cost analysis shows **cache writes are 60% of total spend** ($3.09 of $5.10). Each agent iteration adds ~1,855 tokens of cache writes at $3.75/M. The most common agent pattern is triage: `gmail_search` → `gmail_read` x2-3 → respond (3-5 iterations, ~$0.03-0.06/task). By consolidating search + read into a single server-side tool, we save 2-3 iterations and their cache writes.
+
+### Solution
+New `gmail_triage` compound tool that reuses existing `gmail.searchEmails()`, `scoreEmails()`, and `readRecentThreads()` — no new Google API calls, just orchestration.
+
+**Current flow (3-5 iterations):**
+1. Agent calls `gmail_search` (broad triage query)
+2. Agent sees HIGH-priority email list, decides to read top 2-3
+3. Agent calls `gmail_read` on thread 1
+4. Agent calls `gmail_read` on thread 2 (maybe 3)
+5. Agent synthesizes and responds
+
+**New flow (1-2 iterations):**
+1. Agent calls `gmail_triage` → gets scored emails + top thread previews in one call
+2. Agent synthesizes and responds (or follows up on gaps)
+
+**Estimated savings:** ~$0.02/triage task × ~40% of tasks = meaningful at scale.
+
+### Tool Definition
+```
+gmail_triage: {
+  name: 'gmail_triage',
+  description: 'Triage inbox — search, score, and preview top emails in one call...',
+  input_schema: {
+    query: string (optional) - Gmail search query, defaults to 'in:inbox newer_than:3d'
+    max_results: number (optional) - max emails to search, default 30
+    preview_count: number (optional) - how many top threads to read in full, default 3
+  }
+}
+```
+
+### Implementation (`executeGmailTriage` in execute-tool.ts)
+
+1. **Search phase** (parallel): Main query + `is:unread newer_than:21d` broadening, deduplicated by email ID
+2. **Score phase**: `scoreEmails()` → filter to HIGH tier only
+3. **Preview phase** (parallel): Top N HIGH-priority threads read via `readRecentThreads()` — reuses the same thread reading + extraction logic from meeting_prep (action items, attachments, links, PII redaction)
+4. **Return** structured result: `highPriorityEmails` (all HIGH, metadata), `threadPreviews` (full content for top N), `tierSummary`, `totalSearched`, `gaps` (unpreviewed HIGH thread IDs)
+
+### Key Design Decisions
+- **Reuses `readRecentThreads()`** from meeting_prep — same action item detection, attachment extraction, link extraction, PII redaction
+- **Doesn't replace `gmail_search`** — `gmail_triage` is for broad inbox queries; `gmail_search` remains for specific person/topic searches
+- **Updated `gmail_search` description** to direct broad triage queries to `gmail_triage` instead
+- **Truncation limit: 10,000 chars** — more than regular tools (8K) but less than meeting_prep (12K)
+- **Default preview_count: 3** — covers most triage needs; agent can request more
+- **Timeout: 30,000ms** — searches + 3 reads complete well within this
+- **Tool placed before `meetingPrepTool` in array** — so `meetingPrepTool` stays last with its `cache_control` breakpoint
+
+### Files Modified
+| File | Change |
+|------|--------|
+| `lib/ai/tools.ts` | Added `gmailTriageTool` definition, added to `agenticTools` and `READ_ONLY_TOOLS`, updated `gmail_search` description to mention `gmail_triage` |
+| `lib/ai/execute-tool.ts` | Added `executeGmailTriage()` — parallel search, scoring, parallel thread reads, gaps array |
+| `lib/ai/anthropic.ts` | Added `gmail_triage` to truncation limit mapping (10K) |
+| `lib/ai/types.ts` | Added `gmail_triage: 30_000` to `toolTimeouts` |
+
+### Scoring Fixes (discovered during testing)
+
+**Problem:** `gmail_triage` surfaced low-priority items (self-reminders, CNN newsletter) that `gmail_search` had hidden because the agent used to filter during the read step. With the compound tool, everything comes pre-read so scoring must be tighter.
+
+**Fixes applied:**
+1. **`SELF_SENT: -20`** — emails where `from == userEmail` get heavy penalty (self-reminders drop from ~29 to ~9)
+2. **`DIRECT_RECIPIENT` suppressed for mailing lists** — `List-Unsubscribe` header means mass email, so `DIRECT_RECIPIENT(+12)` and `ONE_TO_ONE(+5)` don't apply. CNN newsletter drops from ~13 to ~-3 (SKIP).
+3. **Marketing pattern: `(morning|evening|daily|weekly) brief`** — catches news brief newsletters.
+
+**Additional files modified:**
+| File | Change |
+|------|--------|
+| `lib/email/scoring.ts` | Added `SELF_SENT` modifier, suppressed DIRECT/ONE_TO_ONE for mailing lists, added brief pattern |
+| `lib/email/types.ts` | Added `isSelfSent` to `EmailSignals` interface |
+
+### Testing
+- [x] "What needs my attention" → agent calls `gmail_triage` → gets previews in 1 call → responds in 1-2 iterations total
+- [x] CNN newsletter filtered out (was showing as HIGH, now SKIP)
+- [x] Self-reminder filtered out (was showing as HIGH, now LOW)
+- [ ] "Email from Tim about the project" → agent should still use `gmail_search` (specific query, not triage)
+- [ ] Verify cost: triage tasks should drop from 3-5 iterations to 1-2
+- [ ] Verify thread previews include action items, attachments, links
+
+---
+
 ## Future: Haiku Routing for Task Execution
 
 Not now — need usage data first. If simple tasks (≤1 tool call) >40% of volume, route to Haiku.
+
+---
+
+## Future: Automated Agent Testing
+
+### Problem
+All agent testing is manual — trigger scans, type tasks, visually inspect results. This is slow, unreliable, and doesn't catch regressions. Each phase adds more test cases that need to be verified after every change.
+
+### Approaches to Investigate
+
+1. **Recorded fixtures + replay**: Record real Google API responses (emails, calendar events, contacts) as JSON fixtures. Replay them in tests by mocking the Google API layer. This tests the full agent loop (tool selection, orchestration, result formatting) without live API calls.
+
+2. **LLM-as-judge**: Run the agent on canned tasks, then use a separate LLM call to evaluate the output against criteria (e.g., "Does the meeting prep include LinkedIn URLs for unfamiliar contacts?", "Did the triage only include HIGH priority emails?"). Slower but catches quality regressions that assertions miss.
+
+3. **Tool call sequence assertions**: For known tasks, assert that the agent called the right tools in the right order. E.g., "prep for meeting" should call `calendar_list` then `meeting_prep`. Doesn't validate output quality but catches broken tool routing.
+
+4. **Snapshot testing**: Run agent on fixture data, snapshot the output. Diff against previous run. Flag changes for human review. Good for catching unintended regressions from prompt or scoring changes.
+
+### Key Challenges
+- Google OAuth tokens expire — tests need either fixtures or a test account with long-lived tokens
+- Agent output is non-deterministic (LLM responses vary) — need fuzzy assertions
+- Some tests require real web search results (meeting prep web research) — need to decide what to mock vs. hit live
+- Cost: each full agent run costs ~$0.02-0.05 in API calls — CI bill adds up
+
+### Next Steps
+- Start with approach 1 (fixtures + replay) for the core tool execution layer
+- Add approach 3 (tool call assertions) for agent loop behavior
+- Consider approach 2 (LLM-as-judge) for quality-sensitive features like meeting prep and email drafts

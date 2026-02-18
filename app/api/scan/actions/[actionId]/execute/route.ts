@@ -81,8 +81,8 @@ export async function POST(
     });
   }
 
-  // Check if already completed (but allow retry of in_progress)
-  if (action.status === 'completed') {
+  // Check if already completed (but allow retry of in_progress and re-prep of meeting_prep)
+  if (action.status === 'completed' && action.type !== 'meeting_prep') {
     return new Response(JSON.stringify({
       error: 'Action already completed',
       status: action.status,

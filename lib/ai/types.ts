@@ -101,6 +101,7 @@ export const DEFAULT_AGENT_CONFIG: AgentConfig = {
     gmail_search: 10_000,
     gmail_read: 5_000,
     gmail_draft: 5_000,
+    gmail_triage: 30_000,
     gmail_send: 10_000,
     calendar_list: 5_000,
     calendar_create: 10_000,
@@ -108,6 +109,7 @@ export const DEFAULT_AGENT_CONFIG: AgentConfig = {
     contacts_analyze: 45_000,
     web_search: 15_000,
     web_fetch: 20_000,
+    meeting_prep: 120_000,
   },
   defaultToolTimeout: 30_000,
   maxIterations: 30, // Allow more iterations for complex tasks

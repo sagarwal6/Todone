@@ -13,7 +13,7 @@ import type { Tool } from '@anthropic-ai/sdk/resources/messages';
  */
 export const gmailSearchTool: Tool = {
   name: 'gmail_search',
-  description: `Search Gmail inbox. Results are automatically scored by priority: HIGH = direct 1:1 messages (mention first), MEDIUM = relevant. Bulk/newsletters are filtered out — only actionable emails are returned. Each result includes a threadId — always build Gmail links so users can tap to open: [Subject](https://mail.google.com/mail/u/0/#inbox/THREAD_ID). Search as many times as needed to fully answer the question. For person + topic searches (e.g., "email from Tim about working together"): search recent first ("from:tim newer_than:2y"), then read promising threads. Topic words are hints — the person may have used different phrasing, so don't require exact keyword matches in the query. If the first search only returns old results, broaden or try without topic keywords. For triage/attention queries: use max_results: 30 (not default 10) to catch everything. The tool automatically includes unread emails from the past 21 days when it detects a triage query, so one search is sufficient. Present like a CEO briefing — only items needing a response or decision. Translate user intent to Gmail operators. Supports: from:, to:, subject:, in:inbox, is:unread, has:attachment, newer_than:, after:, before:.`,
+  description: `Search Gmail inbox for specific person/topic queries. For broad triage ("what needs my attention", "check my inbox"), use gmail_triage instead — it searches, scores, and previews top threads in one call. Results are automatically scored by priority: HIGH = direct 1:1 messages (mention first), MEDIUM = relevant. Bulk/newsletters are filtered out — only actionable emails are returned. Each result includes a threadId — always build Gmail links so users can tap to open: [Subject](https://mail.google.com/mail/u/0/#inbox/THREAD_ID). Search as many times as needed to fully answer the question. For person + topic searches (e.g., "email from Tim about working together"): search recent first ("from:tim newer_than:2y"), then read promising threads. Topic words are hints — the person may have used different phrasing, so don't require exact keyword matches in the query. If the first search only returns old results, broaden or try without topic keywords. Present like a CEO briefing — only items needing a response or decision. Translate user intent to Gmail operators. Supports: from:, to:, subject:, in:inbox, is:unread, has:attachment, newer_than:, after:, before:.`,
   input_schema: {
     type: 'object' as const,
     properties: {
@@ -291,6 +291,73 @@ export const webFetchTool: Tool = {
     },
     required: ['url'],
   },
+};
+
+/**
+ * Gmail Triage Tool
+ * Compound tool: search + score + preview top threads in one call
+ */
+export const gmailTriageTool: Tool = {
+  name: 'gmail_triage',
+  description: `Triage inbox — search, score, and preview top emails in one call. Returns scored HIGH-priority emails with full thread previews for the top results. Use for "what needs my attention", "check my inbox", "any urgent emails" type queries. For specific person/topic searches, use gmail_search instead.`,
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      query: {
+        type: 'string',
+        description: 'Gmail search query. Defaults to broad inbox triage (in:inbox newer_than:3d) if not specified.',
+      },
+      max_results: {
+        type: 'number',
+        description: 'Maximum emails to search. Default: 30',
+        minimum: 1,
+        maximum: 50,
+      },
+      preview_count: {
+        type: 'number',
+        description: 'How many top HIGH-priority threads to read in full. Default: 3',
+        minimum: 1,
+        maximum: 10,
+      },
+    },
+    required: [],
+  },
+};
+
+/**
+ * Meeting Prep Tool
+ * Research attendees and prepare a comprehensive meeting brief
+ */
+export const meetingPrepTool: Tool = {
+  name: 'meeting_prep',
+  description: `Research attendees and prepare a comprehensive meeting brief. Use when user asks to prep for a meeting, or when preparing for an upcoming calendar event. Does parallel deep research per attendee: contacts_analyze for relationship history + multi-pass web searches (LinkedIn, company, news, articles). Returns structured brief per attendee with relationship strength, communication history, professional background, and key links. IMPORTANT: For FAMILIAR/CLOSE contacts, the tool reads up to 10 recent email threads and extracts: conversation summaries, action items, attachments (filenames), and links shared. This data is in the "recentConversations" field — synthesize it into the brief. The "recentThreadIds" field contains ALL thread IDs found — if more threads exist than were read, use gmail_read to read additional ones as needed. After calling this tool, review the results and adapt your follow-up research: (1) For FAMILIAR contacts: the recentConversations data IS the prep — synthesize action items, highlight shared attachments/links, identify what's pending. If the researchGaps mention unread threads, read them to get fuller context. (2) For NEW contacts: web_search each notable org/company/project for a 1-sentence description; search for recent talks or articles by the person. (3) The "researchGaps" field lists specific missing info to fill. Include clickable links throughout. Keep iterating until the brief has enough texture for the user to walk in fully prepared.`,
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      meeting_title: {
+        type: 'string',
+        description: 'The title of the meeting',
+      },
+      attendees: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Names or email addresses of meeting attendees (excluding the user)',
+      },
+      meeting_time: {
+        type: 'string',
+        description: 'ISO 8601 datetime of the meeting (optional)',
+      },
+      meeting_description: {
+        type: 'string',
+        description: 'Meeting description or agenda if available (optional)',
+      },
+      focus_areas: {
+        type: 'string',
+        description: 'Specific topics to research or focus on (optional)',
+      },
+    },
+    required: ['meeting_title', 'attendees'],
+  },
   // Cache breakpoint on last tool — caches all tool definitions (static across iterations)
   cache_control: { type: 'ephemeral' },
 } as Tool;
@@ -302,12 +369,14 @@ export const agenticTools: Tool[] = [
   gmailSearchTool,
   gmailReadTool,
   gmailDraftTool,
+  gmailTriageTool,
   calendarListTool,
   calendarCreateTool,
   contactsSearchTool,
   contactsAnalyzeTool,
   webSearchTool,
   webFetchTool,
+  meetingPrepTool,
 ];
 
 /**
@@ -324,11 +393,13 @@ export const CONFIRMATION_REQUIRED_TOOLS = new Set([
 export const READ_ONLY_TOOLS = new Set([
   'gmail_search',
   'gmail_read',
+  'gmail_triage',
   'calendar_list',
   'contacts_search',
   'contacts_analyze',
   'web_search',
   'web_fetch',
+  'meeting_prep',
 ]);
 
 /**

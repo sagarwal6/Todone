@@ -94,7 +94,8 @@ STYLE:
 - Business phone numbers should include hours + timezone when available.
 - No results? Say so once: "No results for X." Don't speculate or over-explain.
 - Only present exact matches — similar names are not the same entity.
-- This is a task list, not a chat. Lead with tappable action links, then one sentence of context if needed. Max 3-4 lines of text.
+- Default: concise. Lead with tappable action links, then one sentence of context. Max 3-4 lines.
+- EXCEPTION — meeting prep: Be thorough. For new contacts, tell their STORY — for each company/org they built or led, include what it does, scale, and outcome (IPO, acquired, raised $X). The user should not need to click LinkedIn to know the person. For familiar contacts, lead with recent email context and open items. Scheduling details get one sentence, not a timeline. Include [clickable links](url) throughout for deep-dives. Briefs can be long — thoroughness beats brevity.
 
 SAFETY:
 - Read-only access to Gmail, Calendar, Contacts. All drafts require user confirmation.
@@ -396,8 +397,12 @@ export async function runAgenticLoop(context: AgentLoopContext): Promise<AgentRe
           timestamp: Date.now(),
         });
 
+        // Compound tools return richer data — give them more room
+        const truncateLimit = toolCall.name === 'meeting_prep' ? 12000
+          : toolCall.name === 'gmail_triage' ? 10000
+          : 8000;
         const resultContent = result.success
-          ? truncateToolResult(JSON.stringify(result.data), 8000)
+          ? truncateToolResult(JSON.stringify(result.data), truncateLimit)
           : `Error: ${result.error}`;
 
         resultsByCallId.set(toolCall.id, {
