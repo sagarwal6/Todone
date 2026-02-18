@@ -27,6 +27,7 @@
 ## Code Cleanup
 - [ ] Review remaining `console.log` statements in `lib/scan/metadata.ts` (debug `[SCAN]` logs)
 - [ ] Add `public/robots.txt` (disallow crawling of API routes)
+- [ ] Restore rate limits in `app/api/tasks/[taskId]/run/route.ts` (back to 3/min, 20/hour, 50/day — currently raised for testing)
 
 ## Deployment
 - [ ] Set all production environment variables (see `.env.local.example` and `CLAUDE.md`)

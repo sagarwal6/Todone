@@ -85,18 +85,21 @@ export async function analyzeContactRelationship(
   const now = new Date();
   const oneYearAgo = new Date(now);
   oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+  const oneYearAhead = new Date(now);
+  oneYearAhead.setFullYear(oneYearAhead.getFullYear() + 1);
 
   // Run email, calendar, and contacts queries in parallel
   const [emailsFrom, emailsTo, calendarEvents, contactsResults] = await Promise.all([
-    // Emails FROM the contact to user (last year)
-    searchEmails(accessToken, `from:${query} newer_than:1y`, 50).catch(() => [] as EmailMetadata[]),
-    // Emails FROM user TO the contact (last year)
+    // Emails FROM the contact to user (last 1 year)
+    searchEmails(accessToken, `from:${query} newer_than:1y`, 100).catch(() => [] as EmailMetadata[]),
+    // Emails FROM user TO the contact (last 1 year)
     searchEmails(accessToken, `to:${query} newer_than:1y`, 50).catch(() => [] as EmailMetadata[]),
-    // Calendar events for the past year + next 30 days
+    // Calendar events matching the query (server-side search by name/email in attendees, title, description)
     listEvents(accessToken, {
       timeMin: oneYearAgo.toISOString(),
-      timeMax: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      maxResults: 50,
+      timeMax: oneYearAhead.toISOString(),
+      maxResults: 250,
+      q: query,
     }).catch(() => [] as CalendarEvent[]),
     // Google Contacts matching the query (for phone numbers)
     searchContacts(accessToken, query, 10).catch(() => []),
@@ -176,6 +179,7 @@ export async function analyzeContactRelationship(
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const lastEmail = allEmails[0] || null;
+  // Email and calendar both cover 1 year back
   const monthsAnalyzed = 12;
   const frequencyPerMonth = totalEmails / monthsAnalyzed;
 
@@ -191,13 +195,29 @@ export async function analyzeContactRelationship(
     .map(e => e.subject)
     .filter(Boolean);
 
-  // Calendar analysis — filter events that mention the query name
+  // Build a set of known email addresses for this person (from email history + contacts)
+  // so we can match calendar attendees by resolved email, not just the query string
+  const knownEmails = new Set<string>();
+  for (const addr of matchedEmails) {
+    knownEmails.add(addr.toLowerCase());
+  }
+  for (const contact of contactsResults) {
+    if (contact.displayName?.toLowerCase().includes(queryLower)) {
+      for (const e of contact.emails) {
+        knownEmails.add(e.value.toLowerCase());
+      }
+    }
+  }
+
+  // Calendar analysis — filter events that mention the person by name, query, or known email
   const relevantEvents = calendarEvents.filter(event => {
-    // Check attendees
-    const hasAttendee = event.attendees?.some(a =>
-      (a.displayName?.toLowerCase().includes(queryLower)) ||
-      (a.email?.toLowerCase().includes(queryLower))
-    );
+    // Check attendees by name/query match OR known email address
+    const hasAttendee = event.attendees?.some(a => {
+      if (a.email && knownEmails.has(a.email.toLowerCase())) return true;
+      if (a.displayName?.toLowerCase().includes(queryLower)) return true;
+      if (a.email?.toLowerCase().includes(queryLower)) return true;
+      return false;
+    });
     // Check event title
     const inTitle = event.summary?.toLowerCase().includes(queryLower);
     return hasAttendee || inTitle;
@@ -243,7 +263,12 @@ export async function analyzeContactRelationship(
   for (const event of relevantEvents) {
     for (const attendee of event.attendees || []) {
       const attendeeEmail = attendee.email?.toLowerCase();
-      if (attendeeEmail && perPersonEmails.has(attendeeEmail)) {
+      if (attendeeEmail && (perPersonEmails.has(attendeeEmail) || knownEmails.has(attendeeEmail))) {
+        // Ensure this person exists in perPersonEmails (may have been found via contacts but not email)
+        if (!perPersonEmails.has(attendeeEmail)) {
+          const name = attendee.displayName || attendeeEmail;
+          perPersonEmails.set(attendeeEmail, { displayName: name, fromThem: 0, toThem: 0, directToThem: 0, lastDate: null });
+        }
         const existing = perPersonMeetings.get(attendeeEmail) || { count: 0, lastDate: null };
         existing.count++;
         const eventDate = new Date(event.start.dateTime || event.start.date || '');
@@ -394,13 +419,13 @@ function detectMeetingPattern(events: CalendarEvent[]): string | null {
 
   // Check for weekly pattern (5-9 day gaps)
   if (avgGap >= 5 && avgGap <= 9) {
-    const dayOfWeek = getMostCommonDay(dates);
+    const dayOfWeek = getMostCommonDay(dates, events);
     return `weekly on ${dayOfWeek}s`;
   }
 
   // Check for biweekly (12-16 day gaps)
   if (avgGap >= 12 && avgGap <= 16) {
-    const dayOfWeek = getMostCommonDay(dates);
+    const dayOfWeek = getMostCommonDay(dates, events);
     return `biweekly on ${dayOfWeek}s`;
   }
 
@@ -417,14 +442,36 @@ function detectMeetingPattern(events: CalendarEvent[]): string | null {
   return null;
 }
 
-function getMostCommonDay(dates: Date[]): string {
+function getMostCommonDay(dates: Date[], events: CalendarEvent[]): string {
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const counts = new Array(7).fill(0);
-  for (const d of dates) {
-    counts[d.getDay()]++;
+  for (const event of events) {
+    const dateStr = event.start.dateTime || event.start.date || '';
+    const day = getLocalDayOfWeek(dateStr);
+    if (day >= 0) counts[day]++;
   }
   const maxIdx = counts.indexOf(Math.max(...counts));
   return days[maxIdx];
+}
+
+/** Get day-of-week (0=Sun) in the event's local timezone, not the server's */
+function getLocalDayOfWeek(dateStr: string): number {
+  if (!dateStr) return -1;
+  // All-day event (YYYY-MM-DD) — parse directly
+  if (dateStr.length === 10) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, m - 1, d).getDay();
+  }
+  // Timed event with timezone offset
+  const offsetMatch = dateStr.match(/([+-])(\d{2}):(\d{2})$/);
+  if (offsetMatch) {
+    const sign = offsetMatch[1] === '+' ? 1 : -1;
+    const offsetMs = sign * (parseInt(offsetMatch[2]) * 60 + parseInt(offsetMatch[3])) * 60 * 1000;
+    const localMs = new Date(dateStr).getTime() + offsetMs;
+    return new Date(localMs).getUTCDay();
+  }
+  // Fallback: UTC
+  return new Date(dateStr).getUTCDay();
 }
 
 // ============================================================================

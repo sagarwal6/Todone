@@ -60,6 +60,8 @@ interface ListEventsOptions {
   calendarId?: string;
   singleEvents?: boolean;
   orderBy?: 'startTime' | 'updated';
+  /** Free-text search — matches against summary, description, location, attendee name/email */
+  q?: string;
 }
 
 interface CalendarListResponse {
@@ -82,31 +84,53 @@ export async function listEvents(
     calendarId = 'primary',
     singleEvents = true,
     orderBy = 'startTime',
+    q,
   } = options;
 
-  const params = new URLSearchParams({
-    timeMin,
-    timeMax,
-    maxResults: String(Math.min(maxResults, 50)),
-    singleEvents: String(singleEvents),
-    orderBy,
-  });
+  // Google Calendar API max per page is 2500, but we use 250 per page for safety
+  const perPage = Math.min(maxResults, 250);
+  const allEvents: CalendarEvent[] = [];
+  let pageToken: string | undefined;
 
-  const response = await fetch(
-    `${CALENDAR_API_BASE}/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
+  do {
+    const params = new URLSearchParams({
+      timeMin,
+      timeMax,
+      maxResults: String(perPage),
+      singleEvents: String(singleEvents),
+      orderBy,
+    });
+    if (q) {
+      params.set('q', q);
     }
-  );
+    if (pageToken) {
+      params.set('pageToken', pageToken);
+    }
 
-  if (!response.ok) {
-    throw new Error(`Calendar list failed: ${response.status} ${response.statusText}`);
-  }
+    const response = await fetch(
+      `${CALENDAR_API_BASE}/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
 
-  const data: CalendarListResponse = await response.json();
-  return data.items || [];
+    if (!response.ok) {
+      throw new Error(`Calendar list failed: ${response.status} ${response.statusText}`);
+    }
+
+    const data: CalendarListResponse = await response.json();
+    allEvents.push(...(data.items || []));
+    pageToken = data.nextPageToken;
+
+    // Stop if we've collected enough
+    if (allEvents.length >= maxResults) {
+      return allEvents.slice(0, maxResults);
+    }
+  } while (pageToken);
+
+  return allEvents;
 }
 
 // ============================================================================

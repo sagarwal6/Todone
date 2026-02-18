@@ -41,6 +41,11 @@ All actions (send email, create event) require explicit user confirmation in Goo
 - `/components/insight/` - Scan UI components
 - `/contexts/AgentContext.tsx` - Global agent state (runs in background)
 
+### Email Scoring (`/lib/email/scoring.ts`)
+Signal-based priority scoring shared by agent and insight scan. Agent gets HIGH only; scan gets HIGH + MEDIUM.
+- Don't add domains to blocklists — improve generic heuristics in `scoring-utils.ts` instead
+- Triage broadening is server-side in `execute-tool.ts` — agent doesn't need to do multiple searches
+
 ### Insight Scan
 Scans inbox/calendar for actionable items. Emails pre-filtered by scoring before LLM (Haiku 3.5). Actions: `draft_response`, `meeting_prep`, `follow_up`.
 
@@ -129,6 +134,10 @@ SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
 NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY
 ENCRYPTION_SECRET
 ```
+
+## Pre-Production Checklist
+
+See `sessions/pre-production-checklist.md` for items that must be completed before deploying to production (Google Cloud setup, code cleanup, deployment config).
 
 ## Known Gotchas
 

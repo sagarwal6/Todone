@@ -70,11 +70,12 @@ export async function POST(
     location: undefined, // TODO: Add location column to profiles - agent will ask
   };
 
-  // SECURITY: Rate limit agent executions (3/min, 20/hour, 50/day - expensive operation)
+  // SECURITY: Rate limit agent executions (expensive operation)
+  // DEV: Temporarily raised for testing (was 3/min, 20/hour, 50/day)
   const rateLimit = await checkRateLimit(profileId, 'agent_run', {
-    perMinute: 3,
-    perHour: 20,
-    perDay: 50,
+    perMinute: 10,
+    perHour: 60,
+    perDay: 200,
   });
 
   if (!rateLimit.allowed) {

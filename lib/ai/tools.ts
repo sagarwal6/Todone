@@ -13,7 +13,7 @@ import type { Tool } from '@anthropic-ai/sdk/resources/messages';
  */
 export const gmailSearchTool: Tool = {
   name: 'gmail_search',
-  description: `Search Gmail inbox. Prioritize recent emails: start with newer_than:6m, broaden only if needed. Translate user intent to Gmail operators — don't use their exact words as the query. For email triage ("what needs attention?"): search in:inbox newer_than:1d for today, then is:unread newer_than:5d for unanswered. Results are pre-scored: HIGH = direct 1:1 (mention first), MEDIUM = relevant, LOW/skip = bulk. Supports: from:, to:, subject:, in:inbox, is:unread, has:attachment, newer_than:, after:, before:.`,
+  description: `Search Gmail inbox. Results are automatically scored by priority: HIGH = direct 1:1 messages (mention first), MEDIUM = relevant. Bulk/newsletters are filtered out — only actionable emails are returned. Each result includes a threadId — always build Gmail links so users can tap to open: [Subject](https://mail.google.com/mail/u/0/#inbox/THREAD_ID). Search as many times as needed to fully answer the question. For person + topic searches (e.g., "email from Tim about working together"): search recent first ("from:tim newer_than:2y"), then read promising threads. Topic words are hints — the person may have used different phrasing, so don't require exact keyword matches in the query. If the first search only returns old results, broaden or try without topic keywords. For triage/attention queries: use max_results: 30 (not default 10) to catch everything. The tool automatically includes unread emails from the past 21 days when it detects a triage query, so one search is sufficient. Present like a CEO briefing — only items needing a response or decision. Translate user intent to Gmail operators. Supports: from:, to:, subject:, in:inbox, is:unread, has:attachment, newer_than:, after:, before:.`,
   input_schema: {
     type: 'object' as const,
     properties: {
@@ -123,27 +123,31 @@ export const gmailDraftTool: Tool = {
  */
 export const calendarListTool: Tool = {
   name: 'calendar_list',
-  description: `List calendar events. Default: next 7 days. For patterns/recurring ("do I meet with X regularly?"): search last 90 days. For free slots: search just that day. All-day events (birthdays, holidays) are informational — they don't block time. When checking availability, only count events with specific start/end times. Also useful for disambiguation: if user says "message Andrew" and has a meeting with an Andrew today, that's likely who they mean.`,
+  description: `List calendar events. Each event includes a dayOfWeek field (e.g. "Sunday") — always use it instead of computing the day yourself. Choose time_min and time_max based on what the task needs — lean toward broader ranges and higher max_results to avoid missing data. For time ranges ≥30 days, the response includes a recurringMeetings array with pre-analyzed patterns (title, cadence, days, attendees) — use this for "who do I meet with regularly" type questions. For free slots: search just that day. All-day events (birthdays, holidays) are informational — they don't block time. When checking availability, only count events with specific start/end times. Also useful for disambiguation: if user says "message Andrew" and has a meeting with an Andrew today, that's likely who they mean.`,
   input_schema: {
     type: 'object' as const,
     properties: {
       time_min: {
         type: 'string',
-        description: 'Start of time range (ISO 8601). Default: now',
+        description: 'Start of time range (ISO 8601). Set based on what the task needs — go back months/years for pattern analysis.',
       },
       time_max: {
         type: 'string',
-        description: 'End of time range (ISO 8601). Default: 7 days from now',
+        description: 'End of time range (ISO 8601). Include future events when relevant (upcoming meetings, recurring events).',
       },
       max_results: {
         type: 'number',
-        description: 'Maximum events to return (1-50). Default: 20',
+        description: 'Maximum events to return (1-500). Use higher values for broader searches to avoid missing data.',
         minimum: 1,
-        maximum: 50,
+        maximum: 500,
       },
       calendar_id: {
         type: 'string',
         description: 'Calendar ID to search. Default: primary calendar',
+      },
+      q: {
+        type: 'string',
+        description: 'Free-text search filter — matches event title, description, location, and attendee names. Use to find specific recurring events.',
       },
     },
     required: [],
@@ -232,7 +236,7 @@ export const contactsSearchTool: Tool = {
  */
 export const contactsAnalyzeTool: Tool = {
   name: 'contacts_analyze',
-  description: `Analyze the user's relationship with a person over the past year. Returns perPersonBreakdown: each person has email count, meeting count, last contact date, relationship strength, AND phone number (from Google Contacts). Sorted by activity. For "message/text X": cross-reference with calendar_list first — if there's a meeting with a specific person soon, use THAT person's full name or email to look up contact info (call contacts_search if needed). Don't assume the top result from a first-name search is the right person. For "do I meet with X?": use meeting count and pattern. This one tool gives you everything — no need to also call contacts_search.`,
+  description: `Analyze the user's relationship with a person over the past year (email + calendar, 1 year back and 1 year forward). Returns perPersonBreakdown: each person has email count, meeting count, last contact date, relationship strength, AND phone number (from Google Contacts). Sorted by activity. For "message/text X": cross-reference with calendar_list first — if there's a meeting with a specific person soon, use THAT person's full name or email to look up contact info (call contacts_search if needed). Don't assume the top result from a first-name search is the right person.`,
   input_schema: {
     type: 'object' as const,
     properties: {

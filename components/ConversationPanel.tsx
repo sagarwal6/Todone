@@ -292,7 +292,7 @@ export function ConversationPanel({ task, onClose, onAddChatMessage, onComplete,
       {/* Content - scrollable */}
       <div className={`flex-1 overflow-y-auto ${isMobile ? 'px-4 py-4' : 'px-6 py-6'}`}>
         {/* 1. Agent Progress - what the agent did (green box, compact) */}
-        {(isRunning || agentProgress.length > 0 || agentResult?.status === 'completed' || task.agentSteps?.length) && (
+        {(isRunning || agentProgress.length > 0 || agentResult?.status === 'completed' || (task.agentSteps && task.agentSteps.length > 0)) && (
           <div className="mb-4">
             <AgentProgress
               events={agentProgress}
@@ -547,6 +547,18 @@ export function ConversationPanel({ task, onClose, onAddChatMessage, onComplete,
           </div>
         )}
 
+        {/* Agent error message */}
+        {agentError && !isRunning && (
+          <div className="mb-4 flex items-start gap-3">
+            <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
+              <MaterialIcon name="error" size={16} className="text-inbox-error" />
+            </div>
+            <div className="flex-1 pt-1">
+              <p className="text-inbox-body text-inbox-error">{agentError}</p>
+            </div>
+          </div>
+        )}
+
         {/* Start Agent button - fallback if auto-start didn't trigger */}
         {!isRunning && agentProgress.length === 0 && !agentResult && messages.length === 0 && (
           <div className="mb-4">
@@ -568,7 +580,7 @@ export function ConversationPanel({ task, onClose, onAddChatMessage, onComplete,
               "
             >
               <MaterialIcon name="auto_awesome" size={20} />
-              <span>Let Todone work on this</span>
+              <span>{agentError ? 'Try again' : 'Let Todone work on this'}</span>
             </button>
           </div>
         )}

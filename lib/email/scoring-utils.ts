@@ -108,5 +108,21 @@ export function isAutomatedSender(from: string, replyTo?: string): boolean {
     }
   }
 
+  // Company/brand sender: local part matches domain AND display name is a single word
+  // e.g., "Venmo <venmo@venmo.com>", "Uber <uber@uber.com>"
+  // Safe: "Andrew Lee <andrew@andrew.com>" has a two-word display name → not flagged
+  const [localPart, domain] = fromEmail.split('@');
+  if (localPart && domain) {
+    const domainBase = domain.split('.')[0];
+    const displayName = from.replace(/<[^>]+>/, '').trim();
+    const displayNameWords = displayName.split(/\s+/).filter(Boolean);
+    // Only flag if local part matches domain AND display name is a single word (brand, not person)
+    // "Venmo <venmo@venmo.com>" → 1 word, matches → automated
+    // "Andrew Lee <andrew@andrew.com>" → 2 words → NOT automated
+    if (localPart === domainBase && displayNameWords.length <= 1) {
+      return true;
+    }
+  }
+
   return false;
 }
