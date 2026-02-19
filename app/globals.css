@@ -504,6 +504,49 @@ body {
   animation: celebratePulse 2s ease-in-out infinite;
 }
 
+/* Slow idle rotation for sun rays */
+@keyframes sunIdleRotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.sun-idle-rotate {
+  animation: celebratePulse 2s ease-in-out infinite, sunIdleRotate 60s linear infinite;
+}
+
+/* Empty state entry animations */
+@keyframes sunBodyAppear {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes sunRayAppear {
+  from { opacity: 0; transform: scaleY(0); }
+  to { opacity: 0.6; transform: scaleY(1); }
+}
+
+@keyframes emptyTextSlideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.empty-state-entering .sun-body {
+  animation: sunBodyAppear 400ms cubic-bezier(0, 0, 0.2, 1) 300ms both;
+}
+
+.empty-state-entering .sun-ray:nth-child(1) { animation: sunRayAppear 300ms ease-out 350ms both; }
+.empty-state-entering .sun-ray:nth-child(2) { animation: sunRayAppear 300ms ease-out 400ms both; }
+.empty-state-entering .sun-ray:nth-child(3) { animation: sunRayAppear 300ms ease-out 450ms both; }
+.empty-state-entering .sun-ray:nth-child(4) { animation: sunRayAppear 300ms ease-out 500ms both; }
+.empty-state-entering .sun-ray:nth-child(5) { animation: sunRayAppear 300ms ease-out 550ms both; }
+.empty-state-entering .sun-ray:nth-child(6) { animation: sunRayAppear 300ms ease-out 600ms both; }
+.empty-state-entering .sun-ray:nth-child(7) { animation: sunRayAppear 300ms ease-out 650ms both; }
+.empty-state-entering .sun-ray:nth-child(8) { animation: sunRayAppear 300ms ease-out 700ms both; }
+
+.empty-state-entering .empty-text {
+  animation: emptyTextSlideUp 300ms ease-out 500ms both;
+}
+
 /* Scale in - for card expansion (Inbox style) */
 @keyframes scale-in {
   0% {
@@ -564,12 +607,17 @@ body {
   to { transform: translateY(0); }
 }
 
-/* Reduced motion: disable all completion animations */
+/* Reduced motion: disable all completion and entry animations */
 @media (prefers-reduced-motion: reduce) {
   .task-completing,
   .checkbox-completing,
   .checkbox-completing .checkbox-circle,
-  .checkbox-completing .checkmark-path {
+  .checkbox-completing .checkmark-path,
+  .empty-state-entering .sun-body,
+  .empty-state-entering .sun-ray,
+  .empty-state-entering .empty-text,
+  .sun-idle-rotate,
+  .celebrate {
     animation: none !important;
     transition: none !important;
   }
