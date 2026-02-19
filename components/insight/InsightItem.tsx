@@ -253,8 +253,8 @@ export default function InsightItem({
         )}
       </div>
 
-      {/* Dismiss button - hover only, not for completed items */}
-      {!isCompleted && (
+      {/* Dismiss button - hover only */}
+      {!isInProgress && (
         <button
           onClick={handleDismiss}
           className="
@@ -264,7 +264,8 @@ export default function InsightItem({
             transition-all
             opacity-0 group-hover:opacity-100
           "
-          title="Dismiss"
+          title="Dismiss this suggestion"
+          aria-label="Dismiss this suggestion"
         >
           <span className="material-symbols-rounded text-lg">close</span>
         </button>

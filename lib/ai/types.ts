@@ -110,6 +110,7 @@ export const DEFAULT_AGENT_CONFIG: AgentConfig = {
     web_search: 15_000,
     web_fetch: 20_000,
     meeting_prep: 120_000,
+    tone_analyze: 15_000,
   },
   defaultToolTimeout: 30_000,
   maxIterations: 30, // Allow more iterations for complex tasks

@@ -175,6 +175,69 @@ function getDisplayInfo(action: InsightAction): {
   };
 }
 
+/**
+ * Animated warmup steps shown before real SSE progress events arrive.
+ * Steps reveal one at a time to show the agent is working.
+ */
+const WARMUP_STEPS = [
+  { icon: 'mark_email_read', text: 'Reading the email thread...' },
+  { icon: 'stylus_note', text: 'Matching your tone and style...' },
+  { icon: 'edit', text: 'Drafting your response...' },
+];
+
+function DraftWarmupSteps() {
+  const [visibleCount, setVisibleCount] = useState(0);
+
+  useEffect(() => {
+    // Reveal steps one by one
+    const timers = WARMUP_STEPS.map((_, i) =>
+      setTimeout(() => setVisibleCount(i + 1), (i + 1) * 1200)
+    );
+    return () => timers.forEach(clearTimeout);
+  }, []);
+
+  return (
+    <div className="rounded-lg border border-inbox-accent/20 bg-inbox-accent/5 overflow-hidden">
+      <div className="px-3 py-2 flex items-center gap-1.5">
+        <span className="material-symbols-rounded text-inbox-accent text-[16px] animate-pulse">auto_awesome</span>
+        <span className="text-[13px] text-inbox-accent font-medium">Working on it...</span>
+      </div>
+      {WARMUP_STEPS.map((step, i) => (
+        <div
+          key={step.icon}
+          className={`px-3 py-2 flex items-center gap-2 transition-all duration-300 ${
+            i < visibleCount ? 'opacity-100' : 'opacity-0 h-0 py-0 overflow-hidden'
+          }`}
+        >
+          <div className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${
+            i < visibleCount - 1
+              ? 'bg-green-100/50 text-green-500/70'
+              : 'bg-inbox-accent/10 text-inbox-accent'
+          }`}>
+            {i < visibleCount - 1 ? (
+              <span className="material-symbols-rounded text-[12px]">check</span>
+            ) : (
+              <span className="material-symbols-rounded text-[14px] animate-pulse">{step.icon}</span>
+            )}
+          </div>
+          <span className={`text-[13px] ${
+            i < visibleCount - 1 ? 'text-inbox-text-primary' : 'text-inbox-accent'
+          }`}>
+            {step.text}
+          </span>
+          {i === visibleCount - 1 && (
+            <div className="typing-indicator scale-75">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function InsightDetailPanel({
   action,
   actionState,
@@ -197,7 +260,6 @@ export default function InsightDetailPanel({
   const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
   const [hasDraftGenerated, setHasDraftGenerated] = useState(false); // True after AI generates
   const [copied, setCopied] = useState(false); // For copy feedback
-  const [isEmailCollapsed, setIsEmailCollapsed] = useState(false); // Collapse email when draft ready
 
   // Meeting prep state (separate from email)
   const [meetingInput, setMeetingInput] = useState('');
@@ -210,6 +272,16 @@ export default function InsightDetailPanel({
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [isTextareaScrollable, setIsTextareaScrollable] = useState(false);
+
+  // Auto-resize textarea to fit content
+  const autoResizeTextarea = useCallback(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+    setIsTextareaScrollable(el.scrollHeight > el.clientHeight);
+  }, []);
 
   const isMeeting = action.type === 'meeting_prep';
   const meetingContext = isMeeting ? action.context as MeetingPrepContext : null;
@@ -243,18 +315,24 @@ export default function InsightDetailPanel({
     }
   }, [isCompleted, hasFailed]);
 
-  // Reset all email-specific state when switching to a different action
+  // Reset email-specific state when switching to a different action,
+  // but restore state if agent is running or draft was already generated
   useEffect(() => {
-    setDraftText('');
-    setHasDraftGenerated(false);
-    setIsGeneratingDraft(false);
-    setIsEmailCollapsed(false);
+    const isEmail = action.type === 'draft_response';
+    const stillGenerating = actionState?.status === 'in_progress' && isEmail;
+    const existingDraft = isEmail && actionState?.status === 'completed'
+      ? actionState.result?.pendingDrafts?.find(d => d.type === 'email')?.content
+      : undefined;
+
+    setDraftText(existingDraft || '');
+    setHasDraftGenerated(!!existingDraft);
+    setIsGeneratingDraft(stillGenerating || false);
     setError(null);
     setCopied(false);
     setEmailContent(null);
     setMeetingInput('');
     setIsExecutingMeeting(false);
-  }, [action.id]);
+  }, [action.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load email content on mount
   useEffect(() => {
@@ -289,6 +367,11 @@ export default function InsightDetailPanel({
 
     loadEmail();
   }, [action.type, action.context, getEmailContent]);
+
+  // Auto-resize textarea when draft text changes
+  useEffect(() => {
+    autoResizeTextarea();
+  }, [draftText, autoResizeTextarea]);
 
   // Focus input when email loads
   useEffect(() => {
@@ -340,25 +423,44 @@ export default function InsightDetailPanel({
     openGmailThread(threadId, userEmail);
   }, [threadId, userEmail]);
 
-  // Handle "Draft for me" - generate AI draft, then show in textarea
+  // Handle "Draft for me" — same path for initial draft and redraft.
+  // Captures user direction BEFORE the first draft, then reuses it on redraft.
+  const userDirectionRef = useRef<string | undefined>(undefined);
+
   const handleGenerateDraft = useCallback(async () => {
+    const previousDraft = draftText;
+
+    // On first draft, capture whatever direction the user typed.
+    // On redraft, reuse the same direction so the prompt is identical.
+    if (!hasDraftGenerated) {
+      userDirectionRef.current = draftText || undefined;
+    }
+
     setIsGeneratingDraft(true);
+    setHasDraftGenerated(false);
+    setDraftText('');
     setError(null);
 
     try {
-      const result = await onExecute(action.id, draftText || undefined, 'draft');
+      const result = await onExecute(action.id, userDirectionRef.current, 'draft');
       if (!result.success) {
         setError(result.error || 'Failed to generate draft');
         setIsGeneratingDraft(false);
+        if (previousDraft) {
+          setDraftText(previousDraft);
+          setHasDraftGenerated(true);
+        }
         return;
       }
-      // The draft will come back via actionState when the agent completes
-      // We'll update the textarea when we receive it
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
       setIsGeneratingDraft(false);
+      if (previousDraft) {
+        setDraftText(previousDraft);
+        setHasDraftGenerated(true);
+      }
     }
-  }, [action.id, draftText, onExecute]);
+  }, [action.id, draftText, hasDraftGenerated, onExecute]);
 
   // When AI draft is ready, update the textarea and collapse email
   useEffect(() => {
@@ -368,7 +470,6 @@ export default function InsightDetailPanel({
         setDraftText(emailDraft.content);
         setHasDraftGenerated(true);
         setIsGeneratingDraft(false);
-        setIsEmailCollapsed(true); // Collapse email to focus on draft
       }
     }
   }, [isMeeting, isCompleted, actionResult]);
@@ -532,14 +633,6 @@ export default function InsightDetailPanel({
         </button>
 
         <div className="flex-1" />
-
-        <button
-          onClick={handleDismiss}
-          className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
-          title="Dismiss"
-        >
-          <span className="material-symbols-rounded text-xl">delete</span>
-        </button>
       </div>
 
       {/* Content header with sender info */}
@@ -581,6 +674,28 @@ export default function InsightDetailPanel({
                 )}
               </div>
             )}
+          </div>
+
+          {/* Action icons aligned with sender name */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {!isMeeting && threadId && (
+              <button
+                onClick={handleOpenThread}
+                className="p-2 text-gray-400 hover:text-inbox-accent hover:bg-gray-100 rounded-full transition-colors"
+                title="Open in Gmail"
+                aria-label="Open in Gmail"
+              >
+                <span className="material-symbols-rounded text-xl">open_in_new</span>
+              </button>
+            )}
+            <button
+              onClick={handleDismiss}
+              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+              title="Dismiss this suggestion"
+              aria-label="Dismiss this suggestion"
+            >
+              <span className="material-symbols-rounded text-xl">close</span>
+            </button>
           </div>
         </div>
 
@@ -748,41 +863,12 @@ export default function InsightDetailPanel({
                 <span className="text-[14px]">Loading email...</span>
               </div>
             ) : emailContent ? (
-              <>
-                {/* Collapsed email summary when draft is ready */}
-                {isEmailCollapsed && hasDraftGenerated ? (
-                  <button
-                    onClick={() => setIsEmailCollapsed(false)}
-                    className="w-full text-left bg-gray-100 hover:bg-gray-200 rounded-lg px-4 py-3 transition-colors group"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="material-symbols-rounded text-gray-400 group-hover:text-gray-600 transition-colors">
-                        expand_more
-                      </span>
-                      <span className="text-[13px] font-medium text-gray-600">Original email</span>
-                      <span className="text-[13px] text-gray-400 truncate flex-1">
-                        {emailContent.body.slice(0, 60).replace(/\n/g, ' ')}...
-                      </span>
-                    </div>
-                  </button>
-                ) : (
-                  /* Full email body */
-                  <>
-                    {hasDraftGenerated && (
-                      <button
-                        onClick={() => setIsEmailCollapsed(true)}
-                        className="flex items-center gap-1 text-[12px] text-gray-400 hover:text-gray-600 mb-3 transition-colors"
-                      >
-                        <span className="material-symbols-rounded text-sm">expand_less</span>
-                        Collapse
-                      </button>
-                    )}
-                    <div className="text-[14px] text-gray-700 leading-relaxed whitespace-pre-wrap max-w-[600px]">
-                      {processEmailBody(emailContent.body)}
-                    </div>
-                  </>
-                )}
-              </>
+              /* Gmail-like email card — always visible for context */
+              <div className="border-l-[3px] border-l-gray-300 bg-gray-50/50 rounded-r-lg px-4 py-3">
+                <div className="text-[14px] text-gray-700 leading-relaxed whitespace-pre-wrap max-w-[600px]">
+                  {processEmailBody(emailContent.body)}
+                </div>
+              </div>
             ) : error && !draftText ? (
               <div className="py-12 text-center">
                 <span className="material-symbols-rounded text-3xl text-red-400 mb-3">error</span>
@@ -794,15 +880,7 @@ export default function InsightDetailPanel({
       </div>
 
       {/* Footer - Email reply input OR Meeting prep state */}
-      {/* Footer expands when email is collapsed and draft is ready */}
-      <div className={`
-        px-6 py-4 border-t border-gray-100 bg-gray-50
-        transition-all duration-200 ease-out
-        ${isEmailCollapsed && hasDraftGenerated && !isMeeting
-          ? 'flex-1 flex flex-col min-h-0'
-          : 'flex-shrink-0'
-        }
-      `}>
+      <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex-shrink-0 overflow-y-auto" style={{ maxHeight: '60vh' }}>
         {isMeeting ? (
           /* Meeting prep footer */
           <>
@@ -924,7 +1002,7 @@ export default function InsightDetailPanel({
             )}
           </>
         ) : (
-          /* Email reply footer - Progressive UI that builds */
+          /* Email reply footer */
           <>
             {/* Mode toggle */}
             <div className="flex items-center gap-3 mb-3">
@@ -957,153 +1035,163 @@ export default function InsightDetailPanel({
               </button>
             </div>
 
-            {/* Draft ready header */}
-            {hasDraftGenerated && (
-              <div className="flex items-center gap-2 mb-2">
-                <span className="material-symbols-rounded text-inbox-accent text-lg">edit_note</span>
-                <span className="text-[11px] font-semibold text-inbox-accent uppercase tracking-wide">
-                  Your draft reply
-                </span>
-              </div>
-            )}
-
-            {/* Helper text */}
-            {!hasDraftGenerated && (
-              <p className="text-[12px] text-gray-500 mb-3">
-                {replyMode === 'draft'
-                  ? "Give me direction and I'll draft a reply for you."
-                  : "Type your reply below. Copy it, then reply in Gmail."
-                }
-              </p>
-            )}
-
-            {/* Textarea + Button - column layout when draft fills space */}
-            <div className={`
-              ${isEmailCollapsed && hasDraftGenerated ? 'flex-1 flex flex-col min-h-0' : 'flex gap-3'}
-            `}>
-              <div className={`
-                relative
-                ${isEmailCollapsed && hasDraftGenerated ? 'flex-1 min-h-0' : 'flex-1'}
-                ${hasDraftGenerated ? 'ring-2 ring-inbox-accent/20 rounded-xl' : ''}
-              `}>
-                <textarea
-                  ref={inputRef}
-                  value={draftText}
-                  onChange={(e) => setDraftText(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={
-                    replyMode === 'draft'
-                      ? hasDraftGenerated
-                        ? ''
-                        : (suggestion || "e.g., Confirm I'm available and suggest next steps")
-                      : "Type your reply..."
-                  }
-                  className={`
-                    w-full px-4 py-3
-                    text-[14px] text-gray-900
-                    bg-white border rounded-xl
-                    resize-none
-                    focus:outline-none focus:ring-2 focus:ring-inbox-accent/20 focus:border-inbox-accent
-                    placeholder:text-gray-400
-                    transition-all
-                    disabled:opacity-50
-                    ${hasDraftGenerated ? 'border-inbox-accent/30' : 'border-gray-200'}
-                    ${isEmailCollapsed && hasDraftGenerated ? 'h-full' : ''}
-                  `}
-                  disabled={isLoadingEmail || isGeneratingDraft}
-                  style={{ minHeight: isEmailCollapsed && hasDraftGenerated ? undefined : (hasDraftGenerated ? '200px' : '140px') }}
-                />
-
-                {/* Generating indicator - show progress steps when available */}
-                {isGeneratingDraft && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-white/90 rounded-xl p-3">
-                    {agentProgress.length > 0 || isAgentRunning ? (
-                      <div className="w-full max-w-sm">
-                        <AgentProgress
-                          events={agentProgress}
-                          isRunning={isAgentRunning}
-                          currentStep={agentState?.currentStep || null}
-                        />
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center">
-                        <span className="material-symbols-rounded text-2xl text-inbox-accent animate-spin mb-2">
-                          progress_activity
-                        </span>
-                        <span className="text-[13px] text-gray-600">Starting...</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Action buttons - row when expanded, column when compact */}
-              <div className={`
-                ${isEmailCollapsed && hasDraftGenerated
-                  ? 'flex items-center justify-between mt-3 flex-shrink-0'
-                  : 'flex flex-col justify-end gap-2'
-                }
-              `}>
-                {/* Helper text - only show when expanded */}
-                {isEmailCollapsed && hasDraftGenerated && (
-                  <p className="text-[11px] text-gray-400">
-                    Edit if needed, then copy and paste in Gmail
-                  </p>
-                )}
-                {(replyMode === 'write' || hasDraftGenerated) ? (
-                  /* Has draft text - show Copy + Open in Gmail */
-                  <div className={`flex gap-2 ${isEmailCollapsed && hasDraftGenerated ? '' : 'flex-col'}`}>
+            {/* Textarea OR Agent Progress (mutually exclusive) */}
+            <div aria-live="polite">
+              {isGeneratingDraft ? (
+                /* Agent progress replaces textarea during generation */
+                <div
+                  className="bg-white border border-inbox-accent/20 rounded-xl p-4"
+                  style={{ minHeight: '180px' }}
+                  role="status"
+                >
+                  {agentProgress.length > 0 || isAgentRunning ? (
+                    <AgentProgress
+                      events={agentProgress}
+                      isRunning={isAgentRunning}
+                      currentStep={agentState?.currentStep || null}
+                    />
+                  ) : (
+                    <DraftWarmupSteps />
+                  )}
+                </div>
+              ) : (
+                /* Normal textarea with inline redraft button + scroll fade */
+                <div className="relative">
+                  <textarea
+                    ref={inputRef}
+                    value={draftText}
+                    onChange={(e) => {
+                      setDraftText(e.target.value);
+                    }}
+                    onKeyDown={handleKeyDown}
+                    onScroll={(e) => {
+                      const el = e.currentTarget;
+                      setIsTextareaScrollable(el.scrollHeight > el.clientHeight && el.scrollTop + el.clientHeight < el.scrollHeight - 4);
+                    }}
+                    placeholder={
+                      replyMode === 'draft'
+                        ? hasDraftGenerated
+                          ? ''
+                          : (suggestion || "e.g., Confirm I'm available and suggest next steps")
+                        : "Type your reply..."
+                    }
+                    className={`
+                      w-full px-4 py-3
+                      text-[14px] text-gray-900 leading-relaxed
+                      bg-white border rounded-xl
+                      resize-none overflow-y-auto
+                      focus:outline-none focus:ring-2 focus:ring-inbox-accent/20 focus:border-inbox-accent
+                      placeholder:text-gray-400
+                      transition-colors
+                      disabled:opacity-50
+                      ${hasDraftGenerated ? 'border-inbox-accent/30 ring-2 ring-inbox-accent/20' : 'border-gray-200'}
+                    `}
+                    disabled={isLoadingEmail}
+                    style={{
+                      minHeight: hasDraftGenerated ? '200px' : '80px',
+                      maxHeight: '45vh',
+                    }}
+                  />
+                  {/* Bottom fade to indicate more content below */}
+                  {isTextareaScrollable && (
+                    <div className="absolute bottom-0 left-[1px] right-[1px] h-8 rounded-b-xl pointer-events-none bg-gradient-to-t from-white to-transparent" />
+                  )}
+                  {/* Redraft button inside the textarea area */}
+                  {hasDraftGenerated && (
                     <button
-                      onClick={handleCopyDraft}
-                      disabled={!draftText.trim()}
-                      className={`
-                        px-4 py-2.5
-                        text-[13px] font-medium
-                        rounded-xl
-                        transition-all
-                        disabled:opacity-50 disabled:cursor-not-allowed
-                        flex items-center gap-2
-                        whitespace-nowrap
-                        ${copied
-                          ? 'bg-green-100 text-green-700 border border-green-200'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
-                        }
-                      `}
-                    >
-                      <span className="material-symbols-rounded text-base">
-                        {copied ? 'check' : 'content_copy'}
-                      </span>
-                      {copied ? 'Copied!' : 'Copy'}
-                    </button>
-                    <button
-                      onClick={handleOpenThread}
-                      disabled={!threadId}
+                      onClick={handleGenerateDraft}
+                      disabled={isGeneratingDraft}
                       className="
-                        px-4 py-2.5
-                        text-[13px] font-medium text-white
-                        bg-inbox-accent hover:bg-inbox-accent-hover
-                        rounded-xl
+                        absolute bottom-2 right-2
+                        flex items-center gap-1
+                        px-2 py-1
+                        text-[11px] font-medium
+                        text-inbox-accent/70 hover:text-inbox-accent
+                        bg-white/80 hover:bg-inbox-accent/5
+                        border border-inbox-accent/15 hover:border-inbox-accent/30
+                        rounded-md
                         transition-all
-                        disabled:opacity-50 disabled:cursor-not-allowed
-                        flex items-center gap-2
-                        shadow-sm hover:shadow
-                        whitespace-nowrap
+                        disabled:opacity-50
+                        backdrop-blur-sm
+                        z-10
                       "
                     >
-                      <span className="material-symbols-rounded text-base">open_in_new</span>
-                      Open in Gmail
+                      <span className="material-symbols-rounded text-sm">auto_fix_high</span>
+                      Redraft
                     </button>
-                  </div>
-                ) : (
-                  /* Draft for me (before generation): Draft button triggers AI */
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Action buttons row */}
+            <div className="flex items-center gap-2 mt-3">
+              {(replyMode === 'write' || hasDraftGenerated) ? (
+                /* Draft ready or write mode — helper text + Copy + Open in Gmail */
+                <>
+                  {/* Helper text */}
+                  <span className="flex-1 text-[11px] text-gray-400">
+                    {hasDraftGenerated ? 'Edit if needed, then copy and paste in Gmail' : ''}
+                  </span>
+
+                  {/* Copy */}
+                  <button
+                    onClick={handleCopyDraft}
+                    disabled={!draftText.trim()}
+                    className={`
+                      px-3 py-2
+                      text-[13px] font-medium
+                      rounded-lg
+                      transition-all
+                      disabled:opacity-50 disabled:cursor-not-allowed
+                      flex items-center gap-1.5
+                      whitespace-nowrap
+                      ${copied
+                        ? 'bg-green-100 text-green-700 border border-green-200'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
+                      }
+                    `}
+                  >
+                    <span className="material-symbols-rounded text-base">
+                      {copied ? 'check' : 'content_copy'}
+                    </span>
+                    {copied ? 'Copied!' : 'Copy'}
+                  </button>
+
+                  {/* Open in Gmail */}
+                  <button
+                    onClick={handleOpenThread}
+                    disabled={!threadId}
+                    className="
+                      px-3 py-2
+                      text-[13px] font-medium text-white
+                      bg-inbox-accent hover:bg-inbox-accent-hover
+                      rounded-lg
+                      transition-all
+                      disabled:opacity-50 disabled:cursor-not-allowed
+                      flex items-center gap-1.5
+                      shadow-sm hover:shadow
+                      whitespace-nowrap
+                    "
+                  >
+                    <span className="material-symbols-rounded text-base">open_in_new</span>
+                    Reply in Gmail
+                  </button>
+                </>
+              ) : (
+                /* Draft mode before generation */
+                <>
+                  <span className="flex-1 text-[12px] text-gray-500">
+                    Give me direction and I&apos;ll draft a reply for you.
+                  </span>
                   <button
                     onClick={handleGenerateDraft}
                     disabled={isLoadingEmail || !emailContent || isGeneratingDraft}
                     className="
-                      px-5 py-3
+                      px-4 py-2.5
                       text-[14px] font-medium text-white
                       bg-inbox-accent hover:bg-inbox-accent-hover
-                      rounded-xl
+                      rounded-lg
                       transition-all
                       disabled:opacity-50 disabled:cursor-not-allowed
                       flex items-center gap-2
@@ -1113,106 +1201,21 @@ export default function InsightDetailPanel({
                     <span className="material-symbols-rounded text-lg">edit_note</span>
                     Draft
                   </button>
-                )}
-              </div>
+                </>
+              )}
             </div>
 
-            {/* Follow-up chat after draft is generated */}
-            {hasDraftGenerated && (
-              <div className="mt-3 space-y-2">
-                {/* Collapsible agent steps */}
-                {(agentProgress.length > 0) && (
-                  <AgentProgress
-                    events={agentProgress}
-                    isRunning={false}
-                    currentStep={null}
-                    hasCompletedResult
-                    collapsible
-                    defaultCollapsed
-                  />
-                )}
-
-                {/* Chat messages */}
-                {chatMessages.map((msg) => (
-                  <div key={msg.id} className="mb-1">
-                    <div className={`flex items-start gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                      <div className={`
-                        w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0
-                        ${msg.role === 'user'
-                          ? 'bg-inbox-accent text-white'
-                          : 'bg-inbox-accent/10 text-inbox-accent'
-                        }
-                      `}>
-                        <span className="material-symbols-rounded text-[12px]">
-                          {msg.role === 'user' ? 'person' : 'auto_awesome'}
-                        </span>
-                      </div>
-                      <div className={`flex-1 min-w-0 ${msg.role === 'user' ? 'flex justify-end' : 'pt-0.5'}`}>
-                        {msg.role === 'user' ? (
-                          <div className="max-w-[85%] px-3 py-2 rounded-2xl text-[12px] bg-inbox-accent text-white">
-                            {msg.content}
-                          </div>
-                        ) : (
-                          <div className="text-[12px]">
-                            <Markdown content={msg.content} />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-                {/* Chat loading */}
-                {isChatLoading && (
-                  <div className="flex items-start gap-2 mb-1">
-                    <div className="w-6 h-6 rounded-full bg-inbox-accent/10 flex items-center justify-center flex-shrink-0">
-                      <span className="material-symbols-rounded text-[12px] text-inbox-accent">auto_awesome</span>
-                    </div>
-                    <div className="flex gap-1 pt-2">
-                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                    </div>
-                  </div>
-                )}
-
-                {/* Chat input */}
-                <div className="flex gap-2 items-center">
-                  <input
-                    type="text"
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyDown={handleChatKeyDown}
-                    placeholder="Ask a follow-up..."
-                    disabled={isChatLoading}
-                    className="
-                      flex-1 px-3 py-2
-                      text-[13px] text-gray-900
-                      bg-white border border-gray-200 rounded-lg
-                      focus:outline-none focus:ring-2 focus:ring-inbox-accent/20 focus:border-inbox-accent
-                      placeholder:text-gray-400
-                      disabled:opacity-50
-                      transition-all
-                    "
-                  />
-                  <button
-                    onClick={handleSendChat}
-                    disabled={!chatInput.trim() || isChatLoading}
-                    className="
-                      w-8 h-8 rounded-full
-                      bg-inbox-accent text-white
-                      flex items-center justify-center
-                      disabled:opacity-38 disabled:cursor-not-allowed
-                      hover:bg-inbox-accent-hover
-                      transition-colors flex-shrink-0
-                    "
-                    aria-label="Send"
-                  >
-                    <span className="material-symbols-rounded text-base">arrow_upward</span>
-                  </button>
-                </div>
-
-                <div ref={chatEndRef} />
+            {/* Collapsible agent steps (shown after draft is complete) */}
+            {hasDraftGenerated && agentProgress.length > 0 && (
+              <div className="mt-2">
+                <AgentProgress
+                  events={agentProgress}
+                  isRunning={false}
+                  currentStep={null}
+                  hasCompletedResult
+                  collapsible
+                  defaultCollapsed
+                />
               </div>
             )}
 

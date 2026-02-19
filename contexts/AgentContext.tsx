@@ -367,6 +367,7 @@ function formatToolName(toolName: string): string {
     contacts_search: 'contacts search',
     web_search: 'web search',
     web_fetch: 'webpage reading',
+    tone_analyze: 'writing style analysis',
   };
   return names[toolName] || toolName;
 }

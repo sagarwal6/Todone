@@ -198,20 +198,6 @@ function AuthenticatedHome() {
     }
   }, [agent, tasks, addChatMessage, setAgentQuickInfo, setAgentSteps, eventsToStepSummaries]);
 
-  // Extract protected senders from active "Reply to X" tasks
-  const protectedSenders = useMemo(() => {
-    const senders: string[] = [];
-    for (const task of tasks) {
-      // Skip completed/archived tasks
-      if (task.status === 'completed' || task.status === 'archived') continue;
-      // Match "Reply to X:" or "Reply to X" patterns
-      const match = task.title.match(/^Reply to ([^:]+)/);
-      if (match) {
-        senders.push(match[1].trim());
-      }
-    }
-    return senders;
-  }, [tasks]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [insightSelected, setInsightSelected] = useState(false);
   // For email insight actions — show InsightDetailPanel instead of ConversationPanel
@@ -489,11 +475,11 @@ function AuthenticatedHome() {
     setSelectedTaskId(null);
     setSelectedInsightActionId(null);
     setInsightSelected(true);
-    // Start scan with protected senders if idle
+    // Start scan if idle
     if (scan.phase === 'idle') {
-      scan.startScan(false, { protectedSenders });
+      scan.startScan(false);
     }
-  }, [scan, protectedSenders]);
+  }, [scan]);
 
   const handleClosePanel = useCallback(() => {
     setSelectedTaskId(null);
@@ -581,7 +567,6 @@ function AuthenticatedHome() {
             <InsightView
               onClose={() => setViewMode('active')}
               onActionClick={handleInsightActionClick}
-              tasks={tasks}
               selectedActionId={activeInsightActionId}
             />
           </div>
@@ -786,7 +771,6 @@ function AuthenticatedHome() {
             <InsightView
               onClose={handleClosePanel}
               onActionClick={handleInsightActionClick}
-              tasks={tasks}
               scan={scan}
               selectedActionId={activeInsightActionId}
             />

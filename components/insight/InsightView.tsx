@@ -25,7 +25,7 @@ export interface ScanObject {
   emailsScanned: number;
   eventsScanned: number;
   actionStates: Record<string, LocalActionState>;
-  startScan: (force?: boolean, options?: { protectedSenders?: string[] }) => Promise<void>;
+  startScan: (force?: boolean) => Promise<void>;
   executeAction: (id: string, input?: string, mode?: 'draft' | 'write') => Promise<{ success: boolean; taskId?: string; taskTitle?: string; customPrompt?: string; error?: string }>;
   dismissAction: (id: string) => Promise<boolean>;
   getEmailContent: (id: string) => { id: string; from: string; subject: string; body: string; date: string } | null;
@@ -39,7 +39,6 @@ export interface ScanObject {
 interface InsightViewProps {
   onClose?: () => void;
   onActionClick?: (action: InsightAction) => void;
-  tasks?: import('@/lib/types').Task[];
   scan?: ScanObject;
   selectedActionId?: string | null;
 }
@@ -47,7 +46,6 @@ interface InsightViewProps {
 export default function InsightView({
   onClose,
   onActionClick,
-  tasks = [],
   scan: externalScan,
   selectedActionId,
 }: InsightViewProps) {
@@ -136,31 +134,16 @@ export default function InsightView({
     return null;
   }, [scan]);
 
-  // Extract protected senders from active "Reply to X" tasks
-  const protectedSenders = useMemo(() => {
-    const senders: string[] = [];
-    for (const task of tasks) {
-      // Skip completed/archived tasks
-      if (task.status === 'completed' || task.status === 'archived') continue;
-      // Match "Reply to X:" or "Reply to X" patterns
-      const match = task.title.match(/^Reply to ([^:]+)/);
-      if (match) {
-        senders.push(match[1].trim());
-      }
-    }
-    return senders;
-  }, [tasks]);
-
   // Auto-start scan when view opens
   useEffect(() => {
     if (scan.phase === 'idle') {
-      scan.startScan(false, { protectedSenders });
+      scan.startScan(false);
     }
-  }, [protectedSenders]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Force refresh handler
   const handleRefresh = () => {
-    scan.startScan(true, { protectedSenders }); // force=true bypasses cache
+    scan.startScan(true);
   };
 
   // Render the Proactive todos list

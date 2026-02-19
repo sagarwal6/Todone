@@ -224,6 +224,8 @@ async function executeToolInternal(
     // Compound tools
     case 'gmail_triage':
       return executeGmailTriage(input, context);
+    case 'tone_analyze':
+      return executeToneAnalyze(input, context);
     case 'meeting_prep':
       return executeMeetingPrep(input, context);
 
@@ -619,6 +621,394 @@ async function executeGmailTriage(
 }
 
 // ============================================================================
+// Tone Analyze Tool Implementation
+// ============================================================================
+
+interface StyleSignals {
+  greeting: string; // "Hi", "Hey", "Hello", "Dear", "none"
+  greetingExamples: string[]; // Actual first lines: "Hi [name],", "Hey!", etc.
+  signOff: string; // "Best", "Thanks", "Cheers", "none"
+  signOffExamples: string[]; // Actual sign-off blocks: "Thanks,\n[name]"
+  formality: 'formal' | 'casual' | 'neutral';
+  avgLength: number; // average word count
+  usesEmoji: boolean;
+  usesExclamations: boolean;
+  /** Whether the user puts a blank line after the greeting (true) or starts body on next line (false) */
+  blankLineAfterGreeting: boolean;
+  /** Whether the user puts a blank line before the sign-off */
+  blankLineBeforeSignOff: boolean;
+  /** Whether the user uses standard sentence capitalization */
+  usesProperCapitalization: boolean;
+}
+
+/**
+ * Extract the user's own message from an email body.
+ * In reply threads, strips quoted text (lines starting with ">") and
+ * common "On ... wrote:" markers to isolate what the user actually wrote.
+ */
+function extractUserMessage(body: string): string {
+  const lines = body.split('\n');
+  const userLines: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // Stop at quoted reply markers
+    if (/^On .+ wrote:$/i.test(trimmed)) break;
+    if (/^-{3,}\s*Original Message/i.test(trimmed)) break;
+    if (/^>{1,2}\s/.test(line)) continue; // skip quoted lines
+    // Stop at mobile/app signatures
+    if (/^Sent from my (iPhone|iPad|Galaxy|Pixel)/i.test(trimmed)) break;
+    if (/^Get Outlook for/i.test(trimmed)) break;
+    if (/^Sent from (Mail|Yahoo|AOL) for/i.test(trimmed)) break;
+    // Stop at email signature delimiter (standard `-- ` or `--`)
+    if (/^--\s*$/.test(trimmed)) break;
+    userLines.push(line);
+  }
+
+  return userLines.join('\n').trim();
+}
+
+/**
+ * Analyze style signals from a set of email bodies
+ */
+function analyzeStyleSignals(bodies: string[]): StyleSignals {
+  const greetings: Record<string, number> = {};
+  const greetingExamples: string[] = [];
+  const signOffs: Record<string, number> = {};
+  const signOffExamples: string[] = [];
+  let totalWords = 0;
+  let emojiCount = 0;
+  let exclamationCount = 0;
+  let contractionCount = 0;
+  let formalPhraseCount = 0;
+  let blankAfterGreetingCount = 0;
+  let blankBeforeSignOffCount = 0;
+  let greetingDetectedCount = 0;
+  let signOffDetectedCount = 0;
+  let properCapCount = 0;
+
+  for (const body of bodies) {
+    const rawLines = body.split('\n');
+    const lines = rawLines.map(l => l.trim()).filter(Boolean);
+    if (lines.length === 0) continue;
+
+    // Word count
+    totalWords += body.split(/\s+/).filter(Boolean).length;
+
+    // Greeting detection (first non-empty line)
+    const firstLine = lines[0].toLowerCase();
+    if (/^hey\b/.test(firstLine)) { greetings['Hey'] = (greetings['Hey'] || 0) + 1; greetingExamples.push(lines[0]); }
+    else if (/^hi\b/.test(firstLine)) { greetings['Hi'] = (greetings['Hi'] || 0) + 1; greetingExamples.push(lines[0]); }
+    else if (/^hello\b/.test(firstLine)) { greetings['Hello'] = (greetings['Hello'] || 0) + 1; greetingExamples.push(lines[0]); }
+    else if (/^dear\b/.test(firstLine)) { greetings['Dear'] = (greetings['Dear'] || 0) + 1; greetingExamples.push(lines[0]); }
+    else if (/^good\s+(morning|afternoon|evening)\b/.test(firstLine)) { greetings['Good [time]'] = (greetings['Good [time]'] || 0) + 1; greetingExamples.push(lines[0]); }
+    else greetings['none'] = (greetings['none'] || 0) + 1;
+
+    // Spacing detection: check if there's a blank line after the greeting
+    const hasGreeting = /^(hey|hi|hello|dear|good\s+(morning|afternoon|evening))\b/i.test(firstLine);
+    if (hasGreeting) {
+      greetingDetectedCount++;
+      // Find the greeting line in rawLines and check if the next line is blank
+      const greetingIdx = rawLines.findIndex(l => l.trim() === lines[0]);
+      if (greetingIdx >= 0 && greetingIdx < rawLines.length - 1) {
+        if (rawLines[greetingIdx + 1].trim() === '') {
+          blankAfterGreetingCount++;
+        }
+      }
+    }
+
+    // Sign-off detection: scan from the bottom up to find the sign-off line
+    // Look through last 5 non-empty lines for known sign-off keywords
+    const lastLines = lines.slice(-5);
+    let signOffFound = false;
+    for (let i = 0; i < lastLines.length; i++) {
+      const line = lastLines[i].toLowerCase();
+      const signOffPatterns: [RegExp, string][] = [
+        [/\bbest\b/, 'Best'],
+        [/\bthanks\b|\bthank you\b|\bthx\b/, 'Thanks'],
+        [/\bcheers\b/, 'Cheers'],
+        [/\bregards\b|\bkind regards\b|\bbest regards\b/, 'Regards'],
+        [/\bwarm(ly|est)?\b/, 'Warmly'],
+        [/\bsincerely\b/, 'Sincerely'],
+        [/\btake care\b/, 'Take care'],
+        [/\btalk soon\b|\bchat soon\b/, 'Talk soon'],
+        [/\bxo+\b|\blove\b/, 'Love/xo'],
+      ];
+      for (const [pattern, label] of signOffPatterns) {
+        if (pattern.test(line)) {
+          signOffs[label] = (signOffs[label] || 0) + 1;
+          // Capture the sign-off block (sign-off line + any name lines after it)
+          const block = lastLines.slice(i).join('\n');
+          if (signOffExamples.length < 3) signOffExamples.push(block);
+          signOffFound = true;
+          signOffDetectedCount++;
+          // Check if there's a blank line before the sign-off in raw lines
+          const signOffText = lastLines[i];
+          const signOffRawIdx = rawLines.findLastIndex(l => l.trim() === signOffText);
+          if (signOffRawIdx > 0 && rawLines[signOffRawIdx - 1].trim() === '') {
+            blankBeforeSignOffCount++;
+          }
+          break;
+        }
+      }
+      if (signOffFound) break;
+    }
+    if (!signOffFound) signOffs['none'] = (signOffs['none'] || 0) + 1;
+
+    // Emoji detection
+    const emojiPattern = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu;
+    if (emojiPattern.test(body)) emojiCount++;
+
+    // Exclamation marks
+    if (/!/.test(body)) exclamationCount++;
+
+    // Contractions (casual signal)
+    if (/\b(i'm|i'll|i've|don't|can't|won't|isn't|aren't|we're|they're|you're|let's|that's|it's|didn't|couldn't|wouldn't|shouldn't)\b/i.test(body)) {
+      contractionCount++;
+    }
+
+    // Formal phrases
+    if (/\b(please find|as per|pursuant|kindly|I would like to|we would appreciate|at your earliest convenience)\b/i.test(body)) {
+      formalPhraseCount++;
+    }
+
+    // Capitalization detection: check if sentences start with uppercase
+    // Look at body lines (skip greeting/sign-off) for sentence-start capitalization
+    const bodyLines = lines.slice(1, -2); // skip greeting and sign-off area
+    if (bodyLines.length > 0) {
+      const sentences = bodyLines.join(' ').split(/[.!?]\s+/).filter(s => s.trim().length > 2);
+      const capitalizedSentences = sentences.filter(s => /^[A-Z]/.test(s.trim()));
+      if (sentences.length > 0 && capitalizedSentences.length >= sentences.length * 0.7) {
+        properCapCount++;
+      }
+    }
+  }
+
+  const count = bodies.length || 1;
+
+  // Most common greeting/sign-off
+  const topGreeting = Object.entries(greetings).sort((a, b) => b[1] - a[1])[0]?.[0] || 'none';
+  const topSignOff = Object.entries(signOffs).sort((a, b) => b[1] - a[1])[0]?.[0] || 'none';
+
+  // Formality: based on contractions, exclamations, greeting style, formal phrases
+  let formality: 'formal' | 'casual' | 'neutral';
+  const casualSignals = contractionCount + exclamationCount + (topGreeting === 'Hey' ? count : 0);
+  const formalSignals = formalPhraseCount * 2 + (topGreeting === 'Dear' ? count : 0);
+  if (formalSignals > casualSignals) formality = 'formal';
+  else if (casualSignals > count * 0.6) formality = 'casual';
+  else formality = 'neutral';
+
+  return {
+    greeting: topGreeting,
+    greetingExamples: [...new Set(greetingExamples)].slice(0, 3),
+    signOff: topSignOff,
+    signOffExamples: [...new Set(signOffExamples)].slice(0, 3),
+    formality,
+    avgLength: Math.round(totalWords / count),
+    usesEmoji: emojiCount > count * 0.3,
+    usesExclamations: exclamationCount > count * 0.3,
+    blankLineAfterGreeting: greetingDetectedCount > 0 ? blankAfterGreetingCount > greetingDetectedCount * 0.5 : true,
+    blankLineBeforeSignOff: signOffDetectedCount > 0 ? blankBeforeSignOffCount > signOffDetectedCount * 0.5 : true,
+    usesProperCapitalization: properCapCount > count * 0.5,
+  };
+}
+
+async function executeToneAnalyze(
+  input: Record<string, unknown>,
+  context: ToolContext
+): Promise<{ result: ToolResult }> {
+  if (!context.accessToken) {
+    return {
+      result: {
+        success: false,
+        error: 'Gmail access not available. User needs to grant Gmail permissions.',
+        retriable: false,
+      },
+    };
+  }
+
+  const recipientEmail = input.recipient_email as string | undefined;
+
+  // Audit: log tone analysis request (not content)
+  logAuditEvent(context.userId, context.taskId, 'tone_analyze', {
+    hasRecipient: !!recipientEmail,
+  }).catch(() => {});
+
+  try {
+    let sentEmails;
+    let analysisType: 'per_recipient' | 'general' | 'general_fallback';
+
+    // Step 1: Search for sent emails to specific recipient
+    if (recipientEmail) {
+      sentEmails = await gmail.searchEmails(
+        context.accessToken,
+        `from:me to:${recipientEmail} newer_than:1y`,
+        10,
+      );
+      analysisType = 'per_recipient';
+
+      // Fallback: if < 2 emails to this person, fall back to general samples
+      // Mark as 'general_fallback' so the agent knows these are mixed and
+      // must pick the right register (professional vs personal) for this draft
+      if (sentEmails.length < 2) {
+        console.log(`Tone analyze: Only ${sentEmails.length} email(s) to recipient, falling back to general samples`);
+        sentEmails = await gmail.searchEmails(
+          context.accessToken,
+          'from:me newer_than:3m',
+          10,
+        );
+        analysisType = 'general_fallback';
+      }
+    } else {
+      // General style analysis
+      sentEmails = await gmail.searchEmails(
+        context.accessToken,
+        'from:me newer_than:3m',
+        10,
+      );
+      analysisType = 'general';
+    }
+
+    // If still < 2 emails, return no-history flag
+    if (sentEmails.length < 2) {
+      return {
+        result: {
+          success: true,
+          data: {
+            noHistory: true,
+            analysisType,
+            emailCount: sentEmails.length,
+            recommendation: 'No sent email history found. Use your default professional tone.',
+          },
+        },
+      };
+    }
+
+    // Step 2: Read full content of up to 5 emails in parallel
+    const emailsToRead = sentEmails.slice(0, 5);
+    const emailContents = await Promise.all(
+      emailsToRead.map(async (email) => {
+        try {
+          const content = await gmail.readEmail(context.accessToken!, email.id, false);
+          return content;
+        } catch {
+          return null;
+        }
+      }),
+    );
+
+    const validEmails = emailContents.filter((e): e is NonNullable<typeof e> => e !== null);
+    if (validEmails.length < 2) {
+      return {
+        result: {
+          success: true,
+          data: {
+            noHistory: true,
+            analysisType,
+            emailCount: validEmails.length,
+            recommendation: 'Could not read enough sent emails. Use your default professional tone.',
+          },
+        },
+      };
+    }
+
+    // Step 3: Extract user's own messages (strip quoted replies)
+    const userEmail = context.userEmail?.toLowerCase() || '';
+    const userMessages: string[] = [];
+    const samples: { to: string; snippet: string }[] = [];
+
+    for (const email of validEmails) {
+      // Verify this is FROM the user (not a reply from someone else in the thread)
+      const fromLower = email.from.toLowerCase();
+      if (userEmail && !fromLower.includes(userEmail)) continue;
+
+      const userMsg = extractUserMessage(email.body);
+      if (!userMsg || userMsg.length < 10) continue;
+
+      userMessages.push(userMsg);
+
+      // Truncate to ~150 words for the sample
+      const words = userMsg.split(/\s+/);
+      const truncated = words.slice(0, 150).join(' ') + (words.length > 150 ? '...' : '');
+
+      // SECURITY: Redact PII from samples before returning to agent
+      samples.push({
+        to: email.to?.join(', ') || '',
+        snippet: redactPII(truncated),
+      });
+    }
+
+    if (userMessages.length === 0) {
+      return {
+        result: {
+          success: true,
+          data: {
+            noHistory: true,
+            analysisType,
+            emailCount: 0,
+            recommendation: 'Could not extract user-authored messages. Use your default professional tone.',
+          },
+        },
+      };
+    }
+
+    // Step 4: Extract style signals
+    const styleSignals = analyzeStyleSignals(userMessages);
+
+    // Step 5: Build recommendation string
+    const recParts: string[] = [];
+    if (styleSignals.greeting !== 'none') {
+      const example = styleSignals.greetingExamples[0] || styleSignals.greeting;
+      recParts.push(`Start with greeting like: "${example}"`);
+    }
+    if (styleSignals.signOff !== 'none') {
+      const example = styleSignals.signOffExamples[0] || styleSignals.signOff;
+      recParts.push(`End with sign-off exactly like: "${example.replace(/\n/g, '\\n')}"`);
+    }
+    recParts.push(`tone is ${styleSignals.formality}`);
+    recParts.push(`avg ~${styleSignals.avgLength} words`);
+    if (styleSignals.usesEmoji) recParts.push('uses emoji');
+    if (styleSignals.usesExclamations) recParts.push('uses exclamation marks');
+    if (!styleSignals.blankLineAfterGreeting) recParts.push('NO blank line between greeting and body — start body on the very next line');
+    if (styleSignals.blankLineAfterGreeting) recParts.push('blank line between greeting and body');
+    if (!styleSignals.blankLineBeforeSignOff) recParts.push('NO blank line before sign-off — sign-off follows body directly');
+    if (styleSignals.blankLineBeforeSignOff) recParts.push('blank line before sign-off');
+    if (styleSignals.usesProperCapitalization) recParts.push('uses proper sentence capitalization');
+    if (!styleSignals.usesProperCapitalization) recParts.push('uses lowercase/informal capitalization');
+    let recommendation: string;
+    if (analysisType === 'general_fallback') {
+      recommendation = `Limited history with this recipient. Samples below are from various recipients and may mix professional and personal tone. The user writes VERY differently to friends vs colleagues — pick only the samples that match the formality needed for THIS draft, and mirror that tone. Style signals: ${recParts.join(', ')}. Study the matching samples — absorb the user's word choices, phrasing, rhythm, capitalization, and formatting exactly.`;
+    } else {
+      recommendation = `Match this style exactly: ${recParts.join(', ')}. Study the samples above — absorb the user's word choices, phrasing, rhythm, capitalization, and formatting. The recipient should think the user wrote the draft themselves.`;
+    }
+
+    return {
+      result: {
+        success: true,
+        data: {
+          analysisType,
+          recipientEmail: analysisType === 'general_fallback' ? recipientEmail : undefined,
+          emailCount: userMessages.length,
+          samples,
+          styleSignals,
+          recommendation,
+        },
+      },
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('Tone analyze error:', errorMessage);
+    return {
+      result: {
+        success: false,
+        error: `Tone analysis failed: ${errorMessage}`,
+        retriable: true,
+      },
+    };
+  }
+}
+
+// ============================================================================
 // Calendar Tool Implementations
 // ============================================================================
 
@@ -997,13 +1387,27 @@ async function executeContactsSearch(
 
   const contactsList = await contacts.searchContacts(context.accessToken, query, maxResults);
 
+  // Filter out weak matches: Google's People API does fuzzy matching that can
+  // return "Goce Zojcheski" for a "zo" query. Require the query to match a
+  // first name, email prefix, or be a substantial portion of the display name.
+  const queryLower = query.toLowerCase().trim();
+  const filteredContacts = queryLower.length <= 3
+    ? contactsList.filter(c => {
+        const given = (c.givenName || '').toLowerCase();
+        const display = (c.displayName || '').toLowerCase();
+        const emailPrefix = c.emails?.[0]?.value?.split('@')[0]?.toLowerCase() || '';
+        // Short queries must match start of first name, start of display name, or email prefix
+        return given.startsWith(queryLower) || display.startsWith(queryLower) || emailPrefix.startsWith(queryLower);
+      })
+    : contactsList;
+
   return {
     result: {
       success: true,
       data: {
-        contacts: contactsList,
-        count: contactsList.length,
-        hasResults: contactsList.length > 0,
+        contacts: filteredContacts,
+        count: filteredContacts.length,
+        hasResults: filteredContacts.length > 0,
       },
     },
   };

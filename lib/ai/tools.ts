@@ -61,7 +61,7 @@ export const gmailReadTool: Tool = {
  */
 export const gmailDraftTool: Tool = {
   name: 'gmail_draft',
-  description: `Create email draft for user review (NOT sent automatically). The "to" field MUST use a verified email address from contacts, email history, or calendar attendee data — NEVER guess or construct an email from someone's name. Keep drafts SHORT and direct — 1-2 sentences max for quick messages. No corporate filler ("Thanks for your patience!", "I hope this email finds you well"). No sign-off unless it's a formal email. After creating a draft, do NOT repeat the subject/to/body in your response — the draft card displays them. Just confirm it was created in one line. For replies: MUST include thread_id, message_id (from gmail_read), and original_email to thread properly.`,
+  description: `Create email draft for user review (NOT sent automatically). The "to" field MUST use a verified email address from contacts, email history, or calendar attendee data — NEVER guess or construct an email from someone's name. Style and tone come from tone_analyze — follow its recommendation for greeting, sign-off, capitalization, and spacing. After creating a draft, do NOT repeat the subject/to/body in your response — the draft card displays them. Just confirm it was created in one line. For replies: MUST include thread_id, message_id (from gmail_read), and original_email to thread properly.`,
   input_schema: {
     type: 'object' as const,
     properties: {
@@ -234,6 +234,21 @@ export const contactsSearchTool: Tool = {
  * Contacts Analyze Tool
  * Analyze relationship history with a contact across email and calendar
  */
+export const toneAnalyzeTool: Tool = {
+  name: 'tone_analyze',
+  description: `Analyze how the user writes emails to a specific person (or in general). Returns recent sent email samples and style signals (greeting, sign-off, formality, length). Call this BEFORE gmail_draft when replying to someone — match the user's natural voice. If recipient_email is provided, analyzes emails to that person; otherwise analyzes the user's general email style. Skip for very first emails to new contacts (no history to match).`,
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      recipient_email: {
+        type: 'string',
+        description: 'Email address to analyze style for (optional — omit for general style)',
+      },
+    },
+    required: [],
+  },
+};
+
 export const contactsAnalyzeTool: Tool = {
   name: 'contacts_analyze',
   description: `Analyze the user's relationship with a person over the past year (email + calendar, 1 year back and 1 year forward). Returns perPersonBreakdown: each person has email count, meeting count, last contact date, relationship strength, AND phone number (from Google Contacts). Sorted by activity. For "message/text X": cross-reference with calendar_list first — if there's a meeting with a specific person soon, use THAT person's full name or email to look up contact info (call contacts_search if needed). Don't assume the top result from a first-name search is the right person.`,
@@ -370,6 +385,7 @@ export const agenticTools: Tool[] = [
   gmailReadTool,
   gmailDraftTool,
   gmailTriageTool,
+  toneAnalyzeTool,
   calendarListTool,
   calendarCreateTool,
   contactsSearchTool,
@@ -394,6 +410,7 @@ export const READ_ONLY_TOOLS = new Set([
   'gmail_search',
   'gmail_read',
   'gmail_triage',
+  'tone_analyze',
   'calendar_list',
   'contacts_search',
   'contacts_analyze',

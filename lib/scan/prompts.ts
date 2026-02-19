@@ -344,126 +344,51 @@ The user wrote this themselves - your only job is to save it as a draft.`;
   }
 
   // "Draft for me" mode - AI drafts based on tone research
-  // Extract domain from sender email for company-wide tone matching
-  const senderDomain = ctx.senderEmail.split('@')[1] || '';
-
   const userInstructions = userInput
     ? `\n\nUSER'S INSTRUCTIONS (follow these closely):\n"${userInput}"`
     : '';
 
-  return `Read the email thread and draft a response that sounds EXACTLY like how the user writes to THIS person.
+  return `Draft a reply to this email that sounds exactly like the user wrote it.
 
 EMAIL CONTEXT:
 - From: ${ctx.senderName} <${ctx.senderEmail}>
-- Sender domain: ${senderDomain}
 - Subject: ${ctx.subject}
 - Days waiting: ${ctx.daysAgo}
 - Preview: "${ctx.snippet}"${userInstructions}
 
-CRITICAL INSTRUCTIONS - FOLLOW IN ORDER:
+STEPS — FOLLOW IN ORDER:
 
-STEP 1: Learn the user's tone WITH THIS SPECIFIC PERSON/COMPANY
-
-People use different tones with different people. Search in this priority order:
-
-a) FIRST: Search for prior emails TO this person
-   - Search: "in:sent to:${ctx.senderEmail}"
-   - If found: This is the BEST indicator of tone. Match it exactly.
-
-b) SECOND: If no prior emails to them, search for emails to their company
-   - Search: "in:sent to:@${senderDomain}"
-   - If found: Match the professional tone used with this company.
-
-c) THIRD: If neither found, combine these two approaches:
-   - Search: "in:sent" for 5-10 recent emails to learn the user's general style
-   - ALSO analyze the incoming email's tone and formality level
-   - Blend them: Use the user's patterns (greeting, sign-off, sentence structure)
-     BUT match the incoming email's formality level
-   - Example: If user typically writes "Hey X," but incoming email is formal,
-     adjust to "Hi X," while keeping user's concise sentence style
-
-For each search, note:
-- Greeting style: "Hi [Name]," vs "Hey" vs no greeting
-- Sentence structure: short/punchy vs detailed/flowing
-- Sign-off: "Best," vs "Thanks," vs just their name vs nothing
-- Formality: contractions, exclamation marks, emojis
-- Length: brief 2-liners vs multi-paragraph
+STEP 1: Learn the user's voice
+- Call tone_analyze with recipient_email="${ctx.senderEmail}"
+- Study the returned samples — absorb vocabulary, phrasing, rhythm, punctuation
+- Follow the recommendation string EXACTLY: greeting style, sign-off, capitalization, spacing
+- The tone_analyze result is the SINGLE SOURCE OF TRUTH for how to write
 
 STEP 2: Read the incoming email
 - Use gmail_read to get the full email content
 - Understand what they're asking for
-${userInput ? '\n- Follow the user\'s specific instructions' : ''}
+${userInput ? '- Follow the user\'s specific instructions' : ''}
 
-STEP 3: Check if this is about SCHEDULING
-If the email asks about:
-- Meeting up, getting coffee, lunch, call
-- Finding a time, availability, schedule
-- "When works for you?", "Are you free?", etc.
-
-Then CHECK THE CALENDAR:
+STEP 3: If this is about SCHEDULING (meeting up, coffee, call, availability)
 - Use calendar_list to get the user's availability for the next 7 days
-- Look for FREE time slots (gaps between events)
-- Note busy times to avoid suggesting conflicts
-- When suggesting times, offer 2-3 SPECIFIC options based on actual availability
-  Example: "How about Tuesday at 2pm or Thursday morning?" (not vague "sometime this week")
-
-IMPORTANT - SHOW CALENDAR CONTEXT IN YOUR RESPONSE:
-After checking the calendar, tell the user what you found so they can trust your suggestions.
-Format like this:
+- Offer 2-3 SPECIFIC time slots based on actual availability
+- Show the user what you found so they can verify:
 
 "I checked your calendar for the next week:
-- **Monday**: Team standup 9-10am, Lunch with Sarah 12-1pm
+- **Monday**: Team standup 9-10am, Lunch 12-1pm
 - **Tuesday**: Free until 3pm, then Design review 3-4pm
-- **Wednesday**: All-day offsite
-- **Thursday**: Morning free, 1:1 with manager 2-3pm
-- **Friday**: Light day - only standup at 9am
-
+...
 Based on your availability, I'm suggesting Tuesday morning or Thursday morning in the draft."
 
-This helps the user verify the times are actually free before sending.
-
-STEP 4: Draft in the appropriate voice
-- Match the tone the user uses with THIS person (from Step 1)
-- If replying to a casual friend: be casual
-- If replying to a formal business contact: be professional
-- If this is a new contact: mirror their incoming email's style
-- If scheduling: include specific available times from Step 3
-
-STEP 5: Create the draft as a REPLY (not a new email)
+STEP 4: Create the draft as a REPLY
 - Use gmail_draft with these REQUIRED parameters for replies:
   - thread_id: the threadId from the email you read
   - message_id: the messageIdHeader from the email you read (for In-Reply-To header)
   - references: the referencesHeader from the email you read (if present)
   - subject: "Re: [original subject]" (keep the Re: prefix)
-  - original_email: {
-      from: the sender's email,
-      from_name: the sender's name,
-      subject: the original subject,
-      body: the full original email text,
-      date: when it was sent
-    }
+  - original_email: { from, from_name, subject, body, date }
 - This ensures the draft appears as a reply IN THE THREAD, not a new email
-
-EXAMPLES OF TONE MATCHING:
-
-If user's past emails to this person say:
-  "Hey! That sounds great - let's do it. Talk soon!"
-Then reply in kind, NOT:
-  "Thank you for your message. I would be happy to proceed."
-
-If user's past emails to this company are formal:
-  "Dear Ms. Chen, Thank you for following up..."
-Then maintain that formality, NOT:
-  "Hey! Thanks for reaching out!"
-
-EXAMPLE OF SCHEDULING REPLY:
-If the email asks "Want to grab coffee sometime?":
-1. Check calendar for next 7 days
-2. Show the user what you found (see format above)
-3. Find free slots (e.g., Tuesday 2-4pm is open, Thursday morning is free)
-4. Draft: "Hey! Would love to. How about Tuesday afternoon or Thursday morning?"
-
-The goal is for the reply to feel natural in the context of their existing relationship.`;
+- The draft body MUST follow tone_analyze results: same greeting style, same sign-off, same capitalization, same spacing`;
 }
 
 function getMeetingPrepPrompt(action: InsightAction): string {

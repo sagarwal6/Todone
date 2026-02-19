@@ -215,9 +215,8 @@ export function useInsightScan() {
   /**
    * Start a new scan or retrieve cached results
    * @param force - If true, bypass cache and do a fresh scan
-   * @param options - Optional scan options including protected senders
    */
-  const startScan = useCallback(async (force: boolean = false, options?: { protectedSenders?: string[] }) => {
+  const startScan = useCallback(async (force: boolean = false) => {
     // Cancel any existing scan
     abortRef.current?.abort();
     abortRef.current = new AbortController();
@@ -231,10 +230,6 @@ export function useInsightScan() {
       const url = force ? '/api/scan?force=true' : '/api/scan';
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          protectedSenders: options?.protectedSenders || [],
-        }),
         signal: abortRef.current.signal,
       });
 

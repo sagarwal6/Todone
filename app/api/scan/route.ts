@@ -44,13 +44,11 @@ export async function POST(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const forceRefresh = searchParams.get('force') === 'true';
 
-  // Parse request body for frontend-provided protected senders
-  let frontendProtectedSenders: string[] = [];
+  // Parse request body (currently unused but kept for future options)
   try {
-    const body = await request.json();
-    frontendProtectedSenders = body?.protectedSenders || [];
+    await request.json();
   } catch {
-    // No body or invalid JSON - that's fine, use empty array
+    // No body or invalid JSON - that's fine
   }
 
   // Get session (supports both web NextAuth and mobile JWT)
@@ -143,16 +141,6 @@ export async function POST(request: NextRequest) {
 
         const preppedEventMap = new Map<string, string>(); // eventId -> actionId
 
-        // Also get thread IDs of active email tasks (draft_response type with pending/in_progress status)
-        const taskThreadIds = new Set<string>();
-        const protectedSenders = new Set<string>(); // Sender names with active tasks
-
-        // Add frontend-provided protected senders first (most reliable - comes from localStorage tasks)
-        for (const sender of frontendProtectedSenders) {
-          protectedSenders.add(sender);
-          console.log(`[SCAN] Protected sender from frontend: "${sender}"`);
-        }
-
         if (userScans && userScans.length > 0) {
           const scanIds = userScans.map(s => s.id);
 
@@ -173,92 +161,9 @@ export async function POST(request: NextRequest) {
               }
             }
           }
-
-          // Get active email tasks (draft_response) - include pending and in_progress
-          // These emails should still show in Heads up even if user sent last message
-          const { data: activeEmailActions } = await supabaseAdmin
-            .from('insight_actions')
-            .select('execution_context')
-            .eq('type', 'draft_response')
-            .in('scan_id', scanIds)
-            .in('status', ['pending', 'in_progress'])
-            .not('execution_context', 'is', null);
-
-          if (activeEmailActions) {
-            for (const action of activeEmailActions) {
-              const ctx = action.execution_context as { threadId?: string };
-              if (ctx?.threadId) {
-                taskThreadIds.add(ctx.threadId);
-              }
-            }
-          }
-        }
-
-        // ALSO check the tasks table for active "Reply to" tasks
-        // These might have been created from previous scans or manually
-        // We need to get thread IDs from executed insight_actions that created these tasks
-        // Note: Don't filter by status - just exclude completed/done tasks to catch all active ones
-        const { data: activeTasks } = await supabaseAdmin
-          .from('tasks')
-          .select('title, research')
-          .eq('user_id', profile.id)
-          .not('status', 'in', '("done","failed")') // Exclude only finished tasks
-          .like('title', 'Reply to%');
-
-        // For tasks created from insight actions, check if there's a completed action with matching title
-        // and extract thread_id from its execution_context
-        if (activeTasks && activeTasks.length > 0) {
-          // First, extract sender names from task titles as protected senders
-          // This ensures emails from these senders are shown even if we can't find thread IDs
-          for (const task of activeTasks) {
-            const match = task.title.match(/^Reply to ([^:]+)/);
-            if (match) {
-              const senderName = match[1].trim();
-              protectedSenders.add(senderName);
-              console.log(`[SCAN] Protected sender from active task: "${senderName}"`);
-            }
-          }
-
-          // Also try to find thread IDs for more precise matching
-          const { data: userScansForTasks } = await supabaseAdmin
-            .from('insight_scans')
-            .select('id')
-            .eq('user_id', profile.id);
-
-          if (userScansForTasks && userScansForTasks.length > 0) {
-            const allScanIds = userScansForTasks.map(s => s.id);
-            const { data: completedActions } = await supabaseAdmin
-              .from('insight_actions')
-              .select('execution_context, headline')
-              .eq('type', 'draft_response')
-              .in('scan_id', allScanIds)
-              .eq('status', 'completed')
-              .not('execution_context', 'is', null);
-
-            if (completedActions) {
-              // Match tasks to completed actions by sender name
-              for (const task of activeTasks) {
-                // Extract sender name from task title: "Reply to X: ..."
-                const match = task.title.match(/^Reply to ([^:]+)/);
-                if (match) {
-                  const senderName = match[1].trim();
-                  // Find action with matching sender
-                  for (const action of completedActions) {
-                    const ctx = action.execution_context as { senderName?: string; threadId?: string };
-                    if (ctx?.senderName && ctx.senderName.includes(senderName) && ctx?.threadId) {
-                      taskThreadIds.add(ctx.threadId);
-                      console.log(`[SCAN] Found thread ID for active task "${task.title}": ${ctx.threadId}`);
-                    }
-                  }
-                }
-              }
-            }
-          }
         }
 
         console.log(`[SCAN] Found ${preppedEventMap.size} already-prepped meetings`);
-        console.log(`[SCAN] Found ${taskThreadIds.size} active email tasks (thread IDs)`);
-        console.log(`[SCAN] Found ${protectedSenders.size} protected senders from active tasks`);
 
         // Phase 1: Metadata collection
         emit({ type: 'metadata_started', timestamp: Date.now() });
@@ -266,8 +171,6 @@ export async function POST(request: NextRequest) {
         const context = await buildScanContext(accessToken, {
           userEmail: session.user?.email || undefined,
           preppedEventMap: Object.fromEntries(preppedEventMap), // eventId -> actionId
-          taskThreadIds, // Thread IDs of active email tasks - don't exclude these
-          protectedSenders, // Sender names from active tasks - don't exclude their emails
           onGmailProgress: (count) => {
             emit({ type: 'metadata_progress', source: 'gmail', count });
           },

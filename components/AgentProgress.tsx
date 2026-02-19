@@ -39,6 +39,7 @@ const toolConfig: Record<string, { label: string; activeLabel: string; icon: str
   contacts_analyze: { label: 'Analyzed relationship', activeLabel: 'Analyzing relationship', icon: 'person_search' },
   web_search: { label: 'Searched the web', activeLabel: 'Searching the web', icon: 'travel_explore' },
   web_fetch: { label: 'Gathered information', activeLabel: 'Fetching page', icon: 'language' },
+  tone_analyze: { label: 'Analyzed your writing style', activeLabel: 'Analyzing your writing style', icon: 'stylus_note' },
 };
 
 /**
@@ -55,6 +56,8 @@ function getStepDetail(tool: string, args: Record<string, unknown>): string | nu
     case 'calendar_list':
       if (args.daysAhead) return `Next ${args.daysAhead} days`;
       return null;
+    case 'tone_analyze':
+      return args.recipient_email ? `for ${args.recipient_email}` : 'general style';
     default:
       return null;
   }

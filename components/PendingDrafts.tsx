@@ -22,6 +22,7 @@ interface PendingDraftsProps {
   drafts: PendingDraft[];
   onDraftConfirmed?: (draftId: string, result: ConfirmationResult) => void;
   onDraftRejected?: (draftId: string) => void;
+  onDraftRefine?: (draftId: string, draft: PendingDraft, feedback: string, editedDraft?: EmailDraft) => void;
   onAllDraftsProcessed?: () => void;
 }
 
@@ -30,6 +31,7 @@ export function PendingDrafts({
   drafts,
   onDraftConfirmed,
   onDraftRejected,
+  onDraftRefine,
   onAllDraftsProcessed,
 }: PendingDraftsProps) {
   const [loadingDraftId, setLoadingDraftId] = useState<string | null>(null);
@@ -129,9 +131,8 @@ export function PendingDrafts({
               <EmailDraftCard
                 key={draft.id}
                 draft={draft}
-                taskId={taskId}
-                onConfirm={handleConfirm}
                 onReject={handleReject}
+                onRefine={onDraftRefine ? (draftId, feedback, editedDraft) => onDraftRefine(draftId, draft, feedback, editedDraft) : undefined}
                 isLoading={isLoading}
               />
             );

@@ -28,8 +28,6 @@ interface ScanOptions {
   maxEmails: number;
   userEmail?: string; // User's email for scoring
   preppedEventMap?: Record<string, string>; // eventId -> actionId for already-prepped meetings
-  taskThreadIds?: Set<string>; // Thread IDs of active tasks - don't exclude these emails even if user sent last message
-  protectedSenders?: Set<string>; // Sender names with active tasks - don't exclude their emails
   onGmailProgress?: (count: number) => void;
   onCalendarProgress?: (count: number) => void;
 }
@@ -74,7 +72,7 @@ export async function buildScanContext(
 
   // Process email metadata - only emails user needs to respond to
   const topSenders = groupBySender(inboxEmails);
-  const awaitingResponse = await findAwaitingResponse(accessToken, inboxEmails, opts.userEmail, opts.taskThreadIds, opts.protectedSenders);
+  const awaitingResponse = await findAwaitingResponse(accessToken, inboxEmails, opts.userEmail);
 
   // Process calendar metadata
   const upcoming = formatUpcomingEvents(events);
@@ -183,15 +181,11 @@ function groupBySender(emails: EmailMetadata[]): TopSender[] {
  * Find emails that appear to need a response
  * Uses the email scoring layer to filter out automated/platform emails
  * Only includes emails with tier 'high' or 'medium'
- * @param taskThreadIds - Thread IDs of active tasks - don't exclude these even if user sent last message
- * @param protectedSenders - Sender names with active tasks - don't exclude their emails
  */
 async function findAwaitingResponse(
   accessToken: string,
   emails: EmailMetadata[],
   userEmail?: string,
-  taskThreadIds?: Set<string>,
-  protectedSenders?: Set<string>
 ): Promise<AwaitingResponse[]> {
   const now = Date.now();
   const candidates: AwaitingResponse[] = [];
@@ -275,27 +269,15 @@ async function findAwaitingResponse(
     const boostedScore = (scored?.score || 0) + recencyBoost;
 
     // Check if we've already replied in this thread
-    // Only skip if we sent the LAST message AND it's not a high-tier email AND there's no active task for this thread/sender
-    const isHighTier = scored?.tier === 'high';
-    const hasActiveTask = taskThreadIds?.has(email.threadId);
-    // Check if sender has an active task (by name match)
-    const senderName = extractName(email.from).toLowerCase();
-    const hasProtectedSender = protectedSenders && Array.from(protectedSenders).some(
-      name => senderName.includes(name.toLowerCase()) || name.toLowerCase().includes(senderName)
-    );
-
+    // If the user's message is the last one, always filter it out — the reply is the ground truth
     if (email.threadId) {
       const threadInfo = await getThreadInfo(accessToken, email.threadId);
       if (threadInfo && threadInfo.messageCount > 1) {
-        // If we sent the last message, skip (unless high-tier OR has active task OR sender is protected)
-        const lastFromMe = threadInfo.lastMessageFrom.toLowerCase().includes('me') ||
-                          threadInfo.lastMessageFrom.includes(extractEmail(email.to[0] || ''));
-        if (lastFromMe && !isHighTier && !hasActiveTask && !hasProtectedSender) {
+        const lastFromEmail = extractEmail(threadInfo.lastMessageFrom).toLowerCase();
+        const lastFromMe = userEmail ? lastFromEmail === userEmail.toLowerCase() : false;
+        if (lastFromMe) {
           console.log('[SCAN] Skipping thread where user sent last message');
           continue;
-        }
-        if (lastFromMe && (hasActiveTask || hasProtectedSender)) {
-          console.log('[SCAN] Keeping thread with active task/protected sender despite user sent last');
         }
       }
     }
@@ -403,7 +385,7 @@ interface MeetingScore {
 
 function scoreMeeting(
   event: CalendarEvent,
-  userEmail?: string,
+  _userEmail?: string,
   contactAffinity?: Record<string, number> // email -> count of emails exchanged
 ): MeetingScore {
   let score = 0;

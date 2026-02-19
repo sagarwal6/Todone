@@ -87,9 +87,8 @@ function LinkifiedText({ text, className }: { text: string; className?: string }
 
 interface EmailDraftCardProps {
   draft: PendingDraft;
-  taskId: string;
-  onConfirm: (draftId: string, editedData?: EmailDraft) => Promise<void>;
   onReject: (draftId: string, feedback?: string) => Promise<void>;
+  onRefine?: (draftId: string, feedback: string, editedDraft?: EmailDraft) => void;
   isLoading?: boolean;
   /** Called when user opens the draft in Gmail */
   onOpenInGmail?: (draftId: string) => void;
@@ -98,6 +97,7 @@ interface EmailDraftCardProps {
 export function EmailDraftCard({
   draft,
   onReject,
+  onRefine,
   isLoading = false,
   onOpenInGmail,
 }: EmailDraftCardProps) {
@@ -109,10 +109,10 @@ export function EmailDraftCard({
   const [isEditing, setIsEditing] = useState(false);
   const [editedData, setEditedData] = useState<EmailDraft>(emailData);
   const [showOriginal, setShowOriginal] = useState(false);
-  const [showRejectInput, setShowRejectInput] = useState(false);
-  const [rejectFeedback, setRejectFeedback] = useState('');
+  const [instruction, setInstruction] = useState('');
   const [copied, setCopied] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const instructionRef = useRef<HTMLInputElement>(null);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -140,10 +140,8 @@ export function EmailDraftCard({
   }, [isEditing, editedData.body, emailData.body]);
 
   const handleReject = useCallback(async () => {
-    await onReject(draft.id, rejectFeedback || undefined);
-    setShowRejectInput(false);
-    setRejectFeedback('');
-  }, [draft.id, rejectFeedback, onReject]);
+    await onReject(draft.id);
+  }, [draft.id, onReject]);
 
   const handleStartEdit = () => {
     setIsEditing(true);
@@ -153,7 +151,14 @@ export function EmailDraftCard({
   const handleCancelEdit = () => {
     setIsEditing(false);
     setEditedData(emailData);
+    setInstruction('');
   };
+
+  const handleRedraft = useCallback(() => {
+    const feedbackText = instruction.trim() || 'I\'ve edited the draft directly. Please refine based on my changes.';
+    onRefine?.(draft.id, feedbackText, editedData);
+    setInstruction('');
+  }, [draft.id, instruction, editedData, onRefine]);
 
   return (
     <div className="space-y-0">
@@ -277,28 +282,79 @@ export function EmailDraftCard({
         {/* Body */}
         <div className="relative">
           {isEditing ? (
-            <textarea
-              ref={bodyRef}
-              value={editedData.body}
-              onChange={(e) => setEditedData({ ...editedData, body: e.target.value })}
-              className="
-                w-full text-[15px] leading-relaxed text-inbox-text-primary
-                bg-transparent outline-none resize-none
-                border-l-2 border-inbox-accent pl-4 -ml-4
-                min-h-[120px]
-              "
-            />
+            <div className="border-l-2 border-inbox-accent pl-4 -ml-4">
+              <textarea
+                ref={bodyRef}
+                value={editedData.body}
+                onChange={(e) => setEditedData({ ...editedData, body: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    handleRedraft();
+                  }
+                }}
+                className="
+                  w-full text-[15px] leading-relaxed text-inbox-text-primary
+                  bg-transparent outline-none resize-none
+                  min-h-[120px]
+                "
+              />
+              {/* Inline instruction bar + Redraft */}
+              {onRefine && (
+                <div className="flex items-center gap-2 pt-3 border-t border-black/[0.04]">
+                  <span className="material-symbols-rounded text-lg text-inbox-accent flex-shrink-0">auto_fix_high</span>
+                  <input
+                    ref={instructionRef}
+                    type="text"
+                    value={instruction}
+                    onChange={(e) => setInstruction(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                        e.preventDefault();
+                        handleRedraft();
+                      }
+                    }}
+                    placeholder="Add instructions (optional)..."
+                    className="
+                      flex-1 text-[13px] text-inbox-text-primary bg-transparent outline-none
+                      placeholder:text-inbox-text-tertiary
+                    "
+                  />
+                  <button
+                    onClick={handleRedraft}
+                    className="
+                      px-4 py-1.5 text-[13px] font-medium
+                      bg-inbox-accent text-white
+                      rounded-full
+                      hover:bg-inbox-accent-hover
+                      active:scale-[0.98]
+                      transition-all duration-100
+                      flex-shrink-0
+                    "
+                  >
+                    Redraft
+                  </button>
+                </div>
+              )}
+            </div>
           ) : (
             <div
               onClick={handleStartEdit}
               className="
                 text-[15px] leading-relaxed text-inbox-text-primary
-                whitespace-pre-wrap cursor-text
+                whitespace-pre-wrap cursor-text group relative
                 hover:bg-black/[0.02] -mx-3 px-3 py-2 -my-2 rounded
                 transition-colors duration-100
               "
             >
+              <span
+                className="material-symbols-rounded text-lg text-inbox-text-tertiary absolute top-2 right-2 opacity-0 group-hover:opacity-60 transition-opacity duration-150 hidden sm:block"
+                aria-hidden="true"
+              >
+                edit
+              </span>
               {emailData.body}
+              <p className="text-[11px] text-inbox-text-tertiary mt-1 sm:hidden">Tap to edit</p>
             </div>
           )}
         </div>
@@ -313,121 +369,56 @@ export function EmailDraftCard({
 
       {/* Actions */}
       <div className="border-t border-black/[0.06] pt-4">
-        {showRejectInput ? (
-          <div className="space-y-3 animate-fade-in">
-            <textarea
-              value={rejectFeedback}
-              onChange={(e) => setRejectFeedback(e.target.value)}
-              placeholder="What would you like changed? (optional)"
-              className="
-                w-full text-[14px] text-inbox-text-primary
-                bg-inbox-bg-input rounded-lg
-                px-3 py-2.5 outline-none
-                focus:ring-2 focus:ring-inbox-accent focus:ring-offset-0
-                placeholder:text-inbox-text-tertiary
-                resize-none
-              "
-              rows={2}
-              autoFocus
-            />
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowRejectInput(false)}
-                className="text-[14px] text-inbox-text-secondary hover:text-inbox-text-primary transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleReject}
-                disabled={isLoading}
-                className="text-[14px] font-medium text-inbox-error hover:opacity-80 transition-opacity disabled:opacity-50"
-              >
-                Discard draft
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center justify-end gap-3">
-            {isEditing && (
-              <button
-                onClick={handleCancelEdit}
-                className="
-                  px-4 py-2 text-[14px] text-inbox-text-secondary
-                  hover:text-inbox-text-primary hover:bg-inbox-bg-hover
-                  rounded-full transition-colors duration-100
-                "
-              >
-                Cancel
-              </button>
-            )}
-            {!isEditing && (
-              <button
-                onClick={() => setShowRejectInput(true)}
-                disabled={isLoading}
-                className="
-                  px-4 py-2 text-[14px] text-inbox-text-tertiary
-                  hover:text-inbox-error hover:bg-red-50
-                  rounded-full transition-colors duration-100 disabled:opacity-50
-                "
-              >
-                Reject
-              </button>
-            )}
+        <div className="flex items-center gap-3">
+          {/* Left: Discard + Cancel */}
+          <button
+            onClick={handleReject}
+            disabled={isLoading}
+            className="
+              px-4 py-2 text-[14px] text-inbox-text-tertiary
+              hover:text-inbox-error hover:bg-red-50
+              rounded-full transition-colors duration-100 disabled:opacity-50
+            "
+          >
+            Discard
+          </button>
+          {isEditing && (
             <button
-              onClick={handleStartEdit}
-              disabled={isLoading || isEditing}
+              onClick={handleCancelEdit}
               className="
                 px-4 py-2 text-[14px] text-inbox-text-secondary
                 hover:text-inbox-text-primary hover:bg-inbox-bg-hover
                 rounded-full transition-colors duration-100
-                disabled:opacity-50 disabled:pointer-events-none
               "
             >
-              Edit
+              Cancel
             </button>
+          )}
 
-            {isReply ? (
-              <>
-                {/* Reply mode: Copy + Open Thread */}
-                <button
-                  onClick={handleCopyReply}
-                  disabled={isLoading}
-                  className="
-                    flex items-center gap-2
-                    px-5 py-2.5 text-[14px] font-medium
-                    border border-inbox-accent text-inbox-accent
-                    rounded-full
-                    hover:bg-inbox-accent/5
-                    active:scale-[0.98]
-                    transition-all duration-100
-                    disabled:opacity-50 disabled:pointer-events-none
-                  "
-                >
-                  <span className="material-symbols-rounded text-lg">
-                    {copied ? 'check' : 'content_copy'}
-                  </span>
-                  <span>{copied ? 'Copied!' : 'Copy Reply'}</span>
-                </button>
-                <button
-                  onClick={handleOpenInGmail}
-                  disabled={isLoading}
-                  className="
-                    flex items-center gap-2
-                    px-5 py-2.5 text-[14px] font-medium
-                    bg-inbox-accent text-white
-                    rounded-full
-                    hover:bg-inbox-accent-hover hover:shadow-md
-                    active:scale-[0.98]
-                    transition-all duration-100
-                    disabled:opacity-50 disabled:pointer-events-none
-                  "
-                >
-                  <span>Open Thread in Gmail</span>
-                  <span className="material-symbols-rounded text-lg">open_in_new</span>
-                </button>
-              </>
-            ) : (
-              /* New compose mode: single Compose in Gmail button */
+          <div className="flex-1" />
+
+          {/* Right: Gmail actions */}
+          {isReply ? (
+            <>
+              <button
+                onClick={handleCopyReply}
+                disabled={isLoading}
+                className="
+                  flex items-center gap-2
+                  px-5 py-2.5 text-[14px] font-medium
+                  border border-inbox-accent text-inbox-accent
+                  rounded-full
+                  hover:bg-inbox-accent/5
+                  active:scale-[0.98]
+                  transition-all duration-100
+                  disabled:opacity-50 disabled:pointer-events-none
+                "
+              >
+                <span className="material-symbols-rounded text-lg">
+                  {copied ? 'check' : 'content_copy'}
+                </span>
+                <span>{copied ? 'Copied!' : 'Copy'}</span>
+              </button>
               <button
                 onClick={handleOpenInGmail}
                 disabled={isLoading}
@@ -442,12 +433,30 @@ export function EmailDraftCard({
                   disabled:opacity-50 disabled:pointer-events-none
                 "
               >
-                <span>Compose in Gmail</span>
+                <span>Open in Gmail</span>
                 <span className="material-symbols-rounded text-lg">open_in_new</span>
               </button>
-            )}
-          </div>
-        )}
+            </>
+          ) : (
+            <button
+              onClick={handleOpenInGmail}
+              disabled={isLoading}
+              className="
+                flex items-center gap-2
+                px-5 py-2.5 text-[14px] font-medium
+                bg-inbox-accent text-white
+                rounded-full
+                hover:bg-inbox-accent-hover hover:shadow-md
+                active:scale-[0.98]
+                transition-all duration-100
+                disabled:opacity-50 disabled:pointer-events-none
+              "
+            >
+              <span>Compose in Gmail</span>
+              <span className="material-symbols-rounded text-lg">open_in_new</span>
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
