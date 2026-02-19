@@ -79,6 +79,7 @@ export function TaskCard({
 }: TaskCardProps) {
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isSwipeRevealed, setIsSwipeRevealed] = useState<'left' | 'right' | null>(null);
+  const [isCompleting, setIsCompleting] = useState(false);
 
   const isResearching = task.status === 'researching';
   const isReady = task.status === 'ready';
@@ -95,6 +96,7 @@ export function TaskCard({
 
   // Track whether this gesture has been locked to horizontal swipe
   const swipeLockedRef = useRef<'horizontal' | 'vertical' | null>(null);
+  const hapticFiredRef = useRef(false);
 
   const swipeHandlers = useSwipeable({
     onSwiping: (e) => {
@@ -112,10 +114,20 @@ export function TaskCard({
       // Only allow swipe offset if locked to horizontal
       if (swipeLockedRef.current === 'horizontal') {
         setSwipeOffset(e.deltaX);
+        // Haptic feedback at commitment threshold
+        const width = cardRef.current?.offsetWidth || 300;
+        const crossedThreshold = Math.abs(e.deltaX) > width * 0.4;
+        if (crossedThreshold && !hapticFiredRef.current) {
+          hapticFiredRef.current = true;
+          navigator.vibrate?.(10);
+        } else if (!crossedThreshold) {
+          hapticFiredRef.current = false;
+        }
       }
     },
     onSwipedLeft: () => {
       swipeLockedRef.current = null;
+      hapticFiredRef.current = false;
       if (!isMobile || isDragging) return;
       const width = cardRef.current?.offsetWidth || 300;
       if (swipeOffset < -(width * 0.4)) {
@@ -134,6 +146,7 @@ export function TaskCard({
     },
     onSwipedRight: () => {
       swipeLockedRef.current = null;
+      hapticFiredRef.current = false;
       if (!isMobile || isDragging) return;
       const width = cardRef.current?.offsetWidth || 300;
       if (swipeOffset > width * 0.4) {
@@ -192,22 +205,48 @@ export function TaskCard({
   return (
     <div ref={cardRef} className="relative overflow-hidden">
       {/* Swipe action backgrounds — full width, revealed as card slides */}
-      {isMobile && swipeOffset !== 0 && (
-        <>
-          {/* Done action (swipe right) — green fills from left */}
-          {swipeOffset > 0 && (
-            <div className="absolute inset-0 bg-inbox-success flex items-center pl-6">
-              <MaterialIcon name="check_circle" size={24} className="text-white" />
-            </div>
-          )}
-          {/* Someday action (swipe left) — amber fills from right */}
-          {swipeOffset < 0 && (
-            <div className="absolute inset-0 bg-amber-500 flex items-center justify-end pr-6">
-              <MaterialIcon name="schedule" size={24} className="text-white" />
-            </div>
-          )}
-        </>
-      )}
+      {isMobile && swipeOffset !== 0 && (() => {
+        const cardWidth = cardRef.current?.offsetWidth || 300;
+        const swipeProgress = Math.min(Math.abs(swipeOffset) / (cardWidth * 0.4), 1);
+        const iconScale = 0.8 + (swipeProgress * 0.4);
+        const iconOpacity = 0.5 + (swipeProgress * 0.5);
+        const isCommitted = swipeProgress >= 1;
+
+        return (
+          <>
+            {/* Done action (swipe right) — green fills from left */}
+            {swipeOffset > 0 && (
+              <div
+                className="absolute inset-0 bg-inbox-success flex items-center pl-6 transition-[filter] duration-100"
+                style={isCommitted ? { filter: 'brightness(1.2)' } : {}}
+              >
+                <span style={{ display: 'inline-flex', transform: `scale(${iconScale})`, opacity: iconOpacity, transition: 'transform 50ms ease-out' }}>
+                  <MaterialIcon
+                    name="check_circle"
+                    size={24}
+                    className="text-white"
+                  />
+                </span>
+              </div>
+            )}
+            {/* Someday action (swipe left) — amber fills from right */}
+            {swipeOffset < 0 && (
+              <div
+                className="absolute inset-0 bg-amber-500 flex items-center justify-end pr-6 transition-[filter] duration-100"
+                style={isCommitted ? { filter: 'brightness(1.2)' } : {}}
+              >
+                <span style={{ display: 'inline-flex', transform: `scale(${iconScale})`, opacity: iconOpacity, transition: 'transform 50ms ease-out' }}>
+                  <MaterialIcon
+                    name="schedule"
+                    size={24}
+                    className="text-white"
+                  />
+                </span>
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* Card content */}
       <div
@@ -220,6 +259,7 @@ export function TaskCard({
             task-card cursor-pointer group
             ${isDragging ? 'dragging' : ''}
             ${isCompleted ? 'opacity-60' : ''}
+            ${isCompleting && !isMobile ? 'task-completing' : ''}
             ${isSelected ? 'bg-inbox-bg-selected' : ''}
             ${isMobile ? '!bg-[var(--inbox-bg-primary)]' : ''}
           `}
@@ -230,8 +270,15 @@ export function TaskCard({
             {/* Circular Checkbox (desktop only — mobile uses swipe gestures) */}
             {!isMobile && (
               <CircularCheckbox
-                checked={isCompleted}
-                onChange={() => isCompleted ? onRestore(task.id) : onComplete(task.id)}
+                checked={isCompleted || isCompleting}
+                onChange={() => {
+                  if (isCompleted) {
+                    onRestore(task.id);
+                  } else if (!isCompleting) {
+                    setIsCompleting(true);
+                    setTimeout(() => onComplete(task.id), 850);
+                  }
+                }}
                 size="medium"
                 aria-label={isCompleted ? 'Restore task' : 'Complete task'}
               />

@@ -1,7 +1,6 @@
 "use client";
 
-import React from "react";
-import { MaterialIcon } from "./MaterialIcon";
+import React, { useState, useEffect, useRef } from "react";
 
 interface CircularCheckboxProps {
   checked: boolean;
@@ -14,9 +13,9 @@ interface CircularCheckboxProps {
 
 // Inbox-style sizing - refined smaller sizes with thin borders
 const sizeMap = {
-  small: { container: "w-4 h-4", icon: 10 },
-  medium: { container: "w-5 h-5", icon: 12 },
-  large: { container: "w-6 h-6", icon: 14 },
+  small: { container: "w-4 h-4", svgSize: 16 },
+  medium: { container: "w-5 h-5", svgSize: 20 },
+  large: { container: "w-6 h-6", svgSize: 24 },
 };
 
 export function CircularCheckbox({
@@ -27,7 +26,19 @@ export function CircularCheckbox({
   className = "",
   "aria-label": ariaLabel = "Toggle completion",
 }: CircularCheckboxProps) {
-  const { container, icon } = sizeMap[size];
+  const { container, svgSize } = sizeMap[size];
+  const [isAnimating, setIsAnimating] = useState(false);
+  const prevChecked = useRef(checked);
+
+  // Only animate when checked transitions from false to true (user action)
+  useEffect(() => {
+    if (checked && !prevChecked.current) {
+      setIsAnimating(true);
+      const timer = setTimeout(() => setIsAnimating(false), 500);
+      return () => clearTimeout(timer);
+    }
+    prevChecked.current = checked;
+  }, [checked]);
 
   return (
     <button
@@ -40,9 +51,9 @@ export function CircularCheckbox({
       className={`
         relative flex items-center justify-center flex-shrink-0
         min-w-[44px] min-h-[44px]
-        transition-all duration-150 ease-out
         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inbox-accent focus-visible:ring-offset-2
         ${disabled ? "opacity-38 cursor-not-allowed" : "cursor-pointer"}
+        ${isAnimating ? "checkbox-completing" : ""}
         ${className}
       `}
     >
@@ -50,19 +61,36 @@ export function CircularCheckbox({
         ${container}
         rounded-full
         flex items-center justify-center
+        ${isAnimating ? "checkbox-circle" : ""}
         ${
           checked
-            ? "bg-inbox-accent text-inbox-text-inverse"
+            ? "bg-inbox-success text-white"
             : "border border-[#DADCE0] hover:border-[#9AA0A6] hover:bg-inbox-accent/5"
         }
       `}>
         {checked && (
-          <MaterialIcon
-            name="check"
-            size={icon}
-            weight={400}
-            className="animate-scale-in text-white"
-          />
+          <svg
+            width={svgSize * 0.6}
+            height={svgSize * 0.6}
+            viewBox="0 0 24 24"
+            fill="none"
+            className={isAnimating ? "checkmark-path" : ""}
+          >
+            <polyline
+              points="4,12 10,18 20,6"
+              stroke="white"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={isAnimating ? {
+                strokeDasharray: 30,
+                strokeDashoffset: 0,
+                animation: "checkmarkDraw 200ms ease-out 100ms both",
+              } : {
+                strokeDasharray: "none",
+              }}
+            />
+          </svg>
         )}
       </span>
     </button>

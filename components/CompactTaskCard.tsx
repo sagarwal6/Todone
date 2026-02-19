@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Task, ProgressStatus } from '@/lib/types';
 import { CircularCheckbox } from './ui/CircularCheckbox';
 import { MaterialIcon } from './ui/MaterialIcon';
@@ -44,10 +45,16 @@ export function CompactTaskCard({
   const isCompleted = task.status === 'completed';
   const isSomeday = task.status === 'someday';
   const isResearching = task.status === 'researching';
+  const [isCompleting, setIsCompleting] = useState(false);
 
   const handleComplete = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onComplete(task.id);
+    if (isCompleted) {
+      onComplete(task.id);
+    } else if (!isCompleting) {
+      setIsCompleting(true);
+      setTimeout(() => onComplete(task.id), 850);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -67,6 +74,7 @@ export function CompactTaskCard({
         w-full text-left flex items-center gap-2 px-3 py-2.5
         transition-colors duration-100 cursor-pointer
         ${isDragging ? 'opacity-50' : ''}
+        ${isCompleting ? 'task-completing' : ''}
         ${isSelected
           ? 'bg-inbox-bg-selected'
           : 'bg-transparent hover:bg-inbox-bg-hover'
@@ -77,8 +85,15 @@ export function CompactTaskCard({
       {/* Checkbox */}
       <div onClick={handleComplete}>
         <CircularCheckbox
-          checked={isCompleted || isSomeday}
-          onChange={() => onComplete(task.id)}
+          checked={isCompleted || isSomeday || isCompleting}
+          onChange={() => {
+            if (isCompleted) {
+              onComplete(task.id);
+            } else if (!isCompleting) {
+              setIsCompleting(true);
+              setTimeout(() => onComplete(task.id), 850);
+            }
+          }}
           size="small"
         />
       </div>

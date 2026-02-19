@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -25,6 +25,7 @@ import { TaskCard } from './TaskCard';
 import { CompactTaskCard } from './CompactTaskCard';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useAgentContext } from '@/contexts/AgentContext';
+import { useAnimatedList } from '@/hooks/useAnimatedList';
 
 interface SortableTaskProps {
   task: Task;
@@ -81,6 +82,7 @@ function SortableTask({
       <div
         ref={setNodeRef}
         style={style}
+        data-task-id={task.id}
         {...wrapperProps}
         className="cursor-grab active:cursor-grabbing"
       >
@@ -101,6 +103,7 @@ function SortableTask({
     <div
       ref={setNodeRef}
       style={style}
+      data-task-id={task.id}
       {...wrapperProps}
       className="cursor-grab active:cursor-grabbing"
     >
@@ -154,6 +157,9 @@ export function TaskList({
 }: TaskListProps) {
   const { isMobile } = useResponsive();
   const { isAgentRunning } = useAgentContext();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { capturePositions, animateChanges } = useAnimatedList(containerRef);
+  const [completedAnnouncement, setCompletedAnnouncement] = useState('');
 
   // Mobile: TouchSensor only (250ms long-press to drag, avoids conflict with swipe/scroll)
   // Desktop: PointerSensor (8px distance) + KeyboardSensor
@@ -188,6 +194,29 @@ export function TaskList({
     }
   }, [tasks, onReorder]);
 
+  // Wrap removal callbacks to capture positions for FLIP animation
+  const handleComplete = useCallback((taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    capturePositions();
+    onComplete(taskId);
+    requestAnimationFrame(() => animateChanges());
+    if (task) {
+      setCompletedAnnouncement(`Task completed: ${task.title}`);
+    }
+  }, [tasks, onComplete, capturePositions, animateChanges]);
+
+  const handleSomeday = useCallback((taskId: string) => {
+    capturePositions();
+    onSomeday(taskId);
+    requestAnimationFrame(() => animateChanges());
+  }, [onSomeday, capturePositions, animateChanges]);
+
+  const handleDelete = useCallback((taskId: string) => {
+    capturePositions();
+    onDelete(taskId);
+    requestAnimationFrame(() => animateChanges());
+  }, [onDelete, capturePositions, animateChanges]);
+
   // Separate pinned and unpinned tasks (pinned always at top)
   const pinnedTasks = tasks.filter(t => t.isPinned);
   const unpinnedTasks = tasks.filter(t => !t.isPinned);
@@ -201,9 +230,9 @@ export function TaskList({
       key={task.id}
       task={task}
       progress={progressMap[task.id] || null}
-      onComplete={onComplete}
-      onSomeday={onSomeday}
-      onDelete={onDelete}
+      onComplete={handleComplete}
+      onSomeday={handleSomeday}
+      onDelete={handleDelete}
       onRestore={onRestore}
       onShowDetails={onShowDetails}
       onTogglePin={onTogglePin}
@@ -218,20 +247,25 @@ export function TaskList({
   const sortedTasks = [...pinnedTasks, ...unpinnedTasks];
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragEnd={handleDragEnd}
-      modifiers={[restrictToVerticalAxis]}
-    >
-      <SortableContext
-        items={sortedTasks.map((t) => t.id)}
-        strategy={verticalListSortingStrategy}
+    <>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+        modifiers={[restrictToVerticalAxis]}
       >
-        <div className="divide-y divide-inbox-divider">
-          {sortedTasks.map(renderTask)}
-        </div>
-      </SortableContext>
-    </DndContext>
+        <SortableContext
+          items={sortedTasks.map((t) => t.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          <div ref={containerRef} className="divide-y divide-inbox-divider">
+            {sortedTasks.map(renderTask)}
+          </div>
+        </SortableContext>
+      </DndContext>
+      <div aria-live="polite" className="sr-only">
+        {completedAnnouncement}
+      </div>
+    </>
   );
 }

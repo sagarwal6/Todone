@@ -516,6 +516,65 @@ body {
   }
 }
 
+/* === Completion Animation System === */
+
+@keyframes checkmarkDraw {
+  0% { stroke-dashoffset: 30; }
+  100% { stroke-dashoffset: 0; }
+}
+
+@keyframes circleFill {
+  0% { clip-path: circle(0% at 50% 50%); }
+  100% { clip-path: circle(100% at 50% 50%); }
+}
+
+@keyframes checkboxElasticPop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+.checkbox-completing {
+  animation: checkboxElasticPop 200ms cubic-bezier(0.34, 1.56, 0.64, 1) 150ms both;
+}
+
+.checkbox-completing .checkbox-circle {
+  animation: circleFill 150ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* Task card slide-out on completion (desktop) */
+@keyframes taskSlideOutDesktop {
+  0% { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(40px); }
+}
+
+.task-completing {
+  animation: taskSlideOutDesktop 250ms cubic-bezier(0.4, 0, 1, 1) 600ms forwards;
+}
+
+.task-completing .text-inbox-text-primary {
+  text-decoration: line-through;
+  opacity: 0.6;
+  transition: all 200ms ease-out;
+}
+
+/* FLIP row collapse animation */
+@keyframes flipRowCollapse {
+  from { transform: translateY(var(--flip-delta-y)); }
+  to { transform: translateY(0); }
+}
+
+/* Reduced motion: disable all completion animations */
+@media (prefers-reduced-motion: reduce) {
+  .task-completing,
+  .checkbox-completing,
+  .checkbox-completing .checkbox-circle,
+  .checkbox-completing .checkmark-path {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 /* Typing indicator - three bouncing dots */
 .typing-indicator {
   display: flex;
