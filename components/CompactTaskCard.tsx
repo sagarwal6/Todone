@@ -42,7 +42,7 @@ export function CompactTaskCard({
   isAgentRunning = false,
 }: CompactTaskCardProps) {
   const isCompleted = task.status === 'completed';
-  const isArchived = task.status === 'archived';
+  const isSomeday = task.status === 'someday';
   const isResearching = task.status === 'researching';
 
   const handleComplete = (e: React.MouseEvent) => {
@@ -77,7 +77,7 @@ export function CompactTaskCard({
       {/* Checkbox */}
       <div onClick={handleComplete}>
         <CircularCheckbox
-          checked={isCompleted || isArchived}
+          checked={isCompleted || isSomeday}
           onChange={() => onComplete(task.id)}
           size="small"
         />
@@ -88,7 +88,7 @@ export function CompactTaskCard({
         <div className="flex items-center gap-1.5">
           <span className={`
             text-inbox-body break-words
-            ${isCompleted || isArchived ? 'line-through text-inbox-text-tertiary' : 'text-inbox-text-primary'}
+            ${isCompleted || isSomeday ? 'line-through text-inbox-text-tertiary' : 'text-inbox-text-primary'}
           `}>
             {task.title}
           </span>

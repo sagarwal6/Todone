@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { MaterialIcon } from './ui/MaterialIcon';
 
-type ViewMode = 'active' | 'completed' | 'archived' | 'insights';
+type ViewMode = 'active' | 'completed' | 'someday' | 'insights';
 
 interface NavItem {
   id: ViewMode;
@@ -18,7 +18,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { id: 'active', label: 'Active', icon: 'radio_button_unchecked', iconFilled: 'task_alt' },
   { id: 'completed', label: 'Done', icon: 'check_circle', iconFilled: 'check_circle' },
-  { id: 'archived', label: 'Archived', icon: 'inventory_2', iconFilled: 'inventory_2' },
+  { id: 'someday', label: 'Someday', icon: 'schedule', iconFilled: 'schedule' },
 ];
 
 interface SidebarProps {

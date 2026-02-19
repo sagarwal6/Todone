@@ -30,15 +30,15 @@ export function getAllTasks(): Task[] {
 }
 
 export function getActiveTasks(): Task[] {
-  return getAllTasks().filter(t => t.status !== 'completed' && t.status !== 'archived');
+  return getAllTasks().filter(t => t.status !== 'completed' && t.status !== 'someday');
 }
 
 export function getCompletedTasks(): Task[] {
   return getAllTasks().filter(t => t.status === 'completed');
 }
 
-export function getArchivedTasks(): Task[] {
-  return getAllTasks().filter(t => t.status === 'archived');
+export function getSomedayTasks(): Task[] {
+  return getAllTasks().filter(t => t.status === 'someday');
 }
 
 export function setTaskStatus(taskId: string, status: TaskStatus): Task | null {
@@ -79,8 +79,8 @@ export function completeTask(taskId: string): Task | null {
   return setTaskStatus(taskId, 'completed');
 }
 
-export function archiveTask(taskId: string): Task | null {
-  return setTaskStatus(taskId, 'archived');
+export function somedayTask(taskId: string): Task | null {
+  return setTaskStatus(taskId, 'someday');
 }
 
 export function restoreTask(taskId: string): Task | null {

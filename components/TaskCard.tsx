@@ -24,7 +24,7 @@ interface TaskCardProps {
   task: Task;
   progress?: ProgressStatus | null;
   onComplete: (taskId: string) => void;
-  onArchive: (taskId: string) => void;
+  onSomeday: (taskId: string) => void;
   onDelete: (taskId: string) => void;
   onRestore: (taskId: string) => void;
   onShowDetails: (taskId: string) => void;
@@ -66,7 +66,7 @@ export function TaskCard({
   task,
   progress,
   onComplete,
-  onArchive,
+  onSomeday,
   onDelete,
   onRestore,
   onShowDetails,
@@ -83,7 +83,7 @@ export function TaskCard({
   const isResearching = task.status === 'researching';
   const isReady = task.status === 'ready';
   const isCompleted = task.status === 'completed';
-  const isArchived = task.status === 'archived';
+  const isSomeday = task.status === 'someday';
 
   const quickInfo = task.research?.quickInfo;
   const options = task.research?.options;
@@ -124,7 +124,7 @@ export function TaskCard({
         setSwipeOffset(-width);
         setTimeout(() => {
           swipeCommittedRef.current = false;
-          onArchive(task.id);
+          onSomeday(task.id);
         }, 200);
       } else {
         // Below threshold — always snap back (no stop at tap target)
@@ -174,10 +174,10 @@ export function TaskCard({
     onShowDetails(task.id);
   };
 
-  const handleArchive = () => {
+  const handleSomeday = () => {
     setSwipeOffset(0);
     setIsSwipeRevealed(null);
-    onArchive(task.id);
+    onSomeday(task.id);
   };
 
   const handleDelete = () => {
@@ -200,10 +200,10 @@ export function TaskCard({
               <MaterialIcon name="check_circle" size={24} className="text-white" />
             </div>
           )}
-          {/* Archive action (swipe left) — blue fills from right */}
+          {/* Someday action (swipe left) — amber fills from right */}
           {swipeOffset < 0 && (
-            <div className="absolute inset-0 bg-primary flex items-center justify-end pr-6">
-              <MaterialIcon name="inventory_2" size={24} className="text-on-primary" />
+            <div className="absolute inset-0 bg-amber-500 flex items-center justify-end pr-6">
+              <MaterialIcon name="schedule" size={24} className="text-white" />
             </div>
           )}
         </>
@@ -245,7 +245,7 @@ export function TaskCard({
                   {task.title}
                 </h3>
                 {/* Pin icon inline when pinned (only when hover actions hidden) */}
-                {task.isPinned && !isArchived && !isCompleted && !showHoverActions && (
+                {task.isPinned && !isSomeday && !isCompleted && !showHoverActions && (
                   <MaterialIcon name="push_pin" size={14} weight={300} fill={true} className="text-inbox-accent flex-shrink-0" />
                 )}
               </div>
@@ -310,7 +310,7 @@ export function TaskCard({
             {/* Hover actions - only in single-pane view */}
             {showHoverActions && !isMobile && (
               <div className="flex-shrink-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                {!isArchived && !isCompleted && (
+                {!isSomeday && !isCompleted && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onTogglePin(task.id); }}
                     className={`p-1.5 rounded-full transition-colors duration-100 ${
@@ -324,14 +324,14 @@ export function TaskCard({
                     <MaterialIcon name="push_pin" size={18} weight={300} fill={task.isPinned} />
                   </button>
                 )}
-                {!isArchived && (
+                {!isSomeday && (
                   <button
-                    onClick={handleArchive}
+                    onClick={handleSomeday}
                     className="p-1.5 rounded-full text-inbox-text-tertiary hover:text-inbox-text-primary hover:bg-inbox-bg-hover transition-colors duration-100"
-                    aria-label="Archive"
-                    title="Archive"
+                    aria-label="Someday"
+                    title="Someday"
                   >
-                    <MaterialIcon name="inventory_2" size={18} weight={300} />
+                    <MaterialIcon name="schedule" size={18} weight={300} />
                   </button>
                 )}
                 <button

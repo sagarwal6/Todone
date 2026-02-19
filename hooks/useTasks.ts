@@ -306,9 +306,9 @@ export function useTasks() {
     updateStatus(taskId, 'completed');
   }, [updateStatus]);
 
-  // Archive a task
-  const archiveTask = useCallback((taskId: string): void => {
-    updateStatus(taskId, 'archived');
+  // Move task to someday
+  const somedayTask = useCallback((taskId: string): void => {
+    updateStatus(taskId, 'someday');
   }, [updateStatus]);
 
   // Restore a task
@@ -479,9 +479,9 @@ export function useTasks() {
   }, []);
 
   // Filter helpers - exclude insight-sourced tasks from visible lists
-  const activeTasks = tasks.filter(t => t.status !== 'completed' && t.status !== 'archived' && t.source !== 'insight');
+  const activeTasks = tasks.filter(t => t.status !== 'completed' && t.status !== 'someday' && t.source !== 'insight');
   const completedTasks = tasks.filter(t => t.status === 'completed' && t.source !== 'insight');
-  const archivedTasks = tasks.filter(t => t.status === 'archived' && t.source !== 'insight');
+  const somedayTasks = tasks.filter(t => t.status === 'someday' && t.source !== 'insight');
   const pinnedTasks = activeTasks.filter(t => t.isPinned);
   const unpinnedTasks = activeTasks.filter(t => !t.isPinned);
   // Insight tasks are hidden from main lists but accessible for result tracking
@@ -491,7 +491,7 @@ export function useTasks() {
     tasks,
     activeTasks,
     completedTasks,
-    archivedTasks,
+    somedayTasks,
     pinnedTasks,
     unpinnedTasks,
     insightTasks,
@@ -506,7 +506,7 @@ export function useTasks() {
     setFeedback,
     startResearching,
     completeTask,
-    archiveTask,
+    somedayTask,
     restoreTask,
     deleteTask,
     updateTitle,

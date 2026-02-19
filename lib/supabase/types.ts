@@ -15,7 +15,7 @@ export type Json =
 // Includes both legacy statuses and client statuses (added in migration 008)
 export type TaskStatus =
   | 'added' | 'working' | 'ready' | 'done' | 'failed'  // Legacy (still in DB)
-  | 'pending' | 'researching' | 'personal' | 'completed' | 'archived';  // Client statuses
+  | 'pending' | 'researching' | 'personal' | 'completed' | 'someday';  // Client statuses
 export type AgentActionType = 'email_draft' | 'calendar_event' | 'email_send' | 'calendar_create';
 export type UserFeedbackType = 'confirm' | 'reject' | 'edit';
 export type AgentStepStatus = 'pending' | 'running' | 'completed' | 'failed';

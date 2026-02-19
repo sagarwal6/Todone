@@ -21,7 +21,7 @@ import type { PendingDraft as LocalPendingDraft } from '@/hooks/useInsightScan';
 import type { AgentStepSummary } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 
-type ViewMode = 'active' | 'completed' | 'archived' | 'insights';
+type ViewMode = 'active' | 'completed' | 'someday' | 'insights';
 
 /**
  * Transform agent pendingDrafts to local format for display
@@ -97,12 +97,12 @@ function AuthenticatedHome() {
     tasks,
     activeTasks,
     completedTasks,
-    archivedTasks,
+    somedayTasks,
     insightTasks,
     isLoading,
     addTask,
     completeTask,
-    archiveTask,
+    somedayTask,
     restoreTask,
     deleteTask,
     reorderTasks,
@@ -243,7 +243,7 @@ function AuthenticatedHome() {
   const counts: Record<ViewMode, number> = {
     active: activeTasks.length,
     completed: completedTasks.length,
-    archived: archivedTasks.length,
+    someday: somedayTasks.length,
     insights: 0, // Not used for insights tab
   };
 
@@ -498,7 +498,7 @@ function AuthenticatedHome() {
     ? activeTasks
     : viewMode === 'completed'
       ? completedTasks
-      : archivedTasks;
+      : somedayTasks;
 
   // Mobile Layout - Inbox style
   if (isMobile) {
@@ -529,7 +529,7 @@ function AuthenticatedHome() {
               onClose={viewMode === 'insights' ? handleCloseRightPanelInInsight : handleClosePanel}
               onAddChatMessage={addChatMessage}
               onComplete={completeTask}
-              onArchive={archiveTask}
+              onSomeday={somedayTask}
               onDelete={deleteTask}
               onTogglePin={togglePin}
               onUpdateQuickInfo={setAgentQuickInfo}
@@ -606,7 +606,7 @@ function AuthenticatedHome() {
           <TaskList
             tasks={currentTasks}
             onComplete={completeTask}
-            onArchive={archiveTask}
+            onSomeday={somedayTask}
             onDelete={deleteTask}
             onRestore={restoreTask}
             onShowDetails={handleShowDetails}
@@ -688,13 +688,13 @@ function AuthenticatedHome() {
                 Done
               </FilterBubble>
               <FilterBubble
-                active={viewMode === 'archived'}
-                onClick={() => setViewMode('archived')}
-                count={counts.archived}
-                icon="inventory_2"
-                iconActive="inventory_2"
+                active={viewMode === 'someday'}
+                onClick={() => setViewMode('someday')}
+                count={counts.someday}
+                icon="schedule"
+                iconActive="schedule"
               >
-                Archived
+                Someday
               </FilterBubble>
             </div>
           </div>
@@ -745,7 +745,7 @@ function AuthenticatedHome() {
               <TaskList
                 tasks={currentTasks}
                 onComplete={completeTask}
-                onArchive={archiveTask}
+                onSomeday={somedayTask}
                 onDelete={deleteTask}
                 onRestore={restoreTask}
                 onShowDetails={handleShowDetails}
@@ -796,7 +796,7 @@ function AuthenticatedHome() {
                 onClose={insightSelected ? handleCloseRightPanelInInsight : handleClosePanel}
                 onAddChatMessage={addChatMessage}
                 onComplete={completeTask}
-                onArchive={archiveTask}
+                onSomeday={somedayTask}
                 onDelete={deleteTask}
                 onTogglePin={togglePin}
                 onUpdateQuickInfo={setAgentQuickInfo}

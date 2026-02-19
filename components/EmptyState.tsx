@@ -3,7 +3,7 @@
 import { MaterialIcon } from './ui/MaterialIcon';
 
 interface EmptyStateProps {
-  viewMode: 'active' | 'completed' | 'archived';
+  viewMode: 'active' | 'completed' | 'someday';
   compact?: boolean;
 }
 
@@ -70,17 +70,17 @@ export function EmptyState({ viewMode, compact = false }: EmptyStateProps) {
     );
   }
 
-  // Archived
+  // Someday
   return (
     <div className={`text-center ${compact ? 'py-8' : 'py-12'}`}>
       <MaterialIcon
-        name="inventory_2"
+        name="schedule"
         size={compact ? 40 : 48}
         weight={200}
         className="text-inbox-text-tertiary mx-auto mb-4"
       />
       <p className={`text-inbox-text-secondary ${compact ? 'text-sm' : 'text-base'}`}>
-        No archived tasks
+        Nothing here yet — tasks you set aside will appear here
       </p>
     </div>
   );

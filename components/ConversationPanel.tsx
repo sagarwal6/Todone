@@ -83,7 +83,7 @@ interface ConversationPanelProps {
   onClose: () => void;
   onAddChatMessage?: (taskId: string, message: ChatMessage) => void;
   onComplete?: (taskId: string) => void;
-  onArchive?: (taskId: string) => void;
+  onSomeday?: (taskId: string) => void;
   onDelete?: (taskId: string) => void;
   onTogglePin?: (taskId: string) => void;
   onUpdateQuickInfo?: (taskId: string, quickInfo: import('@/lib/types').AgentQuickInfo) => void;
@@ -94,7 +94,7 @@ interface ConversationPanelProps {
   isMobile?: boolean;
 }
 
-export function ConversationPanel({ task, onClose, onAddChatMessage, onComplete, onArchive, onDelete, onTogglePin, onUpdateQuickInfo, onUpdateAgentSteps, autoStartAgent, onAgentStarted, isMobile = false }: ConversationPanelProps) {
+export function ConversationPanel({ task, onClose, onAddChatMessage, onComplete, onSomeday, onDelete, onTogglePin, onUpdateQuickInfo, onUpdateAgentSteps, autoStartAgent, onAgentStarted, isMobile = false }: ConversationPanelProps) {
   // Initialize messages from persisted chat history
   const [messages, setMessages] = useState<ChatMessage[]>(task.chatMessages || []);
   const [input, setInput] = useState('');
@@ -307,7 +307,7 @@ export function ConversationPanel({ task, onClose, onAddChatMessage, onComplete,
           )}
           {/* Action bar */}
           <div className={`flex items-center gap-1 ${isMobile ? '' : 'mt-3'}`}>
-            {task.status !== 'completed' && task.status !== 'archived' && (
+            {task.status !== 'completed' && task.status !== 'someday' && (
               <>
                 <button
                   onClick={() => onComplete?.(task.id)}
@@ -328,11 +328,11 @@ export function ConversationPanel({ task, onClose, onAddChatMessage, onComplete,
                   <span>{task.isPinned ? 'Pinned' : 'Pin'}</span>
                 </button>
                 <button
-                  onClick={() => onArchive?.(task.id)}
+                  onClick={() => onSomeday?.(task.id)}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-inbox-caption text-inbox-text-secondary hover:text-inbox-text-primary hover:bg-inbox-bg-hover transition-colors"
                 >
-                  <MaterialIcon name="inventory_2" size={16} weight={300} />
-                  <span>Archive</span>
+                  <MaterialIcon name="schedule" size={16} weight={300} />
+                  <span>Someday</span>
                 </button>
               </>
             )}

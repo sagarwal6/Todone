@@ -1,4 +1,4 @@
-export type TaskStatus = 'pending' | 'researching' | 'ready' | 'personal' | 'completed' | 'archived';
+export type TaskStatus = 'pending' | 'researching' | 'ready' | 'personal' | 'completed' | 'someday';
 
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
 

@@ -30,7 +30,7 @@ interface SortableTaskProps {
   task: Task;
   progress?: ProgressStatus | null;
   onComplete: (taskId: string) => void;
-  onArchive: (taskId: string) => void;
+  onSomeday: (taskId: string) => void;
   onDelete: (taskId: string) => void;
   onRestore: (taskId: string) => void;
   onShowDetails: (taskId: string) => void;
@@ -45,7 +45,7 @@ function SortableTask({
   task,
   progress,
   onComplete,
-  onArchive,
+  onSomeday,
   onDelete,
   onRestore,
   onShowDetails,
@@ -108,7 +108,7 @@ function SortableTask({
         task={task}
         progress={progress}
         onComplete={onComplete}
-        onArchive={onArchive}
+        onSomeday={onSomeday}
         onDelete={onDelete}
         onRestore={onRestore}
         onShowDetails={onShowDetails}
@@ -129,7 +129,7 @@ interface TaskListProps {
   tasks: Task[];
   progressMap?: ProgressMap;
   onComplete: (taskId: string) => void;
-  onArchive: (taskId: string) => void;
+  onSomeday: (taskId: string) => void;
   onDelete: (taskId: string) => void;
   onRestore: (taskId: string) => void;
   onShowDetails: (taskId: string) => void;
@@ -143,7 +143,7 @@ export function TaskList({
   tasks,
   progressMap = {},
   onComplete,
-  onArchive,
+  onSomeday,
   onDelete,
   onRestore,
   onShowDetails,
@@ -202,7 +202,7 @@ export function TaskList({
       task={task}
       progress={progressMap[task.id] || null}
       onComplete={onComplete}
-      onArchive={onArchive}
+      onSomeday={onSomeday}
       onDelete={onDelete}
       onRestore={onRestore}
       onShowDetails={onShowDetails}
