@@ -5,12 +5,12 @@ import { useSession, signOut } from 'next-auth/react';
 import { TaskInput } from '@/components/TaskInput';
 import { TaskList } from '@/components/TaskList';
 import { ConversationPanel } from '@/components/ConversationPanel';
-import { BottomNav, MobileHeader, DesktopAccountMenu, DeleteAccountDialog } from '@/components/Navigation';
+import { MobileHeader, DesktopAccountMenu, DeleteAccountDialog } from '@/components/Navigation';
 import { QuickCaptureBar, FullScreenCapture } from '@/components/QuickCapture';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { EmptyState } from '@/components/EmptyState';
 import { LoginScreen } from '@/components/LoginScreen';
-import { InsightView, InsightBriefingCard, InsightDetailPanel } from '@/components/insight';
+import { InsightView, InsightDetailPanel } from '@/components/insight';
 import { useTasks } from '@/hooks/useTasks';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useInsightScan } from '@/hooks/useInsightScan';
@@ -222,7 +222,6 @@ function AuthenticatedHome() {
 
   // Has a right panel open (task ConversationPanel or email InsightDetailPanel)
   const hasRightPanel = isTaskSelected || selectedInsightAction !== null;
-  const isPanelOpen = hasRightPanel || insightSelected;
 
   // Compute highlight for the insight list: either the email action or the meeting's mapped action
   const activeInsightActionId = useMemo(() => {
@@ -237,8 +236,9 @@ function AuthenticatedHome() {
     return null;
   }, [selectedInsightActionId, selectedTaskId]);
 
-  // 3-pane: insight list visible + right panel (either ConversationPanel or InsightDetailPanel)
-  const isThreePaneLayout = insightSelected && hasRightPanel;
+  // Briefing dot: show when scan has items
+  const scanItemCount = (scan.quickWin ? 1 : 0) + scan.bundles.reduce((sum, b) => sum + b.items.length, 0);
+  const briefingDot = scanItemCount > 0 && scan.phase === 'complete';
 
   const counts: Record<ViewMode, number> = {
     active: activeTasks.length,
@@ -471,16 +471,6 @@ function AuthenticatedHome() {
     setSelectedTaskId(prev => prev === taskId ? null : taskId);
   }, []);
 
-  const handleShowInsights = useCallback(() => {
-    setSelectedTaskId(null);
-    setSelectedInsightActionId(null);
-    setInsightSelected(true);
-    // Start scan if idle
-    if (scan.phase === 'idle') {
-      scan.startScan(false);
-    }
-  }, [scan]);
-
   const handleClosePanel = useCallback(() => {
     setSelectedTaskId(null);
     setSelectedInsightActionId(null);
@@ -543,49 +533,16 @@ function AuthenticatedHome() {
       );
     }
 
-    // Show full-screen InsightView when insights tab is selected
-    if (viewMode === 'insights') {
-      return (
-        <div
-          className="fixed inset-0 z-50 bg-inbox-bg-primary flex flex-col animate-slide-in-from-right"
-          style={{ paddingTop: 'env(safe-area-inset-top)' }}
-        >
-          {/* Header with back arrow */}
-          <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3 border-b border-inbox-divider">
-            <button
-              onClick={() => setViewMode('active')}
-              className="p-2 -ml-2 rounded-full text-inbox-text-secondary hover:bg-inbox-bg-hover transition-colors"
-              aria-label="Back"
-            >
-              <MaterialIcon name="arrow_back" size={24} />
-            </button>
-            <h2 className="flex-1 text-inbox-body font-medium text-inbox-text-primary">
-              Proactive todos
-            </h2>
-          </div>
-          <div className="flex-1 overflow-hidden">
-            <InsightView
-              onClose={() => setViewMode('active')}
-              onActionClick={handleInsightActionClick}
-              selectedActionId={activeInsightActionId}
-            />
-          </div>
-          <FullScreenCapture
-            isOpen={showCapture}
-            onClose={() => {
-              setShowCapture(false);
-              setCaptureVoice(false);
-            }}
-            onSave={handleAddTask}
-            startWithVoice={captureVoice}
-          />
-        </div>
-      );
-    }
-
     return (
-      <div className="min-h-screen bg-inbox-bg-primary pb-32">
-        <MobileHeader onSignOut={handleSignOut} onDeleteAccount={() => setDeleteDialogOpen(true)} />
+      <div className="min-h-screen bg-inbox-bg-primary pb-20">
+        <MobileHeader
+          currentView={viewMode}
+          onViewChange={setViewMode}
+          counts={counts}
+          briefingDot={briefingDot}
+          onSignOut={handleSignOut}
+          onDeleteAccount={() => setDeleteDialogOpen(true)}
+        />
         <DeleteAccountDialog
           open={deleteDialogOpen}
           onClose={() => setDeleteDialogOpen(false)}
@@ -593,48 +550,55 @@ function AuthenticatedHome() {
           deleting={deleting}
         />
 
-        <main key={viewMode} className="px-4 py-4 animate-fade-in">
-          {/* Insight Briefing Card - lives at top of task list */}
-          {viewMode === 'active' && (
-            <div className="mb-3">
-              <InsightBriefingCard
-                onClick={() => setViewMode('insights')}
-              />
-            </div>
-          )}
+        {viewMode === 'insights' ? (
+          <div className="flex-1 overflow-hidden animate-fade-in">
+            <InsightView
+              onClose={() => setViewMode('active')}
+              onActionClick={handleInsightActionClick}
+              selectedActionId={activeInsightActionId}
+            />
+          </div>
+        ) : (
+          <main key={viewMode} className="px-4 py-4 animate-fade-in">
+            {(viewMode === 'completed' || viewMode === 'someday') && (
+              <button
+                onClick={() => setViewMode('active')}
+                className="flex items-center gap-1 text-sm text-inbox-text-secondary mb-3 active:text-inbox-text-primary transition-colors"
+              >
+                <MaterialIcon name="arrow_back" size={16} />
+                Back to tasks
+              </button>
+            )}
 
-          <TaskList
-            tasks={currentTasks}
-            onComplete={completeTask}
-            onSomeday={somedayTask}
-            onDelete={deleteTask}
-            onRestore={restoreTask}
-            onShowDetails={handleShowDetails}
-            onReorder={reorderTasks}
-            onTogglePin={togglePin}
+            <TaskList
+              tasks={currentTasks}
+              onComplete={completeTask}
+              onSomeday={somedayTask}
+              onDelete={deleteTask}
+              onRestore={restoreTask}
+              onShowDetails={handleShowDetails}
+              onReorder={reorderTasks}
+              onTogglePin={togglePin}
+            />
+
+            {currentTasks.length === 0 && !isLoading && (
+              <EmptyState viewMode={viewMode as 'active' | 'completed' | 'someday'} />
+            )}
+          </main>
+        )}
+
+        {viewMode === 'active' && (
+          <QuickCaptureBar
+            onTap={() => {
+              setCaptureVoice(false);
+              setShowCapture(true);
+            }}
+            onMicTap={() => {
+              setCaptureVoice(true);
+              setShowCapture(true);
+            }}
           />
-
-          {currentTasks.length === 0 && !isLoading && (
-            <EmptyState viewMode={viewMode} />
-          )}
-        </main>
-
-        <QuickCaptureBar
-          onTap={() => {
-            setCaptureVoice(false);
-            setShowCapture(true);
-          }}
-          onMicTap={() => {
-            setCaptureVoice(true);
-            setShowCapture(true);
-          }}
-        />
-
-        <BottomNav
-          currentView={viewMode}
-          onViewChange={setViewMode}
-          counts={counts}
-        />
+        )}
 
         <FullScreenCapture
           isOpen={showCapture}
@@ -649,7 +613,10 @@ function AuthenticatedHome() {
     );
   }
 
-  // Desktop Layout - Inbox style: Two states - clean list OR 2-pane
+  // Desktop: active mode is Tasks or Briefing (completed/someday are sub-states of Tasks)
+  const desktopMode = viewMode === 'insights' ? 'briefing' : 'tasks';
+
+  // Desktop Layout - Two modes: Tasks and Briefing, strictly 1-pane or 2-pane
   return (
     <div className="h-screen bg-inbox-bg-secondary flex flex-col overflow-hidden">
       <DeleteAccountDialog
@@ -658,126 +625,124 @@ function AuthenticatedHome() {
         onConfirm={handleDeleteAccount}
         deleting={deleting}
       />
-      {/* Header with filter tabs - Inbox style */}
-      <header className="flex-shrink-0 bg-inbox-bg-primary border-b border-inbox-divider px-6 py-4">
+      {/* Header - just logo + account menu */}
+      <header className="flex-shrink-0 bg-inbox-bg-primary border-b border-inbox-divider px-6 py-3">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1 className="text-inbox-headline text-inbox-text-primary flex items-center gap-2">
-              <MaterialIcon name="task_alt" size={28} className="text-inbox-accent" fill />
-              Todone
-            </h1>
-
-            {/* Filter tabs - Inbox style */}
-            <div className="flex items-center gap-1 ml-6">
-              <FilterBubble
-                active={viewMode === 'active'}
-                onClick={() => setViewMode('active')}
-                count={counts.active}
-                icon="radio_button_unchecked"
-                iconActive="task_alt"
-              >
-                Active
-              </FilterBubble>
-              <FilterBubble
-                active={viewMode === 'completed'}
-                onClick={() => setViewMode('completed')}
-                count={counts.completed}
-                icon="check_circle"
-                iconActive="check_circle"
-              >
-                Done
-              </FilterBubble>
-              <FilterBubble
-                active={viewMode === 'someday'}
-                onClick={() => setViewMode('someday')}
-                count={counts.someday}
-                icon="schedule"
-                iconActive="schedule"
-              >
-                Someday
-              </FilterBubble>
-            </div>
-          </div>
-
-          {/* Account menu */}
+          <h1 className="text-inbox-headline text-inbox-text-primary flex items-center gap-2">
+            <MaterialIcon name="task_alt" size={28} className="text-inbox-accent" fill />
+            Todone
+          </h1>
           <DesktopAccountMenu
             onSignOut={handleSignOut}
             onDeleteAccount={() => setDeleteDialogOpen(true)}
+            onViewChange={setViewMode}
+            counts={counts}
           />
         </div>
       </header>
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Task List Panel - narrower in 3-pane layout */}
+        {/* Left column: TaskInput + Pill Toggle + (Task List OR InsightView) */}
         <div className={`
           flex flex-col bg-inbox-bg-primary
           transition-all duration-200
-          ${isThreePaneLayout
-            ? 'w-[280px] min-w-[240px] flex-shrink-0 border-r border-inbox-divider'
-            : isPanelOpen
-              ? 'w-[380px] min-w-[320px] flex-shrink-0 border-r border-inbox-divider'
-              : 'flex-1'
+          ${hasRightPanel
+            ? 'w-[380px] min-w-[320px] flex-shrink-0 border-r border-inbox-divider'
+            : 'flex-1'
           }
         `}>
-          {/* Centered content wrapper - constrains width when single-pane */}
           <div className={`
             flex-1 flex flex-col min-h-0
-            ${isPanelOpen ? '' : 'max-w-[720px] mx-auto w-full'}
+            ${hasRightPanel ? '' : 'max-w-[720px] mx-auto w-full'}
           `}>
-            {/* Task input - Inbox style */}
-            <div className={`px-4 py-4 ${!isPanelOpen ? 'px-6 py-6 border-b border-inbox-divider' : ''}`}>
+            {/* Task input */}
+            <div className={`px-4 py-4 ${!hasRightPanel ? 'px-6 py-6 border-b border-inbox-divider' : ''}`}>
               <TaskInput onAddTask={handleAddTask} />
             </div>
 
-            {/* Task list */}
-            <div className="flex-1 overflow-y-auto">
-              {/* Insight Briefing Card - at top of active tasks */}
-              {viewMode === 'active' && (
-                <div className={`${isPanelOpen ? 'px-4 py-2' : 'px-6 py-3'}`}>
-                  <InsightBriefingCard
-                    onClick={handleShowInsights}
-                    isSelected={insightSelected}
-                  />
+            {/* Pill toggle - Tasks / Briefing */}
+            {viewMode !== 'completed' && viewMode !== 'someday' && (
+              <div className={`${hasRightPanel ? 'px-4 pb-3' : 'px-6 pb-4'}`}>
+                <div className="inline-flex h-9 rounded-full bg-inbox-bg-secondary p-0.5">
+                  <button
+                    onClick={() => { setViewMode('active'); handleClosePanel(); }}
+                    className={`px-4 rounded-full text-sm font-medium transition-all duration-150
+                      ${desktopMode === 'tasks'
+                        ? 'bg-inbox-bg-primary shadow-sm text-inbox-text-primary'
+                        : 'text-inbox-text-secondary hover:text-inbox-text-primary'
+                      }`}
+                  >
+                    Tasks
+                  </button>
+                  <button
+                    onClick={() => {
+                      setViewMode('insights');
+                      setInsightSelected(true);
+                      if (scan.phase === 'idle') scan.startScan(false);
+                    }}
+                    className={`px-4 rounded-full text-sm font-medium transition-all duration-150 relative
+                      ${desktopMode === 'briefing'
+                        ? 'bg-inbox-bg-primary shadow-sm text-inbox-text-primary'
+                        : 'text-inbox-text-secondary hover:text-inbox-text-primary'
+                      }`}
+                  >
+                    Briefing
+                    {briefingDot && desktopMode !== 'briefing' && (
+                      <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-inbox-accent" />
+                    )}
+                  </button>
                 </div>
-              )}
+              </div>
+            )}
 
-              <TaskList
-                tasks={currentTasks}
-                onComplete={completeTask}
-                onSomeday={somedayTask}
-                onDelete={deleteTask}
-                onRestore={restoreTask}
-                onShowDetails={handleShowDetails}
-                onReorder={reorderTasks}
-                onTogglePin={togglePin}
-                selectedTaskId={selectedTaskId}
-                compact={isPanelOpen}
-              />
+            {/* Back button for completed/someday sub-views */}
+            {(viewMode === 'completed' || viewMode === 'someday') && (
+              <div className={`${hasRightPanel ? 'px-4 pb-3' : 'px-6 pb-4'}`}>
+                <button
+                  onClick={() => setViewMode('active')}
+                  className="flex items-center gap-1 text-sm text-inbox-text-secondary hover:text-inbox-text-primary transition-colors"
+                >
+                  <MaterialIcon name="arrow_back" size={16} />
+                  {viewMode === 'completed' ? 'Completed tasks' : 'Someday tasks'}
+                </button>
+              </div>
+            )}
 
-              {currentTasks.length === 0 && !isLoading && viewMode !== 'insights' && (
-                <EmptyState viewMode={viewMode} compact={isPanelOpen} />
+            {/* Content area: Task list or InsightView */}
+            <div className="flex-1 overflow-y-auto">
+              {viewMode === 'insights' ? (
+                <InsightView
+                  onClose={() => setViewMode('active')}
+                  onActionClick={handleInsightActionClick}
+                  scan={scan}
+                  selectedActionId={activeInsightActionId}
+                />
+              ) : (
+                <>
+                  <TaskList
+                    tasks={currentTasks}
+                    onComplete={completeTask}
+                    onSomeday={somedayTask}
+                    onDelete={deleteTask}
+                    onRestore={restoreTask}
+                    onShowDetails={handleShowDetails}
+                    onReorder={reorderTasks}
+                    onTogglePin={togglePin}
+                    selectedTaskId={selectedTaskId}
+                    compact={hasRightPanel}
+                  />
+
+                  {currentTasks.length === 0 && !isLoading && (
+                    <EmptyState viewMode={viewMode} compact={hasRightPanel} />
+                  )}
+                </>
               )}
             </div>
           </div>
         </div>
 
-        {/* Middle Panel - InsightView (list only) */}
-        {insightSelected && (
-          <div className={`
-            flex flex-col bg-inbox-bg-primary border-r border-inbox-divider
-            ${isThreePaneLayout ? 'w-[320px] flex-shrink-0' : 'flex-1 min-w-0'}
-          `}>
-            <InsightView
-              onClose={handleClosePanel}
-              onActionClick={handleInsightActionClick}
-              scan={scan}
-              selectedActionId={activeInsightActionId}
-            />
-          </div>
-        )}
-
-        {/* Right Panel - ConversationPanel for meetings, InsightDetailPanel for emails */}
+        {/* Right Panel - ConversationPanel for tasks/meetings, InsightDetailPanel for emails */}
         {hasRightPanel && (
           <div className="flex-1 min-w-0 h-full overflow-hidden bg-inbox-bg-primary">
             {selectedInsightAction && selectedInsightAction.type !== 'meeting_prep' ? (
@@ -786,14 +751,14 @@ function AuthenticatedHome() {
                 actionState={scan.getActionState(selectedInsightAction.id)}
                 onExecute={handleEmailExecute}
                 onDismiss={scan.dismissAction}
-                onClose={handleCloseRightPanelInInsight}
+                onClose={viewMode === 'insights' ? handleCloseRightPanelInInsight : handleClosePanel}
                 getEmailContent={scan.getEmailContent}
                 onChatUpdate={scan.updateActionChatMessages}
               />
             ) : selectedTask ? (
               <ConversationPanel
                 task={selectedTask}
-                onClose={insightSelected ? handleCloseRightPanelInInsight : handleClosePanel}
+                onClose={viewMode === 'insights' ? handleCloseRightPanelInInsight : handleClosePanel}
                 onAddChatMessage={addChatMessage}
                 onComplete={completeTask}
                 onSomeday={somedayTask}
@@ -809,46 +774,5 @@ function AuthenticatedHome() {
         )}
       </div>
     </div>
-  );
-}
-
-interface FilterBubbleProps {
-  active: boolean;
-  onClick: () => void;
-  count: number;
-  icon: string;
-  iconActive: string;
-  children: React.ReactNode;
-  hideCount?: boolean;
-}
-
-// Inbox-style filter tabs
-function FilterBubble({ active, onClick, count, icon, iconActive, children, hideCount }: FilterBubbleProps) {
-  return (
-    <button
-      onClick={onClick}
-      className={`
-        inline-flex items-center gap-2 px-4 py-2
-        rounded-full text-inbox-body font-medium
-        transition-colors duration-100
-        ${active
-          ? 'bg-inbox-accent-light text-inbox-accent'
-          : 'text-inbox-text-secondary hover:bg-inbox-bg-hover'
-        }
-      `}
-    >
-      <MaterialIcon
-        name={active ? iconActive : icon}
-        size={18}
-        weight={300}
-        fill={active}
-      />
-      {children}
-      {!hideCount && count > 0 && (
-        <span className="text-inbox-caption ml-1">
-          {count}
-        </span>
-      )}
-    </button>
   );
 }

@@ -171,14 +171,20 @@ export function BottomNav({ currentView, onViewChange, counts }: BottomNavProps)
 }
 
 interface MobileHeaderProps {
-  title?: string;
+  currentView: ViewMode;
+  onViewChange: (view: ViewMode) => void;
+  counts: Record<string, number>;
+  briefingDot?: boolean;
   onSignOut?: () => void;
   onDeleteAccount?: () => void;
 }
 
-export function MobileHeader({ title = 'Todone', onSignOut, onDeleteAccount }: MobileHeaderProps) {
+export function MobileHeader({ currentView, onViewChange, counts, briefingDot, onSignOut, onDeleteAccount }: MobileHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const isTasksActive = currentView === 'active' || currentView === 'completed' || currentView === 'someday';
+  const isBriefingActive = currentView === 'insights';
 
   // Close menu on outside click
   useEffect(() => {
@@ -197,13 +203,35 @@ export function MobileHeader({ title = 'Todone', onSignOut, onDeleteAccount }: M
       sticky top-0 z-30
       bg-inbox-bg-primary
       border-b border-inbox-divider
-      px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))]
+      px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]
     ">
       <div className="flex items-center justify-between">
-        <h1 className="text-title-large font-display text-inbox-text-primary flex items-center gap-2">
-          <MaterialIcon name="task_alt" size={24} className="text-inbox-accent" fill />
-          {title}
-        </h1>
+        <div className="flex items-center gap-1">
+          <MaterialIcon name="task_alt" size={20} className="text-inbox-accent mr-1" fill />
+          <button
+            onClick={() => onViewChange('active')}
+            className={`text-lg font-display px-2 py-1 rounded-lg transition-colors
+              ${isTasksActive
+                ? 'text-inbox-text-primary font-semibold'
+                : 'text-inbox-text-tertiary'
+              }`}
+          >
+            Tasks
+          </button>
+          <button
+            onClick={() => onViewChange('insights')}
+            className={`text-lg font-display px-2 py-1 rounded-lg transition-colors relative
+              ${isBriefingActive
+                ? 'text-inbox-text-primary font-semibold'
+                : 'text-inbox-text-tertiary'
+              }`}
+          >
+            Briefing
+            {briefingDot && !isBriefingActive && (
+              <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-inbox-accent" />
+            )}
+          </button>
+        </div>
         {onSignOut && (
           <div className="relative" ref={menuRef}>
             <button
@@ -214,7 +242,7 @@ export function MobileHeader({ title = 'Todone', onSignOut, onDeleteAccount }: M
               <MaterialIcon name="more_vert" size={20} weight={300} />
             </button>
             {menuOpen && (
-              <div className="absolute right-0 top-full mt-1 bg-inbox-bg-primary border border-inbox-divider rounded-xl shadow-lg overflow-hidden min-w-[180px] z-50">
+              <div className="absolute right-0 top-full mt-1 bg-inbox-bg-primary border border-inbox-divider rounded-xl shadow-lg overflow-hidden min-w-[200px] z-50">
                 <button
                   onClick={() => { setMenuOpen(false); onSignOut(); }}
                   className="w-full flex items-center gap-3 px-4 py-3 text-sm text-inbox-text-primary active:bg-inbox-bg-hover transition-colors"
@@ -222,6 +250,32 @@ export function MobileHeader({ title = 'Todone', onSignOut, onDeleteAccount }: M
                   <MaterialIcon name="logout" size={18} weight={300} />
                   Sign out
                 </button>
+                <div className="border-t border-inbox-divider">
+                  <button
+                    onClick={() => { setMenuOpen(false); onViewChange('completed'); }}
+                    className="w-full flex items-center justify-between px-4 py-3 text-sm text-inbox-text-secondary active:bg-inbox-bg-hover transition-colors"
+                  >
+                    <span className="flex items-center gap-3">
+                      <MaterialIcon name="check_circle" size={18} weight={300} />
+                      Completed
+                    </span>
+                    {counts.completed > 0 && (
+                      <span className="text-inbox-text-tertiary text-xs">{counts.completed}</span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => { setMenuOpen(false); onViewChange('someday'); }}
+                    className="w-full flex items-center justify-between px-4 py-3 text-sm text-inbox-text-secondary active:bg-inbox-bg-hover transition-colors"
+                  >
+                    <span className="flex items-center gap-3">
+                      <MaterialIcon name="schedule" size={18} weight={300} />
+                      Someday
+                    </span>
+                    {counts.someday > 0 && (
+                      <span className="text-inbox-text-tertiary text-xs">{counts.someday}</span>
+                    )}
+                  </button>
+                </div>
                 <div className="border-t border-inbox-divider">
                   <Link
                     href="/privacy"
@@ -261,9 +315,11 @@ export function MobileHeader({ title = 'Todone', onSignOut, onDeleteAccount }: M
 interface DesktopAccountMenuProps {
   onSignOut: () => void;
   onDeleteAccount: () => void;
+  onViewChange?: (view: ViewMode) => void;
+  counts?: Record<string, number>;
 }
 
-export function DesktopAccountMenu({ onSignOut, onDeleteAccount }: DesktopAccountMenuProps) {
+export function DesktopAccountMenu({ onSignOut, onDeleteAccount, onViewChange, counts }: DesktopAccountMenuProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -288,7 +344,7 @@ export function DesktopAccountMenu({ onSignOut, onDeleteAccount }: DesktopAccoun
         <MaterialIcon name="more_vert" size={20} weight={300} />
       </button>
       {menuOpen && (
-        <div className="absolute right-0 top-full mt-1 bg-inbox-bg-primary border border-inbox-divider rounded-xl shadow-lg overflow-hidden min-w-[180px] z-50">
+        <div className="absolute right-0 top-full mt-1 bg-inbox-bg-primary border border-inbox-divider rounded-xl shadow-lg overflow-hidden min-w-[200px] z-50">
           <button
             onClick={() => { setMenuOpen(false); onSignOut(); }}
             className="w-full flex items-center gap-3 px-4 py-3 text-sm text-inbox-text-primary hover:bg-inbox-bg-hover transition-colors"
@@ -296,6 +352,34 @@ export function DesktopAccountMenu({ onSignOut, onDeleteAccount }: DesktopAccoun
             <MaterialIcon name="logout" size={18} weight={300} />
             Sign out
           </button>
+          {onViewChange && (
+            <div className="border-t border-inbox-divider">
+              <button
+                onClick={() => { setMenuOpen(false); onViewChange('completed'); }}
+                className="w-full flex items-center justify-between px-4 py-3 text-sm text-inbox-text-secondary hover:bg-inbox-bg-hover transition-colors"
+              >
+                <span className="flex items-center gap-3">
+                  <MaterialIcon name="check_circle" size={18} weight={300} />
+                  Completed
+                </span>
+                {counts && counts.completed > 0 && (
+                  <span className="text-inbox-text-tertiary text-xs">{counts.completed}</span>
+                )}
+              </button>
+              <button
+                onClick={() => { setMenuOpen(false); onViewChange('someday'); }}
+                className="w-full flex items-center justify-between px-4 py-3 text-sm text-inbox-text-secondary hover:bg-inbox-bg-hover transition-colors"
+              >
+                <span className="flex items-center gap-3">
+                  <MaterialIcon name="schedule" size={18} weight={300} />
+                  Someday
+                </span>
+                {counts && counts.someday > 0 && (
+                  <span className="text-inbox-text-tertiary text-xs">{counts.someday}</span>
+                )}
+              </button>
+            </div>
+          )}
           <div className="border-t border-inbox-divider">
             <Link
               href="/privacy"
