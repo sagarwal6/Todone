@@ -2,16 +2,17 @@
 
 ## Status
 
-All code phases complete (1, 1b, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 18). Phase 8 (end-to-end testing) in progress.
+All code phases complete (1, 1b, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18). Phase 8 (end-to-end testing) in progress.
+Phase 17 (draft quality + InsightDetailPanel UX) complete — sample-based tone matching, user direction reframed as gist, dismiss/close icon separation.
 Phase 16 (insight panel refactor) complete — meetings use ConversationPanel, emails keep InsightDetailPanel, stale actions time out.
 Phase 15 (gmail_triage compound tool) complete — server-side search+score+preview in one call, saves 2-3 agent iterations per triage task.
 Phase 15 also included scoring fixes: self-sent emails deprioritized (-20), mailing lists no longer get DIRECT_RECIPIENT bonus, "morning/evening brief" pattern added to marketing detection.
 Phase 18 (mid-run messaging & agent reliability) complete — message ordering, disappearing messages/tasks, agent link pickup, unknown term research.
 Phase 10 (tone_analyze tool) complete — style analysis from sent emails, integrated into agent drafting flow.
 
-**Phase 17 (InsightDetailPanel UX + draft quality) — IN PROGRESS.** UI done, prompt architecture simplified, needs manual draft quality testing. See `sessions/2-18-draft-quality/issues.md` for open issues and testing checklist.
+**Phase 19 (Insight scan email selection quality) — NEXT.** The scoring signals that determine which emails appear in proactive insights need tuning — some low-value emails surface while actionable ones are missed. See handoff below.
 
-### Phase 17 changes (uncommitted on `feature/improve-agent`)
+### Phase 17 changes (committed on `feature/improve-agent`)
 
 **UI changes (InsightDetailPanel.tsx, InsightItem.tsx):**
 - Open in Gmail + dismiss icons moved from header bar to sender info row
@@ -44,7 +45,20 @@ Phase 10 (tone_analyze tool) complete — style analysis from sent emails, integ
 **API changes:**
 - `execute/route.ts`: Allow `draft_response` actions to re-execute when completed (enables redraft)
 
-**Status:** UI and tone analyzer work done. Prompt architecture simplified. Draft quality still needs manual testing — tone_analyze detects signals correctly but need to verify agent follows them end-to-end. See issues.md for testing checklist.
+**Draft quality fixes (2-18 session):**
+- Recommendation string rewritten: removed itemized style rules (recParts), replaced with sample-based guidance ("these are the user's actual emails — write like them"). The samples are the source of truth, not extracted rules.
+- User direction reframed: changed from `USER'S INSTRUCTIONS (follow these closely)` to `USER'S DIRECTION (the gist of what they want to say — expand into a complete, polished email)`. Fixes bug where terse user input like "thanks, will find us a time" was taken literally as the draft body.
+- Step 2 reinforces: "user gave you the GIST — craft a complete, polished email that sounds like them"
+- System prompt (anthropic.ts:97): removed prescriptive "Always end with their sign-off", replaced with "study those samples and write exactly like them"
+- `gmail_draft` tool description: changed from "follow its recommendation" to "derive from tone_analyze samples"
+
+**InsightDetailPanel UX fixes (2-18 session):**
+- Dismiss button changed from `close` icon to `delete` (trash can) — X means close, not delete
+- Added separate close (X) button next to dismiss in nav header bar
+- Moved both dismiss and close OUT of email header area (was confusing — looked like email actions) into nav bar next to back button
+- Email header area now only has "Open in Gmail" icon
+
+**Status:** Phase 17 complete. Draft quality tested and working — agent produces natural-sounding drafts derived from user's actual email samples. Redraft consistency (Issue 2 from issues.md) still has some non-determinism but acceptable.
 
 ## Lessons Learned
 
@@ -642,6 +656,82 @@ gmail_triage: {
 - [x] Short contact queries don't match irrelevant names
 - [x] Newly created tasks don't vanish from list
 - [x] Build passes (lint, typecheck)
+
+---
+
+## Phase 19: Insight Scan Email Selection Quality
+
+**Status: NOT STARTED**
+
+**Why:** The proactive insight scan surfaces emails that don't need attention and misses ones that do. The scoring signals that decide which emails appear need tuning. This is a signal/heuristic problem — the code pipeline works, but the weights and filters don't match real inbox patterns.
+
+### How email selection currently works
+
+The scan pipeline has 3 layers:
+
+**Layer 1: Gmail search** (`lib/scan/metadata.ts:buildScanContext`)
+- Searches `in:inbox newer_than:7d` (recent inbox emails)
+- Also fetches `is:unread newer_than:21d` for older unread threads
+- Raw email metadata comes back (from, to, cc, subject, date, headers, snippet, labels)
+
+**Layer 2: Signal scoring** (`lib/email/scoring.ts:scoreEmail`)
+- Each email gets scored based on signals extracted from headers/metadata
+- Positive signals: `DIRECT_RECIPIENT(+12)`, `ONE_TO_ONE(+5)`, `EXISTING_THREAD(+3)`, `HAS_ATTACHMENT(+3)`, `GMAIL_PRIMARY(+3)`, `PERSONAL_DOMAIN(+5)`, `HUMAN_SENDER(+4)`
+- Negative signals: `CC_RECIPIENT(-3)`, `MANY_RECIPIENTS(-3)`, `MARKETING_SUBJECT(-4)`, `SELF_SENT(-20)`, `MAILING_LIST(-6)`, `AUTOMATED_SENDER(-4)`, `PLATFORM_DOMAIN(-4)`, `HTML_ONLY_EMAIL(-4)`, `GMAIL_PROMOTIONS(-10)`, `GMAIL_SOCIAL(-6)`, `GMAIL_UPDATES(-4)`, `GMAIL_FORUMS(-5)`
+- Tier thresholds: HIGH ≥ 10, MEDIUM ≥ 3, LOW ≥ -2, SKIP < -2
+- Mailing lists (`List-Unsubscribe` header) have `DIRECT_RECIPIENT` and `ONE_TO_ONE` suppressed
+
+**Layer 3: Scan filtering** (`lib/scan/metadata.ts` lines 232-256)
+- Only HIGH and MEDIUM tier emails pass to the LLM
+- MEDIUM emails must be unread (unless direct/1:1)
+- Threads where user sent the last message are filtered out
+- Recency boost: today +10, yesterday +5, last 3 days +2
+- After filtering, emails sorted by boosted score, top N sent to Haiku
+
+**Layer 4: LLM classification** (`lib/scan/prompts.ts:getScanPrompt`)
+- Haiku 3.5 sees the filtered emails and decides which ones are actionable
+- Groups into bundles: "Drafts needed", "Meeting prep", "Follow-ups"
+- Each item gets a `suggestedDirection` (what to say in a reply)
+
+### What's wrong (observed symptoms)
+
+**Primary problem: low-signal emails are showing up that the user would never reply to.** The scoring layer is letting through emails that pass the threshold but aren't actually actionable — things the user would just read and archive, not respond to. The tier thresholds or signal weights are too generous.
+
+Investigate:
+1. **Which emails are showing up that shouldn't?** Run a scan, look at the results, check the score breakdown for emails that feel wrong. Focus on what's passing as HIGH/MEDIUM that shouldn't be.
+2. **Are the positive signals too strong?** `DIRECT_RECIPIENT(+12)` is the biggest positive — but being a direct recipient doesn't mean the email needs a reply. A shipping notification addressed directly to you scores +12 even though it's not actionable.
+3. **Are the tier thresholds too low?** HIGH ≥ 10 means a direct email (+12) from anyone automatically qualifies as HIGH even with no other positive signals.
+4. **Is the LLM layer (Haiku) doing enough filtering?** If too many low-value emails pass scoring, Haiku may include them just because they're in the input.
+
+### Debugging approach
+
+1. **Add score breakdown logging for ALL emails** (not just near-high). Temporarily log every email's score + breakdown so you can see the full picture.
+2. **Run a scan and capture the logs.** Compare what showed up in the UI vs. what the user thinks should/shouldn't be there.
+3. **Identify patterns.** Are certain sender types scoring too high? Are real emails from colleagues scoring too low?
+4. **Adjust signals and thresholds.** This is iterative — change a weight, re-scan, evaluate.
+
+### Key files
+
+| File | What to look at |
+|------|----------------|
+| `lib/email/scoring.ts` | `SCORE_MODIFIERS`, `TIER_THRESHOLDS`, `scoreEmail()`, `extractSignals()`, `MARKETING_PATTERNS` |
+| `lib/email/scoring-utils.ts` | `isAutomatedSender()`, `extractEmailAddress()` — generic heuristics, no domain blocklists |
+| `lib/email/types.ts` | `EmailSignals` interface — all the boolean signals |
+| `lib/scan/metadata.ts` | `buildScanContext()` — the filtering pipeline (Layer 3) |
+| `lib/scan/prompts.ts` | `getScanPrompt()` — what the LLM sees and how it classifies |
+
+### Important constraints (from CLAUDE.md)
+- **Don't add domains to blocklists** — improve generic heuristics in `scoring-utils.ts` instead
+- **Don't change scan architecture** — the 4-layer pipeline is sound, just needs signal tuning
+- Scoring is shared by agent (`gmail_triage`) and insight scan — changes affect both
+
+### Testing
+- [ ] Run scan, capture score breakdowns for all emails (HIGH, MEDIUM, and skipped)
+- [ ] Identify false positives (shown but shouldn't be) — note which signals scored them high
+- [ ] Identify false negatives (skipped but should show) — note which signals killed them
+- [ ] Adjust modifiers/thresholds, re-scan, re-evaluate
+- [ ] Verify agent triage (`gmail_triage`) still produces reasonable results after changes
+- [ ] lint, typecheck, build pass
 
 ---
 

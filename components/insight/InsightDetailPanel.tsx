@@ -633,6 +633,24 @@ export default function InsightDetailPanel({
         </button>
 
         <div className="flex-1" />
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleDismiss}
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+            title="Dismiss this suggestion"
+            aria-label="Dismiss this suggestion"
+          >
+            <span className="material-symbols-rounded text-xl">delete</span>
+          </button>
+          <button
+            onClick={onClose}
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+            title="Close"
+            aria-label="Close"
+          >
+            <span className="material-symbols-rounded text-xl">close</span>
+          </button>
+        </div>
       </div>
 
       {/* Content header with sender info */}
@@ -676,9 +694,9 @@ export default function InsightDetailPanel({
             )}
           </div>
 
-          {/* Action icons aligned with sender name */}
-          <div className="flex items-center gap-1 flex-shrink-0">
-            {!isMeeting && threadId && (
+          {/* Open in Gmail */}
+          {!isMeeting && threadId && (
+            <div className="flex items-center flex-shrink-0">
               <button
                 onClick={handleOpenThread}
                 className="p-2 text-gray-400 hover:text-inbox-accent hover:bg-gray-100 rounded-full transition-colors"
@@ -687,16 +705,8 @@ export default function InsightDetailPanel({
               >
                 <span className="material-symbols-rounded text-xl">open_in_new</span>
               </button>
-            )}
-            <button
-              onClick={handleDismiss}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
-              title="Dismiss this suggestion"
-              aria-label="Dismiss this suggestion"
-            >
-              <span className="material-symbols-rounded text-xl">close</span>
-            </button>
-          </div>
+            </div>
+          )}
         </div>
 
         <h2 className="mt-3 text-[16px] font-medium text-gray-900 leading-snug">

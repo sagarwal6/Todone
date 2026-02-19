@@ -345,7 +345,7 @@ The user wrote this themselves - your only job is to save it as a draft.`;
 
   // "Draft for me" mode - AI drafts based on tone research
   const userInstructions = userInput
-    ? `\n\nUSER'S INSTRUCTIONS (follow these closely):\n"${userInput}"`
+    ? `\n\nUSER'S DIRECTION (the gist of what they want to say — expand this into a complete, polished email in the user's voice):\n"${userInput}"`
     : '';
 
   return `Draft a reply to this email that sounds exactly like the user wrote it.
@@ -360,14 +360,13 @@ STEPS — FOLLOW IN ORDER:
 
 STEP 1: Learn the user's voice
 - Call tone_analyze with recipient_email="${ctx.senderEmail}"
-- Study the returned samples — absorb vocabulary, phrasing, rhythm, punctuation
-- Follow the recommendation string EXACTLY: greeting style, sign-off, capitalization, spacing
-- The tone_analyze result is the SINGLE SOURCE OF TRUTH for how to write
+- Study the returned email samples — these are the user's ACTUAL emails to this person
+- Absorb how they write: their greeting (or lack of one), sign-off, capitalization, spacing, sentence length, word choices
+- Your draft must read like the user wrote it — derive everything from the samples
 
 STEP 2: Read the incoming email
 - Use gmail_read to get the full email content
-- Understand what they're asking for
-${userInput ? '- Follow the user\'s specific instructions' : ''}
+- Understand what they're asking for${userInput ? '\n- The user gave you the GIST of what they want to say — use it as direction, but craft a complete, polished email that sounds like them' : ''}
 
 STEP 3: If this is about SCHEDULING (meeting up, coffee, call, availability)
 - Use calendar_list to get the user's availability for the next 7 days
@@ -388,7 +387,7 @@ STEP 4: Create the draft as a REPLY
   - subject: "Re: [original subject]" (keep the Re: prefix)
   - original_email: { from, from_name, subject, body, date }
 - This ensures the draft appears as a reply IN THE THREAD, not a new email
-- The draft body MUST follow tone_analyze results: same greeting style, same sign-off, same capitalization, same spacing`;
+- The draft body must sound like the user wrote it — match the voice from the tone_analyze samples`;
 }
 
 function getMeetingPrepPrompt(action: InsightAction): string {

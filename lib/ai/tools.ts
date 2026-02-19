@@ -61,7 +61,7 @@ export const gmailReadTool: Tool = {
  */
 export const gmailDraftTool: Tool = {
   name: 'gmail_draft',
-  description: `Create email draft for user review (NOT sent automatically). The "to" field MUST use a verified email address from contacts, email history, or calendar attendee data — NEVER guess or construct an email from someone's name. Style and tone come from tone_analyze — follow its recommendation for greeting, sign-off, capitalization, and spacing. After creating a draft, do NOT repeat the subject/to/body in your response — the draft card displays them. Just confirm it was created in one line. For replies: MUST include thread_id, message_id (from gmail_read), and original_email to thread properly.`,
+  description: `Create email draft for user review (NOT sent automatically). The "to" field MUST use a verified email address from contacts, email history, or calendar attendee data — NEVER guess or construct an email from someone's name. Style and tone: derive from tone_analyze samples — write like the user's actual emails. After creating a draft, do NOT repeat the subject/to/body in your response — the draft card displays them. Just confirm it was created in one line. For replies: MUST include thread_id, message_id (from gmail_read), and original_email to thread properly.`,
   input_schema: {
     type: 'object' as const,
     properties: {

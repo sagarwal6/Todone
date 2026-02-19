@@ -956,30 +956,13 @@ async function executeToneAnalyze(
     const styleSignals = analyzeStyleSignals(userMessages);
 
     // Step 5: Build recommendation string
-    const recParts: string[] = [];
-    if (styleSignals.greeting !== 'none') {
-      const example = styleSignals.greetingExamples[0] || styleSignals.greeting;
-      recParts.push(`Start with greeting like: "${example}"`);
-    }
-    if (styleSignals.signOff !== 'none') {
-      const example = styleSignals.signOffExamples[0] || styleSignals.signOff;
-      recParts.push(`End with sign-off exactly like: "${example.replace(/\n/g, '\\n')}"`);
-    }
-    recParts.push(`tone is ${styleSignals.formality}`);
-    recParts.push(`avg ~${styleSignals.avgLength} words`);
-    if (styleSignals.usesEmoji) recParts.push('uses emoji');
-    if (styleSignals.usesExclamations) recParts.push('uses exclamation marks');
-    if (!styleSignals.blankLineAfterGreeting) recParts.push('NO blank line between greeting and body — start body on the very next line');
-    if (styleSignals.blankLineAfterGreeting) recParts.push('blank line between greeting and body');
-    if (!styleSignals.blankLineBeforeSignOff) recParts.push('NO blank line before sign-off — sign-off follows body directly');
-    if (styleSignals.blankLineBeforeSignOff) recParts.push('blank line before sign-off');
-    if (styleSignals.usesProperCapitalization) recParts.push('uses proper sentence capitalization');
-    if (!styleSignals.usesProperCapitalization) recParts.push('uses lowercase/informal capitalization');
+    // The samples are the source of truth — the recommendation just points the agent at them.
+    // Don't impose rules; let the agent derive voice from the user's actual writing.
     let recommendation: string;
     if (analysisType === 'general_fallback') {
-      recommendation = `Limited history with this recipient. Samples below are from various recipients and may mix professional and personal tone. The user writes VERY differently to friends vs colleagues — pick only the samples that match the formality needed for THIS draft, and mirror that tone. Style signals: ${recParts.join(', ')}. Study the matching samples — absorb the user's word choices, phrasing, rhythm, capitalization, and formatting exactly.`;
+      recommendation = `Limited history with this recipient — samples below are from various recipients. The user writes differently to friends vs colleagues. Pick only the samples that match the formality level needed for THIS draft, then write exactly like those samples: same greeting (or lack of one), same sign-off, same capitalization, same spacing, same length. The recipient should think the user wrote it themselves.`;
     } else {
-      recommendation = `Match this style exactly: ${recParts.join(', ')}. Study the samples above — absorb the user's word choices, phrasing, rhythm, capitalization, and formatting. The recipient should think the user wrote the draft themselves.`;
+      recommendation = `These are the user's actual emails to this person. Write exactly like them: same greeting (or lack of one), same sign-off, same capitalization, same spacing, same sentence length. Don't add formality the user doesn't use. Don't drop informality the user does use. The recipient should think the user wrote it themselves.`;
     }
 
     return {
