@@ -170,6 +170,8 @@ export interface Database {
           // Added in migration 009 for source tracking
           source: 'user' | 'insight' | null;
           agent_steps_summary: Json[] | null;
+          // Added in migration 013 for durable insight prep lookup
+          source_ref: string | null;
         };
         Insert: {
           id?: string;
@@ -207,6 +209,8 @@ export interface Database {
           // Added in migration 009 for source tracking
           source?: 'user' | 'insight' | null;
           agent_steps_summary?: Json[] | null;
+          // Added in migration 013 for durable insight prep lookup
+          source_ref?: string | null;
         };
         Update: {
           id?: string;
@@ -244,6 +248,8 @@ export interface Database {
           // Added in migration 009 for source tracking
           source?: 'user' | 'insight' | null;
           agent_steps_summary?: Json[] | null;
+          // Added in migration 013 for durable insight prep lookup
+          source_ref?: string | null;
         };
       };
       agent_steps: {

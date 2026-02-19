@@ -135,6 +135,7 @@ export interface Task {
   agentSteps?: AgentStepSummary[];  // Persisted agent steps for display
   customPrompt?: string | null;     // Custom prompt for insight-driven tasks
   source?: TaskSource;              // Where task originated: user input or insight scan
+  sourceRef?: string | null;        // Stable ref for insight tasks: eventId or threadId
 }
 
 export interface ResearchRequest {
@@ -229,6 +230,7 @@ export function toSupabaseTask(task: Task, userId: string): SupabaseTaskInsert {
     custom_prompt: task.customPrompt ?? null,
     completed_steps: task.completedSteps ?? [],
     source: task.source ?? 'user',
+    source_ref: task.sourceRef ?? null,
     created_at: new Date(task.createdAt).toISOString(),
     updated_at: new Date(task.updatedAt).toISOString(),
     completed_at: task.completedAt ? new Date(task.completedAt).toISOString() : null,
@@ -253,6 +255,7 @@ export function fromSupabaseTask(row: SupabaseTaskRow): Task {
     agentSteps: (row.agent_steps_summary ?? []) as unknown as AgentStepSummary[],
     customPrompt: row.custom_prompt ?? undefined,
     source: (row.source ?? 'user') as TaskSource,
+    sourceRef: row.source_ref ?? undefined,
     completedSteps: row.completed_steps ?? [],
     createdAt: new Date(row.created_at).getTime(),
     updatedAt: new Date(row.updated_at).getTime(),

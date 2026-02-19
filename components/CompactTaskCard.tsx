@@ -108,7 +108,7 @@ export function CompactTaskCard({
             {task.title}
           </span>
           {task.isPinned && (
-            <MaterialIcon name="push_pin" size={14} weight={300} fill={true} className="text-inbox-accent flex-shrink-0" />
+            <MaterialIcon name="push_pin" size={14} weight={300} fill={true} className="text-amber-500 flex-shrink-0" />
           )}
         </div>
         {/* Brief summary for ready tasks */}

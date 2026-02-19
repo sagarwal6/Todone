@@ -61,6 +61,7 @@ export interface EventNeedsPrep {
   // If already prepped, link to existing prep
   alreadyPrepped?: boolean;
   preppedActionId?: string;
+  preppedTaskId?: string;
   // Meeting prep score (higher = more important)
   prepScore?: number;
 }
@@ -126,6 +127,7 @@ export interface MeetingPrepContext {
   // Already prepped - show "View prep" instead of "Prep"
   alreadyPrepped?: boolean;
   preppedActionId?: string;
+  preppedTaskId?: string;
 }
 
 export interface FollowUpContext {

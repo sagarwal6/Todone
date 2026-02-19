@@ -1,16 +1,16 @@
 'use client';
 
 /**
- * InsightView Component - Pure List
+ * InsightView Component - Minimal Briefing List
  *
- * Shows Proactive todos list. When an item is clicked,
- * parent handles creating/selecting the task and showing ConversationPanel.
+ * Clean, scannable list of proactive insight items.
+ * Lightweight section labels, no heavy chrome.
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useInsightScan } from '@/hooks/useInsightScan';
 import InsightItem from './InsightItem';
-import type { InsightAction, MeetingPrepContext } from '@/lib/scan/types';
+import type { InsightAction } from '@/lib/scan/types';
 
 import type { LocalActionState } from '@/hooks/useInsightScan';
 
@@ -58,9 +58,7 @@ export default function InsightView({
     const meetings: Array<{ action: InsightAction; isPriority: boolean }> = [];
     const emails: Array<{ action: InsightAction; isPriority: boolean }> = [];
 
-    // Helper to categorize action
     const addAction = (action: InsightAction, isPriority: boolean) => {
-      // Skip organization/smart_label actions entirely
       if (action.type === 'smart_label') return;
 
       if (action.type === 'meeting_prep') {
@@ -70,19 +68,17 @@ export default function InsightView({
       }
     };
 
-    // Quick win is priority
     if (scan.quickWin) {
       addAction(scan.quickWin, true);
     }
 
-    // All bundle items
     for (const bundle of scan.bundles) {
       for (const item of bundle.items) {
         addAction(item, false);
       }
     }
 
-    // Sort emails by recency (most recent first = lowest daysAgo first)
+    // Sort emails by recency (most recent first)
     emails.sort((a, b) => {
       const aDaysAgo = (a.action.context as { daysAgo?: number })?.daysAgo ?? 999;
       const bDaysAgo = (b.action.context as { daysAgo?: number })?.daysAgo ?? 999;
@@ -104,9 +100,7 @@ export default function InsightView({
 
   const hasContent = meetingActions.length > 0 || emailActions.length > 0;
 
-  // Handle item selection - notify parent
   const handleSelectItem = useCallback((actionId: string) => {
-    // Find the action object
     const allActions: InsightAction[] = [];
     if (scan.quickWin) allActions.push(scan.quickWin);
     for (const bundle of scan.bundles) {
@@ -120,18 +114,19 @@ export default function InsightView({
     }
   }, [onActionClick, scan.quickWin, scan.bundles]);
 
-  // Resolve actionState, falling back to prepped action's state for already-prepped meetings
   const getResolvedActionState = useCallback((action: InsightAction): LocalActionState | null => {
     const state = scan.getActionState(action.id);
     if (state) return state;
 
-    // For already-prepped meetings, fall back to the previous prep's state
-    if (action.type === 'meeting_prep') {
-      const preppedId = (action.context as MeetingPrepContext)?.preppedActionId;
-      if (preppedId) {
-        return scan.getActionState(preppedId);
-      }
+    const ctx = action.context as { alreadyPrepped?: boolean; preppedTaskId?: string; preppedActionId?: string };
+    if (ctx?.preppedTaskId) {
+      return { status: 'completed', taskId: ctx.preppedTaskId };
     }
+
+    if (action.type === 'meeting_prep' && ctx?.preppedActionId) {
+      return scan.getActionState(ctx.preppedActionId);
+    }
+
     return null;
   }, [scan]);
 
@@ -142,15 +137,12 @@ export default function InsightView({
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Force refresh handler
   const handleRefresh = () => {
     scan.startScan(true);
   };
 
-  // Render the Proactive todos list
   return (
     <div className="h-full flex flex-col bg-inbox-bg-primary">
-      {/* Scrollable list content */}
       <div className="flex-1 overflow-y-auto">
         {/* Scanning State */}
         {(scan.phase === 'scanning' || scan.phase === 'analyzing') && (
@@ -169,42 +161,40 @@ export default function InsightView({
           />
         )}
 
-        {/* Complete State - Grouped by Type */}
+        {/* Complete State */}
         {scan.phase === 'complete' && (
           <div className="max-w-2xl mx-auto">
-            {/* Section Header - "Proactive todos" */}
-            <div className="px-3 py-3 flex items-center gap-3">
-              <span className="material-symbols-rounded text-inbox-accent text-lg">auto_awesome</span>
-              <span className="text-inbox-body font-medium text-inbox-text-primary flex-1">Proactive todos</span>
-              {scan.completedAt && (
-                <span className="text-[11px] text-inbox-text-tertiary">
-                  {formatRelativeTime(scan.completedAt)}
-                </span>
-              )}
-              <button
-                onClick={handleRefresh}
-                className="p-1 rounded-full hover:bg-inbox-bg-hover transition-colors"
-                title="Refresh"
-              >
-                <span className="material-symbols-rounded text-inbox-text-tertiary text-base">refresh</span>
-              </button>
-            </div>
-
-            {/* Greeting - subtle context line */}
-            {scan.greeting && (
-              <div className="px-3 pb-3 text-inbox-caption text-inbox-text-tertiary">
-                {scan.greeting}
+            {/* Compact header: greeting + utility */}
+            <div className="px-4 pt-3 pb-2">
+              <div className="flex items-center justify-between">
+                {scan.greeting ? (
+                  <p className="text-[13px] leading-[18px] text-inbox-text-tertiary truncate flex-1 mr-3">
+                    {scan.greeting}
+                  </p>
+                ) : (
+                  <div className="flex-1" />
+                )}
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {scan.completedAt && (
+                    <span className="text-[11px] text-inbox-text-tertiary">
+                      {formatRelativeTime(scan.completedAt)}
+                    </span>
+                  )}
+                  <button
+                    onClick={handleRefresh}
+                    className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-inbox-bg-hover transition-colors"
+                    title="Refresh"
+                  >
+                    <span className="material-symbols-rounded text-[18px] text-inbox-text-tertiary">refresh</span>
+                  </button>
+                </div>
               </div>
-            )}
+            </div>
 
             {/* Meetings Section */}
             {meetingActions.length > 0 && (
               <div>
-                <div className="px-3 py-2 bg-[#E8EAED]">
-                  <span className="text-[12px] font-semibold text-[#3C4043] uppercase tracking-wider">
-                    Meetings
-                  </span>
-                </div>
+                <SectionLabel icon="calendar_today" label="Meetings" />
                 <div className="divide-y divide-inbox-divider">
                   {meetingActions.map(({ action, isPriority }) => (
                     <InsightItem
@@ -224,17 +214,13 @@ export default function InsightView({
             {/* Emails Section */}
             {emailActions.length > 0 && (
               <div>
-                <div className="px-3 py-2 bg-[#E8EAED]">
-                  <span className="text-[12px] font-semibold text-[#3C4043] uppercase tracking-wider">
-                    Emails
-                  </span>
-                </div>
+                <SectionLabel icon="mail" label="Emails" />
                 <div className="divide-y divide-inbox-divider">
                   {emailActions.map(({ action, isPriority }) => (
                     <InsightItem
                       key={action.id}
                       action={action}
-                      actionState={scan.getActionState(action.id)}
+                      actionState={getResolvedActionState(action)}
                       isPriority={isPriority}
                       isSelected={action.id === selectedActionId}
                       onSelect={handleSelectItem}
@@ -275,8 +261,19 @@ function formatRelativeTime(timestamp: number): string {
 }
 
 // ============================================================================
-// Sub-components (simplified)
+// Sub-components
 // ============================================================================
+
+function SectionLabel({ icon, label }: { icon: string; label: string }) {
+  return (
+    <div className="px-4 pt-4 pb-1 flex items-center gap-2">
+      <span className="material-symbols-rounded text-[16px] text-inbox-text-secondary">{icon}</span>
+      <span className="text-[12px] leading-[16px] font-semibold text-inbox-text-secondary uppercase tracking-wider">
+        {label}
+      </span>
+    </div>
+  );
+}
 
 function ScanProgress({
   phase,
@@ -287,7 +284,6 @@ function ScanProgress({
   emailsScanned: number;
   eventsScanned: number;
 }) {
-  // Rotating contextual messages during analyzing phase
   const [messageIndex, setMessageIndex] = useState(0);
   const [fadeIn, setFadeIn] = useState(true);
 
@@ -313,7 +309,6 @@ function ScanProgress({
     return () => clearInterval(interval);
   }, [phase, analyzingMessages.length]);
 
-  // Time-based progress bar: asymptotic curve that creeps forward smoothly
   const [elapsedMs, setElapsedMs] = useState(0);
   useEffect(() => {
     if (phase !== 'analyzing') { setElapsedMs(0); return; }
@@ -322,7 +317,6 @@ function ScanProgress({
     return () => clearInterval(timer);
   }, [phase]);
 
-  // Scanning: 30%, Analyzing: 35% → creeps to ~60% over 10s (asymptotic, never finishes)
   const progressPct = phase === 'analyzing'
     ? 35 + 25 * (1 - Math.exp(-elapsedMs / 8000))
     : 30;

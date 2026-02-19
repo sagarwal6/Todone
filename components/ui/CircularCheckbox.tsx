@@ -65,7 +65,7 @@ export function CircularCheckbox({
         ${
           checked
             ? "bg-inbox-success text-white"
-            : "border border-[#DADCE0] hover:border-[#9AA0A6] hover:bg-inbox-accent/5"
+            : "border border-[#DADCE0] hover:border-inbox-success/40 hover:bg-inbox-success/5"
         }
       `}>
         {checked && (

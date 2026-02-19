@@ -1,66 +1,81 @@
-# Session 2-19: Polish Handoff
+# Session 2-19: Polish Handoff → Next Session
 
 ## Branch
-`feature/ia-makeover` — continue on this branch
+`feature/ia-makeover` — continue on this branch. Not yet pushed to remote.
 
-## What Was Done (Session 2-18)
+## What Was Done (This Session)
 
-The IA makeover restructured Todone's navigation and added polish animations. See `sessions/2-18-IA-makeover/plan.md` for full details. Summary:
+### 1. Durable Insight Prep Persistence
+Added `source_ref` column to `tasks` table so meeting preps and email drafts survive rescans and page reloads. Previously tied to fragile `insight_actions` (cascade-deleted) and an in-memory React ref (lost on reload).
 
-1. **Renamed "Archived" to "Someday"** — across types, hooks, components, DB migration
-2. **Removed bottom nav and pill toggles** — replaced with simple "Todone" header + overflow menu
-3. **Briefing as first row in task list** — `InsightBriefingCard` renders above `TaskList` when viewing active tasks. Click navigates to `InsightView` with back arrow.
-4. **Completion animation** — SVG checkmark draw, card slide-out, FLIP row collapse
-5. **Empty state "dawn" animation** — staggered sun rays, rotating messages
-6. **Scan progress UX** — rotating contextual messages during analyzing phase, time-based progress bar
-7. **Shared scan state** — `page.tsx` owns single `useInsightScan()` and passes `scan` prop to both `InsightBriefingCard` and `InsightView`
-8. **Last scan timestamp** — relative time ("5m ago") shown next to refresh button in InsightView
-9. **Keyboard shortcuts** — `Cmd+1` Tasks, `Cmd+2` Briefing
+### 2. Bug Fixes
+- **Action state watcher**: Fixed `scan.actionStates[actionId].taskId` storing wrong ID (server UUID vs addTask ID). Now checks `insightActionTaskMapRef` first.
+- **Click targets**: InsightItem dismiss button had `opacity-0` but ate clicks. Fixed with `pointer-events-none`. Changed row to `<button>` for reliable tap.
+- **Already-prepped re-trigger**: Three-layer fix — frontend sourceRef lookup, backend cached scan annotation, in-memory ref fallback.
+- **ConversationPanel**: Hidden Pin/Someday for insight tasks (`source !== 'insight'`).
+- **Briefing flash**: Mobile InsightView now receives shared `scan` prop.
 
-## What Needs Polish
+### 3. UI Redesign
+- **InsightItem**: Smaller 32px avatars, one-line sender·subject layout, lightweight status indicators
+- **InsightView**: Removed heavy headers/section bars, compact greeting, inline section labels
+- **Warmth pass**: Amber pins, green checkbox hover, blue pill working indicator, warm gold briefing sparkle
 
-### Must Test (not yet manually verified)
-- [ ] **Mobile**: Header shows "Todone" (no toggle). Briefing card is first item in task list.
-- [ ] **Mobile**: Tap Briefing card → InsightView with "← Back to tasks". Back returns to task list with scan progress reflected in the card.
-- [ ] **Desktop**: No pill toggle. Briefing card above tasks. Click → InsightView with "← Briefing" back button.
-- [ ] **Desktop**: Click insight item → detail in right panel (2-pane max).
-- [ ] **Scan progress**: Rotating contextual messages during analyzing ("Reviewing 42 emails...", etc.)
-- [ ] **Scan timestamp**: Shows "just now" / "5m ago" etc. next to refresh button after scan completes
-- [ ] **Navigate away during scan**: Hit back while scan is in progress → briefing card shows spinner + rotating messages → eventually shows completion with count badge
-- [ ] **Cmd+1/Cmd+2**: Still work
-- [ ] **Menu**: Completed/Someday accessible without counts
-- [ ] **Completion animation**: Check → slide out → rows collapse smoothly (both mobile swipe and desktop click)
-- [ ] **Empty state**: Sun ray animation plays when all tasks completed
-- [ ] **Someday**: Swipe left → amber "Someday" action. Someday view accessible from menu.
+## Key Gotchas
 
-### Known Polish Areas
-- **InsightBriefingCard visual design** — currently plain. May want a subtle background, border, or icon treatment to differentiate from regular tasks
-- **Scan progress bar** — the asymptotic curve means the bar never reaches the end during analyzing. Consider a completion animation when scan finishes (bar fills to 100% then transitions to results)
-- **Transition animations** — navigating between task list and InsightView is instant (no transition). Consider a subtle slide or fade
-- **Timestamp update** — `formatRelativeTime` in InsightView only renders once; the "5m ago" text doesn't live-update (would need a timer to re-render periodically)
-- **Mobile safe areas** — verify nothing is cut off on notched iPhones (especially the briefing card at top and quick capture bar at bottom)
-- **Dark mode** — all new components use inbox-* tokens but should be verified in dark mode if it exists
-- **Accessibility** — completion animation respects `prefers-reduced-motion`, but verify screen reader announcements for scan progress, briefing card state changes
-- **Error recovery** — if scan fails and user hits back, card shows "Scan failed". Need to verify tapping the card retries
+1. **`scan.actionStates[actionId].taskId` is WRONG** — stores a server UUID, not the actual task ID. Always check `insightActionTaskMapRef.current.get(actionId)` first, then sourceRef lookup on tasks array.
 
-## Key Files to Know
+2. **Cached scan path is separate** — `app/api/scan/route.ts` has two code paths (fresh scan vs `get_cached_insight_scan` RPC). Both now annotate with `preppedTaskId`, but check both paths for any new bugs.
+
+3. **Three layers of prep lookup** (in `handleInsightActionClick`):
+   - Layer 1: `preppedTaskId` from action context (set by scan route)
+   - Layer 2: `insightActionTaskMapRef` (in-memory, survives within session)
+   - Layer 3: `tasks.find(t => t.sourceRef === eventId/threadId)` (durable, survives reload)
+
+4. **Pre-commit**: `npm run lint && npm run typecheck && npm run build` — pre-existing errors in auth route types are NOT from this session.
+
+## What Needs To Be Done Next
+
+### Priority 1: Manual Testing
+- [ ] Prep a meeting → wait or rescan → click → should open existing prep (not re-trigger)
+- [ ] Draft an email → rescan → click → opens existing draft
+- [ ] Page reload after prepping → preps survive via source_ref
+- [ ] Fresh scan with no preps → items show as actionable
+- [ ] Mobile briefing flash gone (no "Start scan" splash unless truly first scan)
+
+### Priority 2: Remaining Polish
+- [ ] Mobile briefing list touch targets and scroll behavior
+- [ ] InsightItem dismiss animation (currently instant removal)
+- [ ] Briefing card animation when scan completes (items appearing)
+- [ ] Empty state when all briefing items dismissed
+- [ ] Dark mode pass for new amber/green/gold colors
+- [ ] Scan progress bar completion animation (fills to 100% on finish)
+- [ ] Transition animation between task list ↔ InsightView
+- [ ] Timestamp live-update (currently "5m ago" doesn't tick)
+- [ ] Mobile safe areas on notched iPhones
+- [ ] Error recovery (scan fails → tap card → retry)
+
+### Priority 3: Infrastructure
+- [ ] Migrations 010-012 not pushed via `supabase db push` (pg_cron dependency). Enable pg_cron or make migration 010 optional.
+
+## Key Files
 
 | File | Role |
 |------|------|
-| `app/page.tsx` | Main layout — owns scan state, renders mobile/desktop, routes between views |
-| `components/insight/InsightBriefingCard.tsx` | Card in task list — receives `scan` prop, shows progress/results |
-| `components/insight/InsightView.tsx` | Full briefing view — grouped meetings/emails, refresh button + timestamp |
-| `components/insight/InsightItem.tsx` | Individual action row in InsightView |
-| `components/insight/InsightDetailPanel.tsx` | Right panel for selected insight action (desktop) |
-| `hooks/useInsightScan.ts` | Scan lifecycle — SSE streaming, cached results, action states, `completedAt` |
-| `components/Navigation.tsx` | Header (mobile + desktop) and overflow menu |
-| `components/ui/CircularCheckbox.tsx` | SVG checkmark animation |
-| `hooks/useAnimatedList.ts` | FLIP animation for row collapse after completion |
-| `components/EmptyState.tsx` | Dawn animation when task list is empty |
+| `app/page.tsx` | Main orchestration — scan state, insight action handling, sourceRef lookups |
+| `app/api/scan/route.ts` | Scan API — fresh + cached paths, preppedTaskId annotation |
+| `components/insight/InsightItem.tsx` | Briefing list row (rewritten this session) |
+| `components/insight/InsightView.tsx` | Full briefing view with section labels |
+| `components/insight/InsightBriefingCard.tsx` | Card in task list — scan progress/results |
+| `components/TaskCard.tsx` | Task row (warmth updates) |
+| `components/CompactTaskCard.tsx` | Compact task row (warmth updates) |
+| `components/ConversationPanel.tsx` | Detail panel — insight task guards |
+| `components/ui/CircularCheckbox.tsx` | Checkbox with green hover preview |
+| `lib/scan/types.ts` | MeetingPrepContext with preppedTaskId |
+| `hooks/useInsightScan.ts` | Scan lifecycle — SSE, caching, action states |
 
 ## Architecture Reminders
 
-- `useInsightScan()` uses `useState` — each call is independent state. That's why `page.tsx` calls it once and passes `scan` as a prop. Do NOT add `useInsightScan()` calls in child components.
-- Scan survives view navigation because `page.tsx` never unmounts. If mobile app is backgrounded, server completes independently and caches result in DB.
-- `InsightView` accepts an optional `scan` prop (`externalScan`). If not provided it creates its own — but in practice `page.tsx` always provides it.
-- The `ScanObject` type in `InsightView.tsx` is the canonical interface for the scan prop. Both `InsightView` and `InsightBriefingCard` import from there.
+- `useInsightScan()` uses `useState` — each call is independent state. `page.tsx` calls it once and passes `scan` as prop. Do NOT add `useInsightScan()` calls in child components.
+- Scan survives view navigation because `page.tsx` never unmounts.
+- `InsightView` accepts optional `scan` prop. In practice `page.tsx` always provides it.
+- `ScanObject` type in `InsightView.tsx` is the canonical interface for scan props.

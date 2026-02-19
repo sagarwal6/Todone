@@ -316,24 +316,29 @@ export function ConversationPanel({ task, onClose, onAddChatMessage, onComplete,
                   <MaterialIcon name="check_circle" size={16} weight={300} />
                   <span>Done</span>
                 </button>
-                <button
-                  onClick={() => onTogglePin?.(task.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-inbox-caption transition-colors ${
-                    task.isPinned
-                      ? 'text-inbox-accent bg-inbox-accent/10'
-                      : 'text-inbox-text-secondary hover:text-inbox-accent hover:bg-inbox-accent/10'
-                  }`}
-                >
-                  <MaterialIcon name="push_pin" size={16} weight={300} fill={task.isPinned} />
-                  <span>{task.isPinned ? 'Pinned' : 'Pin'}</span>
-                </button>
-                <button
-                  onClick={() => onSomeday?.(task.id)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-inbox-caption text-inbox-text-secondary hover:text-inbox-text-primary hover:bg-inbox-bg-hover transition-colors"
-                >
-                  <MaterialIcon name="schedule" size={16} weight={300} />
-                  <span>Someday</span>
-                </button>
+                {/* Pin and Someday don't apply to insight tasks (meeting preps, email drafts) */}
+                {task.source !== 'insight' && (
+                  <>
+                    <button
+                      onClick={() => onTogglePin?.(task.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-inbox-caption transition-colors ${
+                        task.isPinned
+                          ? 'text-amber-500 bg-amber-500/10'
+                          : 'text-inbox-text-secondary hover:text-amber-500 hover:bg-amber-500/10'
+                      }`}
+                    >
+                      <MaterialIcon name="push_pin" size={16} weight={300} fill={task.isPinned} />
+                      <span>{task.isPinned ? 'Pinned' : 'Pin'}</span>
+                    </button>
+                    <button
+                      onClick={() => onSomeday?.(task.id)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-inbox-caption text-inbox-text-secondary hover:text-inbox-text-primary hover:bg-inbox-bg-hover transition-colors"
+                    >
+                      <MaterialIcon name="schedule" size={16} weight={300} />
+                      <span>Someday</span>
+                    </button>
+                  </>
+                )}
               </>
             )}
             <button

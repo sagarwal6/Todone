@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Task, TaskStatus, TaskSource, Research, Feedback, AgentQuickInfo, AgentStepSummary } from './types';
 import { getTasks, saveTasks, addTask, updateTask, deleteTask, reorderTasks } from './storage';
 
-export function createTask(title: string, customPrompt?: string | null, source?: TaskSource): Task {
+export function createTask(title: string, customPrompt?: string | null, source?: TaskSource, sourceRef?: string | null): Task {
   const tasks = getTasks();
   // New tasks go to the top - use minimum order minus 1
   const minOrder = tasks.length > 0 ? Math.min(...tasks.map(t => t.order)) : 1;
@@ -19,6 +19,7 @@ export function createTask(title: string, customPrompt?: string | null, source?:
     completedAt: null,
     customPrompt: customPrompt || null,
     source: source || 'user',
+    sourceRef: sourceRef || null,
   };
 
   addTask(task);

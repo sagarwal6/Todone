@@ -320,10 +320,16 @@ function AuthenticatedHome() {
   useEffect(() => {
     // Check all actionStates with taskIds
     for (const [actionId, state] of Object.entries(scan.actionStates)) {
-      if (state.status !== 'in_progress' || !state.taskId) continue;
+      if (state.status !== 'in_progress') continue;
+
+      // The execute API returns a server-generated taskId, but the actual task
+      // created by addTask() has a different ID stored in insightActionTaskMapRef.
+      // Check both to find the running agent.
+      const actualTaskId = insightActionTaskMapRef.current.get(actionId) || state.taskId;
+      if (!actualTaskId) continue;
 
       // Check if agent finished
-      const agentState = agent.getAgentState(state.taskId);
+      const agentState = agent.getAgentState(actualTaskId);
       if (agentState && !agentState.isRunning && agentState.result) {
         const result = agentState.result;
         if (result.status === 'completed') {
@@ -359,8 +365,29 @@ function AuthenticatedHome() {
 
   // Handle insight action click — meetings create task + ConversationPanel, emails open InsightDetailPanel
   const handleInsightActionClick = useCallback(async (action: InsightAction) => {
-    // Emails: show InsightDetailPanel directly (no task creation yet)
+    // For already-prepped emails, open the existing task's ConversationPanel directly
     if (action.type !== 'meeting_prep') {
+      const ctx = action.context as { alreadyPrepped?: boolean; preppedTaskId?: string; threadId?: string };
+      if (ctx?.preppedTaskId) {
+        const existingTask = tasks.find(t => t.id === ctx.preppedTaskId);
+        if (existingTask) {
+          insightActionTaskMapRef.current.set(action.id, ctx.preppedTaskId);
+          setSelectedInsightActionId(null);
+          setSelectedTaskId(ctx.preppedTaskId);
+          return;
+        }
+      }
+      // Fallback: find task by sourceRef matching threadId (works after reload with cached scans)
+      if (ctx?.threadId) {
+        const sourceRefMatch = tasks.find(t => t.source === 'insight' && t.sourceRef === ctx.threadId);
+        if (sourceRefMatch) {
+          insightActionTaskMapRef.current.set(action.id, sourceRefMatch.id);
+          setSelectedInsightActionId(null);
+          setSelectedTaskId(sourceRefMatch.id);
+          return;
+        }
+      }
+      // Fresh email — show InsightDetailPanel (no task creation yet)
       setSelectedTaskId(null); // Clear any meeting ConversationPanel
       setSelectedInsightActionId(action.id);
       return;
@@ -390,22 +417,45 @@ function AuthenticatedHome() {
       }
     }
 
-    // 3. For already-prepped meetings, check if task exists by title match
+    // 3. For already-prepped items, check preppedTaskId from durable task lookup
     const meetingCtx = action.context as MeetingPrepContext;
-    if (meetingCtx?.alreadyPrepped) {
+    if (meetingCtx?.preppedTaskId) {
+      const existingTask = tasks.find(t => t.id === meetingCtx.preppedTaskId);
+      if (existingTask) {
+        insightActionTaskMapRef.current.set(action.id, meetingCtx.preppedTaskId);
+        setSelectedTaskId(meetingCtx.preppedTaskId);
+        return;
+      }
+    }
+
+    // 3b. Legacy fallback: check preppedActionId in ref map
+    if (meetingCtx?.alreadyPrepped && meetingCtx?.preppedActionId) {
       const preppedId = meetingCtx.preppedActionId;
-      if (preppedId) {
-        const preppedTaskId = insightActionTaskMapRef.current.get(preppedId);
-        if (preppedTaskId) {
-          const existingTask = tasks.find(t => t.id === preppedTaskId);
-          if (existingTask) {
-            insightActionTaskMapRef.current.set(action.id, preppedTaskId);
-            setSelectedTaskId(preppedTaskId);
-            return;
-          }
+      const legacyTaskId = insightActionTaskMapRef.current.get(preppedId);
+      if (legacyTaskId) {
+        const existingTask = tasks.find(t => t.id === legacyTaskId);
+        if (existingTask) {
+          insightActionTaskMapRef.current.set(action.id, legacyTaskId);
+          setSelectedTaskId(legacyTaskId);
+          return;
         }
       }
-      // Also try title match
+    }
+
+    // 3c. Definitive fallback: find task by sourceRef matching eventId
+    // Works after page reload with cached scans (where preppedTaskId isn't set)
+    const eventId = meetingCtx?.eventId;
+    if (eventId) {
+      const sourceRefMatch = tasks.find(t => t.source === 'insight' && t.sourceRef === eventId);
+      if (sourceRefMatch) {
+        insightActionTaskMapRef.current.set(action.id, sourceRefMatch.id);
+        setSelectedTaskId(sourceRefMatch.id);
+        return;
+      }
+    }
+
+    // 3d. Title match as last resort
+    if (meetingCtx?.alreadyPrepped) {
       const titleMatch = tasks.find(t =>
         t.source === 'insight' &&
         t.title.includes(meetingCtx.title || action.headline)
@@ -417,10 +467,11 @@ function AuthenticatedHome() {
       }
     }
 
-    // 4. New meeting — execute and create task, auto-start agent
+    // 4. New meeting — execute and create task with sourceRef, auto-start agent
     const result = await scan.executeAction(action.id);
     if (result.success && result.taskTitle) {
-      const newTask = addTask(result.taskTitle, result.customPrompt, 'insight');
+      const sourceRef = meetingCtx?.eventId || null;
+      const newTask = addTask(result.taskTitle, result.customPrompt, 'insight', sourceRef);
       insightActionTaskMapRef.current.set(action.id, newTask.id);
       setAutoStartAgentTaskId(newTask.id);
       setSelectedTaskId(newTask.id);
@@ -429,10 +480,19 @@ function AuthenticatedHome() {
 
   // Handler for InsightDetailPanel executing an email action (Draft for me / Write it myself)
   const handleEmailExecute = useCallback(async (actionId: string, userInput?: string, replyMode?: 'draft' | 'write') => {
+    // Find the action to extract threadId for sourceRef
+    const allActions: InsightAction[] = [];
+    if (scan.quickWin) allActions.push(scan.quickWin);
+    for (const bundle of scan.bundles) {
+      for (const item of bundle.items) allActions.push(item);
+    }
+    const action = allActions.find(a => a.id === actionId);
+    const threadId = (action?.context as { threadId?: string })?.threadId || null;
+
     const result = await scan.executeAction(actionId, userInput, replyMode);
     if (result.success && result.taskTitle) {
-      // Create hidden task with 'insight' source
-      const newTask = addTask(result.taskTitle, result.customPrompt, 'insight');
+      // Create hidden task with 'insight' source + threadId as sourceRef
+      const newTask = addTask(result.taskTitle, result.customPrompt, 'insight', threadId);
       insightActionTaskMapRef.current.set(actionId, newTask.id);
       // Auto-start the agent for this email task
       setAutoStartAgentTaskId(newTask.id);
@@ -583,6 +643,7 @@ function AuthenticatedHome() {
             <InsightView
               onClose={() => setViewMode('active')}
               onActionClick={handleInsightActionClick}
+              scan={scan}
               selectedActionId={activeInsightActionId}
             />
           </div>

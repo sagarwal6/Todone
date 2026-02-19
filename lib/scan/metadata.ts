@@ -27,7 +27,8 @@ interface ScanOptions {
   calendarDays: number;
   maxEmails: number;
   userEmail?: string; // User's email for scoring
-  preppedEventMap?: Record<string, string>; // eventId -> actionId for already-prepped meetings
+  preppedEventMap?: Record<string, string>; // eventId -> actionId for already-prepped meetings (legacy)
+  preppedRefMap?: Record<string, { taskId: string; title: string }>; // sourceRef -> task info (durable)
   onGmailProgress?: (count: number) => void;
   onCalendarProgress?: (count: number) => void;
 }
@@ -85,12 +86,13 @@ export async function buildScanContext(
   // Process calendar metadata
   const upcoming = formatUpcomingEvents(events);
   const preppedMap = opts.preppedEventMap || {};
+  const preppedRefMap = opts.preppedRefMap || {};
   // Build contact affinity from top senders (simple heuristic)
   const contactAffinity: Record<string, number> = {};
   for (const sender of topSenders) {
     contactAffinity[sender.email.toLowerCase()] = sender.count;
   }
-  const needsPrep = findEventsNeedingPrep(events, preppedMap, opts.userEmail, contactAffinity);
+  const needsPrep = findEventsNeedingPrep(events, preppedMap, opts.userEmail, contactAffinity, preppedRefMap);
 
   return {
     emails: {
@@ -357,7 +359,7 @@ async function findAwaitingResponse(
       // Direct emails (1:1 or small group) likely need a response even if read
       // High-tier emails show even if read (user may have opened but not replied)
       if (scored.tier === 'medium' && !email.isUnread && !scored.signals.isDirect) {
-        console.log('[SCAN] Skipping read medium-tier email');
+        console.log(`[SCAN] READ_MEDIUM_SKIP: score=${scored.score}, domain=${scored.fromDomain}, subj="${email.subject?.slice(0, 50)}" — skipping (read, medium, non-direct)`);
         continue;
       }
     } else {
@@ -386,7 +388,7 @@ async function findAwaitingResponse(
         const lastFromEmail = extractEmail(threadInfo.lastMessageFrom).toLowerCase();
         const lastFromMe = userEmail ? lastFromEmail === userEmail.toLowerCase() : false;
         if (lastFromMe) {
-          console.log('[SCAN] Skipping thread where user sent last message');
+          console.log(`[SCAN] USER_REPLIED: subj="${email.subject?.slice(0, 50)}" — skipping (user sent last message)`);
           continue;
         }
       }
@@ -627,7 +629,8 @@ function findEventsNeedingPrep(
   events: CalendarEvent[],
   preppedEventMap: Record<string, string> = {},
   userEmail?: string,
-  contactAffinity?: Record<string, number>
+  contactAffinity?: Record<string, number>,
+  preppedRefMap: Record<string, { taskId: string; title: string }> = {},
 ): EventNeedsPrep[] {
   const now = Date.now();
   const candidates: EventNeedsPrep[] = [];
@@ -635,7 +638,8 @@ function findEventsNeedingPrep(
   for (const event of events) {
     if (event.status === 'cancelled') continue;
 
-    // Check if already prepped
+    // Check if already prepped — prefer durable task lookup, fall back to legacy action lookup
+    const preppedTaskInfo = preppedRefMap[event.id];
     const preppedActionId = preppedEventMap[event.id];
 
     const startTime = new Date(event.start.dateTime || event.start.date || '').getTime();
@@ -654,8 +658,10 @@ function findEventsNeedingPrep(
     // Log scoring for debugging
     console.log(`[MEETING SCORE] "${event.summary}" - score: ${meetingScore.score}, attendees: ${meetingScore.signals.attendeeCount}, organizer: ${meetingScore.signals.userIsOrganizer}, passive: ${meetingScore.signals.isPassiveEvent}`);
 
+    const isPrepped = !!preppedTaskInfo || !!preppedActionId;
+
     // Skip meetings below threshold (unless already prepped - show those for continuity)
-    if (meetingScore.score < MEETING_PREP_THRESHOLD && !preppedActionId) {
+    if (meetingScore.score < MEETING_PREP_THRESHOLD && !isPrepped) {
       console.log(`[MEETING SKIP] "${event.summary}" - score ${meetingScore.score} below threshold ${MEETING_PREP_THRESHOLD}`);
       continue;
     }
@@ -667,9 +673,10 @@ function findEventsNeedingPrep(
       hoursUntil: Math.round(hoursUntil),
       attendees: externalAttendees.map(a => a.displayName || a.email),
       description: event.description?.slice(0, 500),
-      // Mark if already prepped with link to action
-      alreadyPrepped: !!preppedActionId,
+      // Mark if already prepped with link to task (durable) or action (legacy)
+      alreadyPrepped: isPrepped,
       preppedActionId: preppedActionId,
+      preppedTaskId: preppedTaskInfo?.taskId,
       // Include score for potential future use
       prepScore: meetingScore.score,
     });

@@ -1,16 +1,11 @@
 'use client';
 
 /**
- * InsightItem Component - Pure List Row
+ * InsightItem Component - Clean List Row
  *
- * A simple, scannable row for insight items.
- * Click to select and show detail in panel (no inline expansion).
- *
- * Design principles:
- * - Compact, single-line layout
- * - Selection state for highlighting active item
- * - Hover actions for dismiss
- * - Status indicators (spinner for in_progress, checkmark for completed)
+ * Compact, scannable row with small colored avatar for warmth.
+ * Status communicated via avatar replacement (spinner/checkmark).
+ * Single-line sender + subject, optional suggestion second line.
  */
 
 import { useState, useCallback } from 'react';
@@ -26,21 +21,15 @@ interface InsightItemProps {
   onDismiss: (actionId: string) => Promise<boolean>;
 }
 
-/**
- * Get sender initial for avatar
- */
 function getSenderInitial(name: string): string {
   return name.charAt(0).toUpperCase();
 }
 
-/**
- * Get a consistent color for sender avatar based on name
- */
 function getAvatarColor(name: string): string {
   const colors = [
     'bg-blue-500',
-    'bg-green-500',
-    'bg-purple-500',
+    'bg-emerald-500',
+    'bg-violet-500',
     'bg-orange-500',
     'bg-pink-500',
     'bg-teal-500',
@@ -51,9 +40,6 @@ function getAvatarColor(name: string): string {
   return colors[index];
 }
 
-/**
- * Extract display info from action context
- */
 function getDisplayInfo(action: InsightAction): {
   senderName: string;
   subject: string;
@@ -97,7 +83,6 @@ function getDisplayInfo(action: InsightAction): {
     };
   }
 
-  // Fallback
   const headline = action.headline || '';
   return {
     senderName: headline.split(' · ')[0] || 'Item',
@@ -117,23 +102,17 @@ export default function InsightItem({
 }: InsightItemProps) {
   const [isDismissing, setIsDismissing] = useState(false);
 
-  // Check if this is an already-prepped meeting
-  const meetingContext = action.type === 'meeting_prep' ? action.context as MeetingPrepContext : null;
-  const isAlreadyPrepped = meetingContext?.alreadyPrepped ?? false;
-
-  // Derive status from actionState
   const isInProgress = actionState?.status === 'in_progress';
   const isCompleted = actionState?.status === 'completed';
 
   const { senderName, subject, timeAgo, suggestion } = getDisplayInfo(action);
 
-  // Handle row click - always open in detail panel
   const handleRowClick = useCallback(() => {
     onSelect(action.id);
   }, [onSelect, action.id]);
 
   const handleDismiss = useCallback(async (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent row click
+    e.stopPropagation();
     setIsDismissing(true);
     await onDismiss(action.id);
   }, [action.id, onDismiss]);
@@ -142,53 +121,44 @@ export default function InsightItem({
     return null;
   }
 
-  // Determine action hint based on type and status
-  const actionHint = isCompleted
-    ? (action.type === 'meeting_prep' ? 'View prep' : 'View draft')
-    : action.type === 'draft_response'
-      ? 'Draft reply'
-      : action.type === 'meeting_prep'
-        ? (isAlreadyPrepped ? 'View prep' : 'Prep meeting')
-        : '';
-
   return (
-    <div
+    <button
+      type="button"
       onClick={handleRowClick}
       className={`
-        group relative flex items-center gap-3 px-4 py-3
-        cursor-pointer
+        group relative w-full flex items-center gap-3 px-4 py-3
+        text-left cursor-pointer
         transition-colors duration-100
-        border-b border-gray-100 last:border-b-0
         ${isSelected
-          ? 'bg-blue-50 border-l-[3px] border-l-inbox-accent'
+          ? 'bg-blue-50'
           : isCompleted
-            ? 'bg-green-50/50 hover:bg-green-50'
+            ? 'hover:bg-gray-50 active:bg-gray-100'
             : 'hover:bg-gray-50 active:bg-gray-100'
         }
       `}
     >
-      {/* Priority indicator (only when not selected and not completed) */}
+      {/* Priority accent bar */}
       {isPriority && !isSelected && !isCompleted && (
-        <div className="absolute left-0 top-0 bottom-0 w-1 bg-inbox-accent" />
+        <div className="absolute left-0 top-2 bottom-2 w-0.5 bg-inbox-accent rounded-full" />
       )}
 
-      {/* Status indicator OR Avatar */}
+      {/* Avatar / Status indicator — 32px circle */}
       {isInProgress ? (
-        <div className="w-9 h-9 rounded-full flex items-center justify-center bg-inbox-accent-light flex-shrink-0">
-          <span className="material-symbols-rounded text-lg text-inbox-accent animate-spin">
+        <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-50 flex-shrink-0">
+          <span className="material-symbols-rounded text-[18px] text-inbox-accent animate-spin">
             progress_activity
           </span>
         </div>
       ) : isCompleted ? (
-        <div className="w-9 h-9 rounded-full flex items-center justify-center bg-green-100 flex-shrink-0">
-          <span className="material-symbols-rounded text-lg text-green-600">
+        <div className="w-8 h-8 rounded-full flex items-center justify-center bg-green-50 flex-shrink-0">
+          <span className="material-symbols-rounded text-[18px] text-green-600">
             check_circle
           </span>
         </div>
       ) : (
         <div className={`
-          w-9 h-9 rounded-full flex items-center justify-center
-          ${getAvatarColor(senderName)} text-white font-medium text-sm
+          w-8 h-8 rounded-full flex items-center justify-center
+          ${getAvatarColor(senderName)} text-white text-xs font-medium
           flex-shrink-0
         `}>
           {getSenderInitial(senderName)}
@@ -196,80 +166,64 @@ export default function InsightItem({
       )}
 
       {/* Content */}
-      <div className="flex-1 min-w-0">
-        {/* Primary row */}
-        <div className="flex items-baseline gap-2">
-          <span className={`
-            text-inbox-body truncate
-            ${isPriority && !isCompleted ? 'font-semibold' : 'font-medium'}
-            ${isCompleted ? 'text-inbox-text-secondary' : 'text-inbox-text-primary'}
-          `}>
+      <div className={`flex-1 min-w-0 ${isCompleted ? 'opacity-60' : ''}`}>
+        {/* Primary line: sender + subject */}
+        <p className="truncate text-[14px] leading-[20px]">
+          <span className={`${isPriority && !isCompleted ? 'font-semibold' : 'font-medium'} text-inbox-text-primary`}>
             {senderName}
           </span>
-          <span className={`text-inbox-caption truncate flex-1 ${isCompleted ? 'text-inbox-text-tertiary' : 'text-inbox-text-secondary'}`}>
+          <span className="text-inbox-text-tertiary">{' '}&middot;{' '}</span>
+          <span className="font-normal text-inbox-text-secondary">
             {subject}
           </span>
-        </div>
+        </p>
 
-        {/* Secondary row - suggestion */}
-        {suggestion && !isCompleted && (
-          <p className="text-inbox-caption text-inbox-text-secondary truncate mt-0.5">
+        {/* Suggestion line */}
+        {suggestion && !isCompleted && !isInProgress && (
+          <p className="text-[13px] leading-[18px] text-inbox-text-tertiary truncate mt-0.5">
             {suggestion}
           </p>
         )}
 
-        {/* Status text for in-progress */}
+        {/* In-progress hint */}
         {isInProgress && (
-          <p className="text-inbox-caption text-inbox-accent truncate mt-0.5">
+          <p className="text-[13px] leading-[18px] text-inbox-accent truncate mt-0.5">
             {action.type === 'meeting_prep' ? 'Preparing...' : 'Drafting...'}
           </p>
         )}
 
-        {/* Status text for completed */}
+        {/* Completed hint */}
         {isCompleted && (
-          <p className="text-inbox-caption text-green-600 truncate mt-0.5">
+          <p className="text-[13px] leading-[18px] text-green-600 truncate mt-0.5">
             Ready to view
           </p>
         )}
       </div>
 
-      {/* Right side: time + hover action */}
-      <div className="flex-shrink-0 flex items-center gap-2">
-        {!isInProgress && (
-          <span className={`text-inbox-caption ${isCompleted ? 'text-inbox-text-tertiary' : 'text-inbox-text-tertiary'}`}>
-            {timeAgo}
-          </span>
-        )}
-        {/* Action hint on hover, chevron when not hovering */}
-        {actionHint && !isInProgress && (
-          <>
-            <span className={`text-inbox-caption hidden group-hover:inline ${isCompleted ? 'text-green-600' : 'text-inbox-accent'}`}>
-              {actionHint}
-            </span>
-            <span className="material-symbols-rounded text-base text-gray-400 group-hover:hidden">
-              chevron_right
-            </span>
-          </>
-        )}
-      </div>
+      {/* Right: time */}
+      <span className="flex-shrink-0 text-[12px] leading-[16px] text-inbox-text-tertiary whitespace-nowrap">
+        {timeAgo}
+      </span>
 
-      {/* Dismiss button - hover only */}
+      {/* Dismiss — hover only on desktop */}
       {!isInProgress && (
-        <button
+        <span
+          role="button"
+          tabIndex={-1}
           onClick={handleDismiss}
           className="
-            p-1.5 -mr-1 flex-shrink-0
-            text-gray-300 hover:text-gray-500
-            hover:bg-gray-100 rounded-full
-            transition-all
+            absolute right-2 top-1/2 -translate-y-1/2
+            p-1.5 rounded-full
+            text-gray-300 hover:text-gray-500 hover:bg-gray-100
+            transition-opacity duration-150
             opacity-0 group-hover:opacity-100
+            pointer-events-none group-hover:pointer-events-auto
           "
-          title="Dismiss this suggestion"
-          aria-label="Dismiss this suggestion"
+          aria-label="Dismiss"
         >
-          <span className="material-symbols-rounded text-lg">close</span>
-        </button>
+          <span className="material-symbols-rounded text-[16px]">close</span>
+        </span>
       )}
-    </div>
+    </button>
   );
 }

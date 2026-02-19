@@ -96,7 +96,7 @@ export default function InsightBriefingCard({ onClick, isSelected, scan }: Insig
         ) : (
           <span className={`
             material-symbols-rounded text-lg
-            ${scan.phase === 'complete' && totalItems > 0 ? 'text-inbox-accent' : 'text-inbox-text-tertiary'}
+            ${scan.phase === 'complete' && totalItems > 0 ? 'text-inbox-accent' : 'text-amber-400'}
             ${scan.phase === 'error' ? 'text-inbox-error' : ''}
           `}>
             {scan.phase === 'error' ? 'error' : 'auto_awesome'}

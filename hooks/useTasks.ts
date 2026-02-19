@@ -200,8 +200,8 @@ export function useTasks() {
   }, [loadTasks]);
 
   // Create a new task with optimistic update + Supabase sync
-  const addTask = useCallback((title: string, customPrompt?: string | null, source?: TaskSource): Task => {
-    const newTask = taskOps.createTask(title, customPrompt, source);
+  const addTask = useCallback((title: string, customPrompt?: string | null, source?: TaskSource, sourceRef?: string | null): Task => {
+    const newTask = taskOps.createTask(title, customPrompt, source, sourceRef);
     setTasks(prev => [...prev, newTask].sort((a, b) => a.order - b.order));
 
     // Sync to Supabase with error reporting

@@ -293,7 +293,7 @@ export function TaskCard({
                 </h3>
                 {/* Pin icon inline when pinned (only when hover actions hidden) */}
                 {task.isPinned && !isSomeday && !isCompleted && !showHoverActions && (
-                  <MaterialIcon name="push_pin" size={14} weight={300} fill={true} className="text-inbox-accent flex-shrink-0" />
+                  <MaterialIcon name="push_pin" size={14} weight={300} fill={true} className="text-amber-500 flex-shrink-0" />
                 )}
               </div>
 
@@ -344,10 +344,10 @@ export function TaskCard({
 
             {/* Agent running indicator */}
             {isAgentRunning && (
-              <div className="flex-shrink-0 flex items-center gap-2 text-inbox-accent">
+              <div className="flex-shrink-0 flex items-center gap-1.5 text-inbox-accent bg-inbox-accent-light/60 rounded-full px-2.5 py-1">
                 <MaterialIcon
                   name="progress_activity"
-                  size={18}
+                  size={14}
                   className="animate-spin"
                 />
                 <span className="text-inbox-caption">Working...</span>
@@ -362,8 +362,8 @@ export function TaskCard({
                     onClick={(e) => { e.stopPropagation(); onTogglePin(task.id); }}
                     className={`p-1.5 rounded-full transition-colors duration-100 ${
                       task.isPinned
-                        ? 'text-inbox-accent hover:bg-inbox-accent/10'
-                        : 'text-inbox-text-tertiary hover:text-inbox-text-primary hover:bg-inbox-bg-hover'
+                        ? 'text-amber-500 hover:bg-amber-500/10'
+                        : 'text-inbox-text-tertiary hover:text-amber-500 hover:bg-amber-500/10'
                     }`}
                     aria-label={task.isPinned ? "Unpin" : "Pin to top"}
                     title={task.isPinned ? "Unpin" : "Pin to top"}

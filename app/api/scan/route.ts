@@ -81,6 +81,41 @@ export async function POST(request: NextRequest) {
     const { data: actions } = await supabaseAdmin
       .rpc('get_insight_actions', { p_scan_id: scan.id });
 
+    // Query durable task preps so cached results show already-prepped items correctly
+    const { data: preppedTasks } = await supabaseAdmin
+      .from('tasks')
+      .select('id, source_ref')
+      .eq('user_id', profile.id)
+      .eq('source', 'insight')
+      .not('source_ref', 'is', null)
+      .is('deleted_at', null);
+
+    const cachedPreppedMap = new Map<string, string>();
+    if (preppedTasks) {
+      for (const task of preppedTasks) {
+        if (task.source_ref) {
+          cachedPreppedMap.set(task.source_ref, task.id);
+        }
+      }
+    }
+
+    // Annotate cached actions with preppedTaskId (same logic as addPreppedInfo for fresh scans)
+    const annotateCached = (action: InsightAction) => {
+      if (action.context) {
+        const ctx = action.context as { eventId?: string; threadId?: string };
+        const refKey = ctx.eventId || ctx.threadId;
+        if (refKey && cachedPreppedMap.has(refKey)) {
+          (action.context as { alreadyPrepped?: boolean; preppedTaskId?: string }).alreadyPrepped = true;
+          (action.context as { alreadyPrepped?: boolean; preppedTaskId?: string }).preppedTaskId = cachedPreppedMap.get(refKey)!;
+        }
+      }
+    };
+
+    const cachedQuickWin = scan.quick_win as InsightAction | null;
+    const cachedBundles = (scan.bundles || []) as ActionBundle[];
+    if (cachedQuickWin) annotateCached(cachedQuickWin);
+    cachedBundles.forEach(bundle => bundle.items.forEach(annotateCached));
+
     return new Response(JSON.stringify({
       cached: true,
       scan: {
@@ -91,10 +126,9 @@ export async function POST(request: NextRequest) {
         contextSummary: scan.context_summary,
         createdAt: scan.created_at,
         expiresAt: scan.expires_at,
-        // New bundled format
         greeting: scan.greeting,
-        quickWin: scan.quick_win,
-        bundles: scan.bundles || [],
+        quickWin: cachedQuickWin,
+        bundles: cachedBundles,
       },
     }), {
       headers: { 'Content-Type': 'application/json' },
@@ -131,46 +165,38 @@ export async function POST(request: NextRequest) {
           status: 'in_progress',
         });
 
-        // Get already-prepped meeting eventIds with their action IDs for THIS USER
-        // So we can show "View prep" instead of "Prep" button
-        // Two-step query: first get user's scan IDs, then get prepped actions from those scans
-        const { data: userScans } = await supabaseAdmin
-          .from('insight_scans')
-          .select('id')
-          .eq('user_id', profile.id);
+        // Query tasks with source='insight' and source_ref set to find existing preps
+        // This is durable — tasks survive scan TTL expiry and cascade deletes
+        const { data: preppedTasks } = await supabaseAdmin
+          .from('tasks')
+          .select('id, source_ref, title')
+          .eq('user_id', profile.id)
+          .eq('source', 'insight')
+          .not('source_ref', 'is', null)
+          .is('deleted_at', null);
 
-        const preppedEventMap = new Map<string, string>(); // eventId -> actionId
-
-        if (userScans && userScans.length > 0) {
-          const scanIds = userScans.map(s => s.id);
-
-          // Get prepped meetings
-          const { data: preppedActions } = await supabaseAdmin
-            .from('insight_actions')
-            .select('id, execution_context')
-            .eq('type', 'meeting_prep')
-            .in('scan_id', scanIds)
-            .in('status', ['completed', 'in_progress'])
-            .not('execution_context', 'is', null);
-
-          if (preppedActions) {
-            for (const action of preppedActions) {
-              const ctx = action.execution_context as { eventId?: string };
-              if (ctx?.eventId) {
-                preppedEventMap.set(ctx.eventId, action.id);
-              }
+        // Build map: sourceRef -> { taskId, title }
+        const preppedRefMap = new Map<string, { taskId: string; title: string }>();
+        if (preppedTasks) {
+          for (const task of preppedTasks) {
+            if (task.source_ref) {
+              preppedRefMap.set(task.source_ref, { taskId: task.id, title: task.title });
             }
           }
         }
 
-        console.log(`[SCAN] Found ${preppedEventMap.size} already-prepped meetings`);
+        // Legacy compatibility: build eventId -> actionId map (empty now, preppedTaskId used instead)
+        const preppedEventMap = new Map<string, string>();
+
+        console.log(`[SCAN] Found ${preppedRefMap.size} already-prepped items via tasks`);
 
         // Phase 1: Metadata collection
         emit({ type: 'metadata_started', timestamp: Date.now() });
 
         const context = await buildScanContext(accessToken, {
           userEmail: session.user?.email || undefined,
-          preppedEventMap: Object.fromEntries(preppedEventMap), // eventId -> actionId
+          preppedEventMap: Object.fromEntries(preppedEventMap), // eventId -> actionId (legacy, now empty)
+          preppedRefMap: Object.fromEntries(preppedRefMap), // sourceRef -> { taskId, title }
           onGmailProgress: (count) => {
             emit({ type: 'metadata_progress', source: 'gmail', count });
           },
@@ -211,15 +237,17 @@ export async function POST(request: NextRequest) {
 
         const analysisResult = await analyzeContext(context, emit);
 
-        // Post-process meeting_prep actions to add alreadyPrepped info
-        // This ensures UI can show "View prep" instead of "Prep" for already-prepped meetings
+        // Post-process actions to add alreadyPrepped info from tasks
+        // This ensures UI can show "View prep" instead of "Prep" for already-prepped items
         const addPreppedInfo = (action: InsightAction) => {
-          if (action.type === 'meeting_prep' && action.context) {
-            const ctx = action.context as { eventId?: string };
-            if (ctx.eventId && preppedEventMap.has(ctx.eventId)) {
-              (action.context as { alreadyPrepped?: boolean; preppedActionId?: string }).alreadyPrepped = true;
-              (action.context as { alreadyPrepped?: boolean; preppedActionId?: string }).preppedActionId = preppedEventMap.get(ctx.eventId);
-              console.log(`[SCAN] Marked meeting as already-prepped: ${action.headline}`);
+          if (action.context) {
+            const ctx = action.context as { eventId?: string; threadId?: string };
+            const refKey = ctx.eventId || ctx.threadId;
+            if (refKey && preppedRefMap.has(refKey)) {
+              const prepped = preppedRefMap.get(refKey)!;
+              (action.context as { alreadyPrepped?: boolean; preppedTaskId?: string }).alreadyPrepped = true;
+              (action.context as { alreadyPrepped?: boolean; preppedTaskId?: string }).preppedTaskId = prepped.taskId;
+              console.log(`[SCAN] Marked as already-prepped: ${action.headline} (task: ${prepped.taskId})`);
             }
           }
         };

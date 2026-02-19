@@ -84,6 +84,7 @@ export async function POST(request: NextRequest) {
     agentSteps: taskData.agentSteps ?? [],
     customPrompt: taskData.customPrompt,
     source: taskData.source ?? 'user',
+    sourceRef: taskData.sourceRef ?? null,
     completedSteps: taskData.completedSteps ?? [],
   };
 
