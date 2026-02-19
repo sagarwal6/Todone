@@ -2,14 +2,14 @@
 
 ## Status
 
-All code phases complete (1, 1b, 2, 3, 4, 5, 6, 7, 9, 11, 12, 13, 14, 15, 16). Phase 8 (end-to-end testing) in progress.
+All code phases complete (1, 1b, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 18). Phase 8 (end-to-end testing) in progress.
 Phase 16 (insight panel refactor) complete — meetings use ConversationPanel, emails keep InsightDetailPanel, stale actions time out.
 Phase 15 (gmail_triage compound tool) complete — server-side search+score+preview in one call, saves 2-3 agent iterations per triage task.
 Phase 15 also included scoring fixes: self-sent emails deprioritized (-20), mailing lists no longer get DIRECT_RECIPIENT bonus, "morning/evening brief" pattern added to marketing detection.
-
 Phase 18 (mid-run messaging & agent reliability) complete — message ordering, disappearing messages/tasks, agent link pickup, unknown term research.
+Phase 10 (tone_analyze tool) complete — style analysis from sent emails, integrated into agent drafting flow.
 
-**Phase 17 (InsightDetailPanel UX + tone_analyze enhancements) — IN PROGRESS.** See `sessions/2-18-draft-quality/issues.md` for open issues.
+**Phase 17 (InsightDetailPanel UX + draft quality) — IN PROGRESS.** UI done, prompt architecture simplified, needs manual draft quality testing. See `sessions/2-18-draft-quality/issues.md` for open issues and testing checklist.
 
 ### Phase 17 changes (uncommitted on `feature/improve-agent`)
 
@@ -32,8 +32,19 @@ Phase 18 (mid-run messaging & agent reliability) complete — message ordering, 
 - Recommendation string includes spacing and capitalization signals
 - No hardcoded style rules — all data-driven from analyzer
 
+**Prompt architecture fix — single source of truth for tone (prompts.ts, tools.ts):**
+- Simplified `getDraftResponsePrompt()` from 5 steps (~110 lines) to 4 steps (~40 lines)
+- Removed Step 1 (manual sent email searching for tone) — replaced with "Call tone_analyze, follow its results"
+- Removed Step 4 (voice matching rules) — tone_analyze handles this
+- Kept scheduling detection (Step 3) and reply threading (Step 4)
+- Removed `gmail_draft` style prescriptions ("No sign-off unless formal", "1-2 sentences max", "No corporate filler") — replaced with "Style and tone come from tone_analyze"
+- `tone_analyze` is now the SINGLE SOURCE OF TRUTH for drafting style. System prompt (anthropic.ts:97) already aligned.
+- See `sessions/2-18-draft-quality/issues.md` for the full diagnosis
+
 **API changes:**
 - `execute/route.ts`: Allow `draft_response` actions to re-execute when completed (enables redraft)
+
+**Status:** UI and tone analyzer work done. Prompt architecture simplified. Draft quality still needs manual testing — tone_analyze detects signals correctly but need to verify agent follows them end-to-end. See issues.md for testing checklist.
 
 ## Lessons Learned
 
@@ -307,23 +318,23 @@ Switched scan analysis model from Sonnet 4 to Haiku 3.5. ~4x cost reduction. Rev
 
 ---
 
-## Phase 10: Email Tone & Style Tool
+## Phase 10: Email Tone & Style Tool (DONE)
 
 **Why:** Email drafts sound generic/corporate. The agent should match the user's actual writing style — per recipient, per email type, or a general default.
 
-**Approach:** Build a `tone_analyze` tool that:
-1. Reads user's recent sent emails (general style, or filtered to a specific recipient)
-2. Extracts: greeting style, sign-off, formality level, average length, punctuation habits, emoji usage
-3. Returns a style profile the agent uses when drafting emails
-4. Cache the profile per-user (general) and per-recipient (specific) to avoid re-analyzing
+**What was built:**
+- `tone_analyze` tool (`tools.ts`, `execute-tool.ts`) — analyzes user's sent emails to a specific recipient (or general style as fallback)
+- Reads up to 5 recent sent emails, extracts user-authored messages (strips quoted replies)
+- Returns: samples (PII-redacted), styleSignals (greeting, signOff, formality, avgLength, emoji, exclamations, blankLineAfterGreeting, blankLineBeforeSignOff, usesProperCapitalization, signOffExamples, greetingExamples), recommendation string
+- Three analysis modes: `per_recipient` (emails to this person), `general_fallback` (< 2 emails to recipient, falls back to general), `general` (no recipient specified)
+- System prompt principle (anthropic.ts:97) tells agent to call tone_analyze before every draft
+- Caching not implemented (analysis is fast enough per-draft)
 
-**Layers:** Per-recipient style > per-email-type style > general user style > sensible defaults
-
-- [ ] Design tool interface and style profile schema
-- [ ] Implement sent email analysis (read last 5-10 sent emails)
-- [ ] Extract style features (greeting, sign-off, length, formality)
-- [ ] Integrate with gmail_draft — agent calls tone_analyze before drafting
-- [ ] Cache style profiles to avoid repeated analysis
+- [x] Design tool interface and style profile schema
+- [x] Implement sent email analysis (read last 5-10 sent emails)
+- [x] Extract style features (greeting, sign-off, length, formality, capitalization, spacing)
+- [x] Integrate with gmail_draft — agent calls tone_analyze before drafting
+- [ ] Cache style profiles to avoid repeated analysis (deferred — not a bottleneck)
 
 ---
 
