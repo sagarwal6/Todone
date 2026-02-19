@@ -449,6 +449,84 @@ export async function getSentEmails(
 }
 
 /**
+ * Get outbound email counts per domain (lightweight).
+ * Only fetches message IDs + To headers — no full metadata.
+ * Used by Insight Scan to detect engagement patterns.
+ * Returns Map<domain, count> so callers can compute engagement ratios.
+ */
+export async function fetchEngagedDomains(
+  accessToken: string,
+  days: number = 90,
+  maxResults: number = 200
+): Promise<Map<string, number>> {
+  const query = `in:sent newer_than:${days}d`;
+  const domainCounts = new Map<string, number>();
+
+  let pageToken: string | undefined;
+  let fetched = 0;
+
+  while (fetched < maxResults) {
+    const params = new URLSearchParams({
+      q: query,
+      maxResults: String(Math.min(50, maxResults - fetched)),
+    });
+    if (pageToken) params.set('pageToken', pageToken);
+
+    const response = await fetchWithRetry(
+      `${GMAIL_API_BASE}/messages?${params}`,
+      accessToken,
+      { maxRetries: 2, baseDelayMs: 500 }
+    );
+
+    const data: GmailListResponse = await response.json();
+    if (!data.messages || data.messages.length === 0) break;
+
+    // Fetch only To header for each message (batches of 10)
+    const batchSize = 10;
+    for (let i = 0; i < data.messages.length; i += batchSize) {
+      const batch = data.messages.slice(i, i + batchSize);
+      const headerPromises = batch.map(async (msg) => {
+        const headerParams = new URLSearchParams();
+        headerParams.set('format', 'metadata');
+        headerParams.append('metadataHeaders', 'To');
+
+        try {
+          const res = await fetch(
+            `${GMAIL_API_BASE}/messages/${msg.id}?${headerParams}`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+          if (!res.ok) return;
+          const message: GmailMessage = await res.json();
+          const toHeader = message.payload?.headers?.find(
+            (h: { name: string; value: string }) => h.name.toLowerCase() === 'to'
+          );
+          if (toHeader?.value) {
+            // Extract all domains from To header (may have multiple recipients)
+            const addresses = toHeader.value.split(',');
+            for (const addr of addresses) {
+              const match = addr.match(/@([^>]+)/);
+              if (match) {
+                const domain = match[1].toLowerCase().trim();
+                domainCounts.set(domain, (domainCounts.get(domain) || 0) + 1);
+              }
+            }
+          }
+        } catch {
+          // Skip individual message failures
+        }
+      });
+      await Promise.all(headerPromises);
+    }
+
+    fetched += data.messages.length;
+    pageToken = data.nextPageToken;
+    if (!pageToken) break;
+  }
+
+  return domainCounts;
+}
+
+/**
  * Get thread details to check for replies
  */
 export async function getThreadInfo(

@@ -6,9 +6,9 @@
  * graceful error recovery.
  */
 
-import { searchEmailsPaginated, getThreadInfo, type EmailMetadata } from '../google/gmail';
+import { searchEmailsPaginated, getThreadInfo, fetchEngagedDomains, type EmailMetadata } from '../google/gmail';
 import { listEvents, type CalendarEvent } from '../google/calendar';
-import { scoreEmail, getScoreBreakdown } from '../email/scoring';
+import { scoreEmail } from '../email/scoring';
 import type { ScoredEmail, EmailMetadataWithHeaders } from '../email/types';
 import type {
   ScanContext,
@@ -54,9 +54,10 @@ export async function buildScanContext(
   const errors: { gmail?: string; calendar?: string } = {};
 
   // Parallel fetch with individual error handling
-  const [emailsResult, eventsResult] = await Promise.allSettled([
+  const [emailsResult, eventsResult, engagedDomainsResult] = await Promise.allSettled([
     fetchInboxEmails(accessToken, opts),
     fetchCalendarEvents(accessToken, opts),
+    opts.userEmail ? fetchEngagedDomains(accessToken, 90, 200) : Promise.resolve(new Map<string, number>()),
   ]);
 
   // Extract results or record errors
@@ -70,9 +71,16 @@ export async function buildScanContext(
     errors.calendar = eventsResult.reason?.message || 'Failed to fetch calendar';
   }
 
+  const engagedDomains = engagedDomainsResult.status === 'fulfilled' ? engagedDomainsResult.value : new Map<string, number>();
+  if (engagedDomainsResult.status === 'rejected') {
+    console.log('[SCAN] Failed to fetch engaged domains, skipping engagement filter');
+  }
+  const engagedSummary = Array.from(engagedDomains.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([d, c]) => `${d}(${c})`).join(', ');
+  console.log(`[SCAN] Engaged domains (${engagedDomains.size}): ${engagedSummary}`);
+
   // Process email metadata - only emails user needs to respond to
   const topSenders = groupBySender(inboxEmails);
-  const awaitingResponse = await findAwaitingResponse(accessToken, inboxEmails, opts.userEmail);
+  const awaitingResponse = await findAwaitingResponse(accessToken, inboxEmails, opts.userEmail, engagedDomains);
 
   // Process calendar metadata
   const upcoming = formatUpcomingEvents(events);
@@ -87,7 +95,7 @@ export async function buildScanContext(
   return {
     emails: {
       topSenders: topSenders.slice(0, 15),
-      awaitingResponse: awaitingResponse.slice(0, 30),
+      awaitingResponse: awaitingResponse.slice(0, 8),
       sentAwaitingReply: [], // Removed - only showing emails user needs to respond to
       totalScanned: inboxEmails.length,
     },
@@ -186,6 +194,7 @@ async function findAwaitingResponse(
   accessToken: string,
   emails: EmailMetadata[],
   userEmail?: string,
+  engagedDomains?: Map<string, number>,
 ): Promise<AwaitingResponse[]> {
   const now = Date.now();
   const candidates: AwaitingResponse[] = [];
@@ -218,15 +227,80 @@ async function findAwaitingResponse(
     }
   }
 
+  console.log(`[SCAN] Scored ${scoredEmails.length} emails`);
+
+  // Build domain-level metadata for bulk sender detection
+  const domainEmails = new Map<string, Array<{ sender: string; email: EmailMetadata; scored: ScoredEmail }>>();
   for (const { email, scored } of scoredEmails) {
-    // Log high-tier emails prominently
-    if (scored && scored.tier === 'high') {
-      console.log(`[SCAN] HIGH-TIER: score=${scored.score}, isDirect: ${scored.signals.isDirect}, isUnread: ${email.isUnread}`);
-    } else if (scored && scored.score >= 5) {
-      // Log emails close to high tier with full breakdown for debugging
-      const breakdown = getScoreBreakdown(scored.signals);
-      const breakdownStr = breakdown.map(b => `${b.modifier}:${b.value > 0 ? '+' : ''}${b.value}`).join(', ');
-      console.log(`[SCAN] Near-high: tier=${scored.tier}, score=${scored.score}, breakdown: [${breakdownStr}]`);
+    if (scored?.fromDomain) {
+      const sender = extractEmail(email.from);
+      const existing = domainEmails.get(scored.fromDomain) || [];
+      existing.push({ sender, email, scored });
+      domainEmails.set(scored.fromDomain, existing);
+    }
+  }
+
+  // Detect bulk solicitation domains: 3+ emails from 3+ distinct senders
+  // Two exclusions:
+  // 1. Personal email domains (gmail, yahoo, etc.) — many senders is normal
+  // 2. Domains with low outbound (< 3) — these are service/platform domains, not orgs you work with
+  //    Only domains where you actively correspond (3+ outbound) can be bulk solicitation sources
+  //    (e.g., you consult for GLG but get flooded by their sales team)
+  const PERSONAL_DOMAINS = new Set([
+    'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com',
+    'icloud.com', 'protonmail.com', 'live.com', 'me.com', 'msn.com',
+  ]);
+  const bulkDomains = new Set<string>();
+  for (const [domain, emails] of domainEmails) {
+    if (PERSONAL_DOMAINS.has(domain)) continue;
+    if (emails.length < 3) continue;
+    const uniqueSenders = new Set(emails.map(e => e.sender));
+    if (uniqueSenders.size < 3) continue;
+    // Only flag domains with meaningful outbound — low-outbound domains (0-2)
+    // are service/platform relationships, not orgs with bulk solicitations
+    const outbound = engagedDomains?.get(domain) || 0;
+    if (outbound < 3) continue;
+    bulkDomains.add(domain);
+    console.log(
+      `[SCAN] BULK_DOMAIN: domain=${domain}, emails=${emails.length}, senders=${uniqueSenders.size}, outbound=${outbound}`
+    );
+  }
+
+  for (const { email, scored } of scoredEmails) {
+
+    // Filter 1: Zero-engagement domains (never replied to, high inbound volume)
+    if (scored && engagedDomains && engagedDomains.size > 0) {
+      const domain = scored.fromDomain;
+      const inboundCount = domainEmails.get(domain)?.length || 0;
+      const outboundCount = engagedDomains.get(domain) || 0;
+
+      if (inboundCount >= 3 && outboundCount === 0) {
+        console.log(
+          `[SCAN] NO_ENGAGEMENT: domain=${domain}, inbound=${inboundCount}, outbound=0, ` +
+          `subj="${email.subject?.slice(0, 50)}" — skipping`
+        );
+        continue;
+      }
+    }
+
+    // Filter 2: Bulk solicitation domains (3+ emails from 3+ distinct senders)
+    // For flagged domains, filter ALL emails UNLESS they show signs of a real conversation:
+    // - EXISTING_THREAD: ongoing back-and-forth (not a cold solicitation)
+    // - GMAIL_PRIMARY: Gmail itself classified it as important personal mail
+    // This catches varied solicitation subjects (GLG, AlphaSights, etc.) while preserving
+    // personal contacts (e.g., member success rep) and important docs (e.g., tax 1099)
+    if (scored && bulkDomains.has(scored.fromDomain)) {
+      const isExistingThread = scored.signals.isThread;
+      const isGmailPrimary = scored.signals.gmailCategory === 'primary';
+
+      if (!isExistingThread && !isGmailPrimary) {
+        console.log(
+          `[SCAN] BULK_SOLICITATION: domain=${scored.fromDomain}, ` +
+          `thread=${isExistingThread}, primary=${isGmailPrimary}, ` +
+          `subj="${email.subject?.slice(0, 50)}" — skipping`
+        );
+        continue;
+      }
     }
 
     // CRITICAL: Use scoring layer to filter
@@ -243,6 +317,42 @@ async function findAwaitingResponse(
         console.log(`[SCAN] SKIP: tier=${scored.tier}, score=${scored.score}, reasons: [${reasons.join(', ')}]`);
         continue;
       }
+
+      // Filter 3: Automated/transactional emails (don't need human responses)
+      // Verification codes, receipts, welcome emails, billing alerts, order notifications,
+      // automated surveys, shared document notifications, automated reports —
+      // these are system-generated and never need an email reply.
+      // Exception: automated emails in threads AND in Gmail Primary — these are real
+      // conversations routed through support systems (e.g., zendesk ticket replies).
+      // Automated+thread+updates = still a notification (surveys, shared docs, reports).
+      if (scored.signals.isAutomated) {
+        const isRealConversation = scored.signals.isThread
+          && scored.signals.gmailCategory === 'primary';
+        if (!isRealConversation) {
+          console.log(
+            `[SCAN] AUTOMATED_SKIP: score=${scored.score}, thread=${scored.signals.isThread}, ` +
+            `cat=${scored.signals.gmailCategory}, ` +
+            `subj="${email.subject?.slice(0, 50)}" — skipping (no reply needed)`
+          );
+          continue;
+        }
+      }
+
+      // Filter 4: Gmail "Updates" category without thread signal
+      // Gmail classifies transactional/notification emails as "updates" — support tickets,
+      // verification codes, shared documents, trial promos, solicitations.
+      // These rarely need email replies. Exception: if there's an existing thread,
+      // it may be a real conversation routed through a support system.
+      // Personal domains (gmail.com etc.) are excluded since their category is always primary.
+      if (scored.signals.gmailCategory === 'updates' && !scored.signals.isThread
+          && !scored.signals.isPersonalDomain) {
+        console.log(
+          `[SCAN] UPDATES_NO_THREAD: score=${scored.score}, domain=${scored.fromDomain}, ` +
+          `subj="${email.subject?.slice(0, 50)}" — skipping`
+        );
+        continue;
+      }
+
       // For medium-tier emails, require unread status UNLESS it's a direct email
       // Direct emails (1:1 or small group) likely need a response even if read
       // High-tier emails show even if read (user may have opened but not replied)
@@ -300,6 +410,12 @@ async function findAwaitingResponse(
       isDirectEmail: isDirect,
       priorityScore: boostedScore, // Use boosted score (includes recency)
     });
+  }
+
+  // Log what passed through filtering
+  console.log(`[SCAN] ===== FILTER RESULT: ${candidates.length}/${scoredEmails.length} emails passed =====`);
+  for (const c of candidates) {
+    console.log(`[SCAN] PASSED: score=${c.priorityScore} | subj="${c.subject?.slice(0, 50)}"`);
   }
 
   // Sort by score (highest first), then by days ago

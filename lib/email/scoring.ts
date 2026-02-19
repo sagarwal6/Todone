@@ -306,11 +306,6 @@ export function extractSignals(
     extractEmailAddress(e).toLowerCase() === userEmailLower
   );
 
-  // Debug logging for direct email detection
-  if (toList.length > 0 && toList.length <= 3) {
-    console.log(`Scoring: To list count: ${toList.length}, isInTo: ${isInTo}`);
-  }
-
   // Count total recipients
   const recipientCount = toList.length + ccList.length;
 

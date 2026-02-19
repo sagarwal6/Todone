@@ -141,35 +141,22 @@ DO NOT INCLUDE:
 QUICKWIN SELECTION:
 Pick the single highest-impact action. If a meeting is within 48 hours, prep for that. Otherwise, the oldest important email from a real person.
 
-EMAIL PRIORITIZATION (CRITICAL - READ CAREFULLY):
-- ONLY suggest drafting replies for emails from REAL INDIVIDUAL PEOPLE
-- Real people = emails marked "PERSONAL EMAIL" or from someone with a real first+last name
-- The sender name should be a real person's name like "Alex Johnson" or "John Smith"
+EMAIL SELECTION (CRITICAL - READ CAREFULLY):
+ALL emails in "Awaiting Your Response" have been pre-filtered by a strict metadata scoring system.
+Newsletters, automated notifications, receipts, verification codes, billing alerts, and platform emails
+have ALREADY been removed before you see them. Do NOT apply your own filtering on top.
 
-NEVER EVER suggest drafting replies for:
-* Newsletters or digests (Daily Digest, Weekly Update, AI Apps Daily, etc.)
-* Transaction alerts or notifications (Transaction alerts, Payment received, etc.)
-* Platform emails (community groups, accelerators, LinkedIn, Research Team, etc.)
-* Event invitations or RSVPs (Demo Night, Conference, Meetup, etc.)
-* Generic sender names (Client Team, Project Contact, Support Team, noreply, etc.)
-* Any email that looks like it was sent to many people (newsletters, announcements)
-* Any email about "organizing" or "filtering" your inbox
+YOUR JOB: Include EVERY email from the "Awaiting Your Response" list in the drafts bundle.
+The only emails you should skip are calendar invitations (respond via calendar, not email)
+and tax/financial documents that are informational only (no reply needed).
+Everything else: INCLUDE IT. Even if it looks like a notification — it passed strict filtering for a reason.
 
 NEVER suggest inbox organization, labeling, or filtering actions. We do NOT help with that.
 
-CRITICAL OVERRIDE RULE:
-If an email is marked "DIRECT TO YOU" AND has Priority Score >= 14, you MUST include it in the drafts bundle.
-These emails have been pre-filtered by an AI scoring system that already removed automated emails.
-Priority Score >= 14 means: real human, direct email, needs response. Include ALL of them.
-
-When in doubt, CHECK THE PRIORITY SCORE:
-- Priority Score >= 14: ALWAYS include, no exceptions
-- Priority Score 10-13: Include unless clearly automated (noreply@, notifications@)
-- Priority Score < 10: Use your judgment
-
 BUNDLE GUIDELINES:
 - Maximum 3 bundles
-- For "drafts" bundle: include ALL emails with Priority Score >= 14 (these are verified human emails)
+- For "drafts" bundle: include EVERY email from "Awaiting Your Response" (except calendar invitations and informational-only docs)
+- If there are 10 emails, include all 10. If there are 15, include all 15. NEVER self-limit.
 - Always include actual context (threadId, messageId, eventId, etc.)
 - Copy threadId, messageId, eventId etc. EXACTLY from the input data
 
@@ -240,15 +227,11 @@ ${context.emails.topSenders.map(s =>
 ).join('\n') || 'None found'}
 
 ### Emails Awaiting Your Response
-**CRITICAL RULE - PRIORITY SCORE >= 14 MEANS INCLUDE:**
-- If Priority Score >= 14: MUST include in drafts bundle (pre-verified as real human email)
-- If Priority Score 10-13: Include unless clearly automated
-- The scoring system has already filtered out automated emails
-
-**PRIORITIZATION GUIDE:**
-- Emails marked "PERSONAL EMAIL" are from real people (gmail.com, outlook.com)
-- Emails marked "DIRECT TO YOU" were sent directly to the user, not CC'd
-- Higher priority scores = more important = include first
+**CRITICAL: INCLUDE ALL EMAILS BELOW**
+These emails have been pre-filtered by a strict metadata system that already removed newsletters,
+automated notifications, receipts, verification codes, and platform emails.
+Include EVERY email below in the drafts bundle — do NOT apply additional filtering.
+The only exceptions: calendar invitations (respond via calendar) and informational-only documents (no reply needed).
 
 **CRITICAL: USE EXACT NAMES**
 - The "From:" field shows the sender's name - use it EXACTLY in headlines
