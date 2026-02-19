@@ -484,6 +484,37 @@ function AuthenticatedHome() {
     // Keep insightSelected true so user returns to insight list
   }, []);
 
+  // Keyboard shortcuts: Cmd/Ctrl+1 = Tasks, Cmd/Ctrl+2 = Briefing
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      if (e.key === '1') {
+        e.preventDefault();
+        setViewMode('active');
+        setSelectedTaskId(null);
+        setSelectedInsightActionId(null);
+      } else if (e.key === '2') {
+        e.preventDefault();
+        setViewMode('insights');
+        setSelectedTaskId(null);
+        setSelectedInsightActionId(null);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  // Clear selection when switching modes to avoid stale right panels
+  const handleViewChange = useCallback((newView: ViewMode) => {
+    const prevMode = viewMode === 'insights' ? 'briefing' : 'tasks';
+    const newMode = newView === 'insights' ? 'briefing' : 'tasks';
+    if (prevMode !== newMode) {
+      setSelectedTaskId(null);
+      setSelectedInsightActionId(null);
+    }
+    setViewMode(newView);
+  }, [viewMode]);
+
   const currentTasks = viewMode === 'active'
     ? activeTasks
     : viewMode === 'completed'
@@ -537,7 +568,7 @@ function AuthenticatedHome() {
       <div className="min-h-screen bg-inbox-bg-primary pb-20">
         <MobileHeader
           currentView={viewMode}
-          onViewChange={setViewMode}
+          onViewChange={handleViewChange}
           counts={counts}
           briefingDot={briefingDot}
           onSignOut={handleSignOut}
@@ -635,7 +666,7 @@ function AuthenticatedHome() {
           <DesktopAccountMenu
             onSignOut={handleSignOut}
             onDeleteAccount={() => setDeleteDialogOpen(true)}
-            onViewChange={setViewMode}
+            onViewChange={handleViewChange}
             counts={counts}
           />
         </div>
@@ -666,7 +697,7 @@ function AuthenticatedHome() {
               <div className={`${hasRightPanel ? 'px-4 pb-3' : 'px-6 pb-4'}`}>
                 <div className="inline-flex h-9 rounded-full bg-inbox-bg-secondary p-0.5">
                   <button
-                    onClick={() => { setViewMode('active'); handleClosePanel(); }}
+                    onClick={() => { handleViewChange('active'); }}
                     className={`px-4 rounded-full text-sm font-medium transition-all duration-150
                       ${desktopMode === 'tasks'
                         ? 'bg-inbox-bg-primary shadow-sm text-inbox-text-primary'
@@ -677,7 +708,7 @@ function AuthenticatedHome() {
                   </button>
                   <button
                     onClick={() => {
-                      setViewMode('insights');
+                      handleViewChange('insights');
                       setInsightSelected(true);
                       if (scan.phase === 'idle') scan.startScan(false);
                     }}
