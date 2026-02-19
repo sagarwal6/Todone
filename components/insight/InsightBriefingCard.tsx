@@ -7,27 +7,39 @@
  * Styled to match regular tasks with subtle differentiation.
  */
 
-import { useEffect } from 'react';
-import { useInsightScan } from '@/hooks/useInsightScan';
+import { useState, useEffect, useMemo } from 'react';
+import type { ScanObject } from './InsightView';
 
 interface InsightBriefingCardProps {
   onClick: () => void;
   isSelected?: boolean;
+  scan: ScanObject;
 }
 
-export default function InsightBriefingCard({ onClick, isSelected }: InsightBriefingCardProps) {
-  const scan = useInsightScan();
-
-  // Auto-start scan when component mounts if idle
-  useEffect(() => {
-    if (scan.phase === 'idle') {
-      scan.startScan();
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+export default function InsightBriefingCard({ onClick, isSelected, scan }: InsightBriefingCardProps) {
 
   // Calculate total items count
   const totalItems = (scan.quickWin ? 1 : 0) +
     scan.bundles.reduce((sum, b) => sum + b.items.length, 0);
+
+  // Rotating messages for analyzing phase
+  const [analyzingIndex, setAnalyzingIndex] = useState(0);
+  const analyzingMessages = useMemo(() => {
+    const msgs: string[] = [];
+    if (scan.emailsScanned > 0) msgs.push(`Reviewing ${scan.emailsScanned} emails...`);
+    if (scan.eventsScanned > 0) msgs.push(`Checking ${scan.eventsScanned} events...`);
+    msgs.push('Finding what needs attention...');
+    msgs.push('Prioritizing...');
+    return msgs;
+  }, [scan.emailsScanned, scan.eventsScanned]);
+
+  useEffect(() => {
+    if (scan.phase !== 'analyzing') return;
+    const interval = setInterval(() => {
+      setAnalyzingIndex(prev => (prev + 1) % analyzingMessages.length);
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [scan.phase, analyzingMessages.length]);
 
   // Get summary text based on state
   const getSummaryText = () => {
@@ -38,7 +50,7 @@ export default function InsightBriefingCard({ onClick, isSelected }: InsightBrie
       return `Scanning${scan.emailsScanned > 0 ? ` · ${scan.emailsScanned} emails` : '...'}`;
     }
     if (scan.phase === 'analyzing') {
-      return 'Analyzing...';
+      return analyzingMessages[analyzingIndex];
     }
     if (scan.phase === 'error') {
       return 'Scan failed';
@@ -101,7 +113,7 @@ export default function InsightBriefingCard({ onClick, isSelected }: InsightBrie
             : 'text-inbox-text-secondary'
           }
         `}>
-          <span className="font-medium">Proactive todos</span>
+          <span className="font-medium">Briefing</span>
           <span className="text-inbox-text-tertiary"> · {getSummaryText()}</span>
         </p>
       </div>

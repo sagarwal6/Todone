@@ -7,7 +7,7 @@
  * parent handles creating/selecting the task and showing ConversationPanel.
  */
 
-import { useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useInsightScan } from '@/hooks/useInsightScan';
 import InsightItem from './InsightItem';
 import type { InsightAction, MeetingPrepContext } from '@/lib/scan/types';
@@ -25,6 +25,7 @@ export interface ScanObject {
   emailsScanned: number;
   eventsScanned: number;
   actionStates: Record<string, LocalActionState>;
+  completedAt: number | null;
   startScan: (force?: boolean) => Promise<void>;
   executeAction: (id: string, input?: string, mode?: 'draft' | 'write') => Promise<{ success: boolean; taskId?: string; taskTitle?: string; customPrompt?: string; error?: string }>;
   dismissAction: (id: string) => Promise<boolean>;
@@ -175,6 +176,11 @@ export default function InsightView({
             <div className="px-3 py-3 flex items-center gap-3">
               <span className="material-symbols-rounded text-inbox-accent text-lg">auto_awesome</span>
               <span className="text-inbox-body font-medium text-inbox-text-primary flex-1">Proactive todos</span>
+              {scan.completedAt && (
+                <span className="text-[11px] text-inbox-text-tertiary">
+                  {formatRelativeTime(scan.completedAt)}
+                </span>
+              )}
               <button
                 onClick={handleRefresh}
                 className="p-1 rounded-full hover:bg-inbox-bg-hover transition-colors"
@@ -254,6 +260,21 @@ export default function InsightView({
 }
 
 // ============================================================================
+// Helpers
+// ============================================================================
+
+function formatRelativeTime(timestamp: number): string {
+  const seconds = Math.round((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+// ============================================================================
 // Sub-components (simplified)
 // ============================================================================
 
@@ -266,6 +287,46 @@ function ScanProgress({
   emailsScanned: number;
   eventsScanned: number;
 }) {
+  // Rotating contextual messages during analyzing phase
+  const [messageIndex, setMessageIndex] = useState(0);
+  const [fadeIn, setFadeIn] = useState(true);
+
+  const analyzingMessages = useMemo(() => {
+    const msgs: string[] = [];
+    if (emailsScanned > 0) msgs.push(`Reviewing ${emailsScanned} emails...`);
+    if (eventsScanned > 0) msgs.push(`Checking ${eventsScanned} calendar events...`);
+    msgs.push('Finding emails that need a response...');
+    msgs.push('Identifying meetings to prep...');
+    msgs.push('Prioritizing what matters most...');
+    return msgs;
+  }, [emailsScanned, eventsScanned]);
+
+  useEffect(() => {
+    if (phase !== 'analyzing') return;
+    const interval = setInterval(() => {
+      setFadeIn(false);
+      setTimeout(() => {
+        setMessageIndex(prev => (prev + 1) % analyzingMessages.length);
+        setFadeIn(true);
+      }, 200);
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [phase, analyzingMessages.length]);
+
+  // Time-based progress bar: asymptotic curve that creeps forward smoothly
+  const [elapsedMs, setElapsedMs] = useState(0);
+  useEffect(() => {
+    if (phase !== 'analyzing') { setElapsedMs(0); return; }
+    const start = Date.now();
+    const timer = setInterval(() => setElapsedMs(Date.now() - start), 200);
+    return () => clearInterval(timer);
+  }, [phase]);
+
+  // Scanning: 30%, Analyzing: 35% → creeps to ~60% over 10s (asymptotic, never finishes)
+  const progressPct = phase === 'analyzing'
+    ? 35 + 25 * (1 - Math.exp(-elapsedMs / 8000))
+    : 30;
+
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-6 min-h-[300px]">
       <div className="w-12 h-12 mb-4 rounded-full bg-inbox-accent-light flex items-center justify-center">
@@ -278,7 +339,7 @@ function ScanProgress({
         {phase === 'scanning' ? 'Scanning...' : 'Analyzing...'}
       </p>
 
-      <p className="text-sm text-inbox-text-tertiary mb-4">
+      <p className={`text-sm text-inbox-text-tertiary mb-4 text-center transition-opacity duration-200 ${fadeIn ? 'opacity-100' : 'opacity-0'}`}>
         {phase === 'scanning' ? (
           <>
             {emailsScanned > 0 && `${emailsScanned} emails`}
@@ -287,12 +348,15 @@ function ScanProgress({
             {emailsScanned === 0 && eventsScanned === 0 && 'Getting started'}
           </>
         ) : (
-          'Finding actionable items'
+          analyzingMessages[messageIndex]
         )}
       </p>
 
       <div className="w-40 h-1 bg-inbox-bg-secondary rounded-full overflow-hidden">
-        <div className="h-full bg-inbox-accent rounded-full animate-[insight-progress_15s_ease-out_forwards]" />
+        <div
+          className="h-full bg-inbox-accent rounded-full transition-all duration-700 ease-out"
+          style={{ width: `${progressPct}%` }}
+        />
       </div>
     </div>
   );

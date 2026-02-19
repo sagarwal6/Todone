@@ -70,6 +70,7 @@ export interface LocalActionState {
 interface ExtendedScanState extends ScanState {
   emailCache: Record<string, EmailContent>;
   actionStates: Record<string, LocalActionState>;
+  completedAt: number | null;
 }
 
 /**
@@ -149,6 +150,7 @@ const initialState: ExtendedScanState = {
   emailCache: {},
   // Action states for tracking status and results (synced to Supabase)
   actionStates: {},
+  completedAt: null,
 };
 
 export function useInsightScan() {
@@ -273,6 +275,7 @@ export function useInsightScan() {
           bundles: data.scan.bundles || [],
           // Populate action states from database
           actionStates,
+          completedAt: new Date(data.scan.createdAt).getTime(),
         }));
 
         // Pre-fetch email content for draft actions
@@ -839,6 +842,7 @@ function handleEvent(
         ...prev,
         phase: 'complete',
         scanId: event.scanId,
+        completedAt: Date.now(),
       }));
       break;
 

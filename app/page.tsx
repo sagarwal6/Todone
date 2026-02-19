@@ -10,7 +10,7 @@ import { QuickCaptureBar, FullScreenCapture } from '@/components/QuickCapture';
 import { MaterialIcon } from '@/components/ui/MaterialIcon';
 import { EmptyState } from '@/components/EmptyState';
 import { LoginScreen } from '@/components/LoginScreen';
-import { InsightView, InsightDetailPanel } from '@/components/insight';
+import { InsightView, InsightDetailPanel, InsightBriefingCard } from '@/components/insight';
 import { useTasks } from '@/hooks/useTasks';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useInsightScan } from '@/hooks/useInsightScan';
@@ -236,16 +236,7 @@ function AuthenticatedHome() {
     return null;
   }, [selectedInsightActionId, selectedTaskId]);
 
-  // Briefing dot: show when scan has items
-  const scanItemCount = (scan.quickWin ? 1 : 0) + scan.bundles.reduce((sum, b) => sum + b.items.length, 0);
-  const briefingDot = scanItemCount > 0 && scan.phase === 'complete';
-
-  const counts: Record<ViewMode, number> = {
-    active: activeTasks.length,
-    completed: completedTasks.length,
-    someday: somedayTasks.length,
-    insights: 0, // Not used for insights tab
-  };
+  // (briefingDot and counts removed — briefing is now a card in the task list)
 
   // Start agent for insight tasks (they don't have ConversationPanel to start it)
   useEffect(() => {
@@ -567,10 +558,7 @@ function AuthenticatedHome() {
     return (
       <div className="min-h-screen bg-inbox-bg-primary pb-20">
         <MobileHeader
-          currentView={viewMode}
           onViewChange={handleViewChange}
-          counts={counts}
-          briefingDot={briefingDot}
           onSignOut={handleSignOut}
           onDeleteAccount={() => setDeleteDialogOpen(true)}
         />
@@ -583,6 +571,15 @@ function AuthenticatedHome() {
 
         {viewMode === 'insights' ? (
           <div className="flex-1 overflow-hidden animate-fade-in">
+            <div className="px-4 pt-3 pb-1">
+              <button
+                onClick={() => setViewMode('active')}
+                className="flex items-center gap-1 text-sm text-inbox-text-secondary active:text-inbox-text-primary transition-colors"
+              >
+                <MaterialIcon name="arrow_back" size={16} />
+                Back to tasks
+              </button>
+            </div>
             <InsightView
               onClose={() => setViewMode('active')}
               onActionClick={handleInsightActionClick}
@@ -599,6 +596,16 @@ function AuthenticatedHome() {
                 <MaterialIcon name="arrow_back" size={16} />
                 Back to tasks
               </button>
+            )}
+
+            {viewMode === 'active' && (
+              <InsightBriefingCard
+                scan={scan}
+                onClick={() => {
+                  handleViewChange('insights');
+                  if (scan.phase === 'idle') scan.startScan(false);
+                }}
+              />
             )}
 
             <TaskList
@@ -644,10 +651,7 @@ function AuthenticatedHome() {
     );
   }
 
-  // Desktop: active mode is Tasks or Briefing (completed/someday are sub-states of Tasks)
-  const desktopMode = viewMode === 'insights' ? 'briefing' : 'tasks';
-
-  // Desktop Layout - Two modes: Tasks and Briefing, strictly 1-pane or 2-pane
+  // Desktop Layout - Tasks with InsightBriefingCard as first row, 1-pane or 2-pane
   return (
     <div className="h-screen bg-inbox-bg-secondary flex flex-col overflow-hidden">
       <DeleteAccountDialog
@@ -667,7 +671,6 @@ function AuthenticatedHome() {
             onSignOut={handleSignOut}
             onDeleteAccount={() => setDeleteDialogOpen(true)}
             onViewChange={handleViewChange}
-            counts={counts}
           />
         </div>
       </header>
@@ -692,50 +695,15 @@ function AuthenticatedHome() {
               <TaskInput onAddTask={handleAddTask} />
             </div>
 
-            {/* Pill toggle - Tasks / Briefing */}
-            {viewMode !== 'completed' && viewMode !== 'someday' && (
-              <div className={`${hasRightPanel ? 'px-4 pb-3' : 'px-6 pb-4'}`}>
-                <div className="inline-flex h-9 rounded-full bg-inbox-bg-secondary p-0.5">
-                  <button
-                    onClick={() => { handleViewChange('active'); }}
-                    className={`px-4 rounded-full text-sm font-medium transition-all duration-150
-                      ${desktopMode === 'tasks'
-                        ? 'bg-inbox-bg-primary shadow-sm text-inbox-text-primary'
-                        : 'text-inbox-text-secondary hover:text-inbox-text-primary'
-                      }`}
-                  >
-                    Tasks
-                  </button>
-                  <button
-                    onClick={() => {
-                      handleViewChange('insights');
-                      setInsightSelected(true);
-                      if (scan.phase === 'idle') scan.startScan(false);
-                    }}
-                    className={`px-4 rounded-full text-sm font-medium transition-all duration-150 relative
-                      ${desktopMode === 'briefing'
-                        ? 'bg-inbox-bg-primary shadow-sm text-inbox-text-primary'
-                        : 'text-inbox-text-secondary hover:text-inbox-text-primary'
-                      }`}
-                  >
-                    Briefing
-                    {briefingDot && desktopMode !== 'briefing' && (
-                      <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-inbox-accent" />
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Back button for completed/someday sub-views */}
-            {(viewMode === 'completed' || viewMode === 'someday') && (
+            {/* Back button for completed/someday/insights sub-views */}
+            {(viewMode === 'completed' || viewMode === 'someday' || viewMode === 'insights') && (
               <div className={`${hasRightPanel ? 'px-4 pb-3' : 'px-6 pb-4'}`}>
                 <button
                   onClick={() => setViewMode('active')}
                   className="flex items-center gap-1 text-sm text-inbox-text-secondary hover:text-inbox-text-primary transition-colors"
                 >
                   <MaterialIcon name="arrow_back" size={16} />
-                  {viewMode === 'completed' ? 'Completed tasks' : 'Someday tasks'}
+                  {viewMode === 'completed' ? 'Completed tasks' : viewMode === 'someday' ? 'Someday tasks' : 'Briefing'}
                 </button>
               </div>
             )}
@@ -751,6 +719,19 @@ function AuthenticatedHome() {
                 />
               ) : (
                 <>
+                  {viewMode === 'active' && (
+                    <div className={`${hasRightPanel ? 'px-0' : 'px-0'}`}>
+                      <InsightBriefingCard
+                        scan={scan}
+                        onClick={() => {
+                          handleViewChange('insights');
+                          setInsightSelected(true);
+                          if (scan.phase === 'idle') scan.startScan(false);
+                        }}
+                      />
+                    </div>
+                  )}
+
                   <TaskList
                     tasks={currentTasks}
                     onComplete={completeTask}
