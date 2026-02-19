@@ -12,7 +12,7 @@ import { KeyFactsLine } from './KeyFactsLine';
 import { Markdown } from './ui/Markdown';
 import { useAgentContext } from '@/contexts/AgentContext';
 import { v4 as uuidv4 } from 'uuid';
-import type { PendingDraft } from '@/lib/ai/types';
+import type { PendingDraft, EmailDraft } from '@/lib/ai/types';
 import type { AgentStepSummary } from '@/lib/types';
 
 interface SuggestedAction {
@@ -124,6 +124,31 @@ export function ConversationPanel({ task, onClose, onAddChatMessage, onComplete,
     startAgent(task.id, task.title, task.research, task.customPrompt);
   }, [task.id, task.title, task.research, task.customPrompt, startAgent]);
 
+  const handleRefine = useCallback((_draftId: string, draft: PendingDraft, feedback: string, editedDraft?: EmailDraft) => {
+    const originalData = draft.data as EmailDraft;
+    // Use the user's edited version if provided, otherwise the original
+    const draftToShow = editedDraft || originalData;
+    const originalContext = originalData.originalEmail
+      ? `\nOriginal email from ${originalData.originalEmail.fromName || originalData.originalEmail.from} about "${originalData.originalEmail.subject}":\n${originalData.originalEmail.body}`
+      : '';
+
+    const customPrompt = [
+      `Original task: "${task.title}"`,
+      '',
+      editedDraft ? 'The user edited the draft to:' : 'You previously drafted this email:',
+      `To: ${draftToShow.to.join(', ')}`,
+      `Subject: ${draftToShow.subject}`,
+      `Body:\n${draftToShow.body}`,
+      originalContext,
+      '',
+      `The user wants these changes: ${feedback}`,
+      '',
+      'Revise the draft incorporating the feedback. Call tone_analyze first to match the user\'s writing style. Keep everything else the same unless the feedback says otherwise.',
+    ].join('\n');
+
+    startAgent(task.id, task.title, task.research, customPrompt);
+  }, [task.id, task.title, task.research, startAgent]);
+
   // Auto-start agent when panel opens if appropriate
   useEffect(() => {
     const chatMessages = task.chatMessages || [];
@@ -156,11 +181,33 @@ export function ConversationPanel({ task, onClose, onAddChatMessage, onComplete,
     }
   }, [autoStartAgent, isRunning, agentProgress.length, agentResult, agentError, task.chatMessages, task.agentQuickInfo, task.source, handleStartAgent, onAgentStarted]);
 
-  // Load messages when task changes
+  // Load messages when switching to a different task only.
+  // Do NOT re-sync on task.chatMessages changes — local state is authoritative
+  // while the panel is mounted. Re-syncing on chatMessages changes causes user
+  // messages to vanish when a Supabase refetch races with local state updates.
   useEffect(() => {
     setMessages(task.chatMessages || []);
     setShowSources(false);
-  }, [task.id, task.chatMessages]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task.id]);
+
+  // When agent completes, add its message to local messages (appended chronologically).
+  // The chat rendering section skips this specific message by content match since
+  // it's already displayed in the dedicated agent result section above.
+  const prevAgentResultRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (agentResult?.status === 'completed' && agentResult.message) {
+      if (prevAgentResultRef.current !== agentResult.message) {
+        prevAgentResultRef.current = agentResult.message;
+        setMessages(prev => {
+          if (prev.some(m => m.role === 'assistant' && m.content === agentResult.message)) {
+            return prev;
+          }
+          return [...prev, { id: `agent-result-${Date.now()}`, role: 'assistant' as const, content: agentResult.message, timestamp: Date.now() }];
+        });
+      }
+    }
+  }, [agentResult]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -178,9 +225,17 @@ export function ConversationPanel({ task, onClose, onAddChatMessage, onComplete,
     };
 
     setMessages(prev => [...prev, userMessage]);
-    // Persist user message
+    // Persist user message (syncs to Supabase so the running agent loop can pick it up)
     onAddChatMessage?.(task.id, userMessage);
     setInput('');
+
+    // If agent is running, don't call the separate chat API.
+    // The running agent loop will pick up the message from Supabase
+    // between iterations and incorporate it into its unified response.
+    if (isRunning) {
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -221,7 +276,7 @@ export function ConversationPanel({ task, onClose, onAddChatMessage, onComplete,
     } finally {
       setIsLoading(false);
     }
-  }, [input, task, isLoading, messages, onAddChatMessage]);
+  }, [input, task, isLoading, isRunning, messages, onAddChatMessage]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -308,8 +363,14 @@ export function ConversationPanel({ task, onClose, onAddChatMessage, onComplete,
           </div>
         )}
 
-        {/* 2. Agent explanation message - show from live result OR first persisted assistant message */}
+        {/* 2. Agent explanation message - show in dedicated section ONLY when there
+              are no user chat messages. When the user sent messages mid-run, everything
+              flows chronologically in the chat list instead (so user's message appears
+              first, then agent response — not the other way around). */}
         {(() => {
+          const hasUserMessages = messages.some(m => m.role === 'user');
+          if (hasUserMessages) return null; // Let chat list handle chronological ordering
+
           const liveMessage = agentResult?.status === 'completed' ? agentResult.message : null;
           const liveQuickInfo = agentResult?.status === 'completed' ? agentResult.quickInfo : null;
 
@@ -354,6 +415,7 @@ export function ConversationPanel({ task, onClose, onAddChatMessage, onComplete,
               onDraftRejected={(draftId) => {
                 console.log('Draft rejected:', draftId);
               }}
+              onDraftRefine={handleRefine}
             />
           </div>
         )}
@@ -495,44 +557,65 @@ export function ConversationPanel({ task, onClose, onAddChatMessage, onComplete,
           </div>
         )}
 
-        {/* Chat messages - skip first assistant message (shown in dedicated section above) */}
+        {/* Chat messages - skip the agent result only when shown in dedicated section above */}
         {(() => {
-          let skippedFirst = false;
+          const hasUserMessages = messages.some(m => m.role === 'user');
+
+          // Only skip when the dedicated agent section is visible (no user messages).
+          // When user sent messages mid-run, dedicated section is hidden — let everything
+          // flow chronologically in the chat list so user message appears before agent response.
+          const agentDisplayMessage = !hasUserMessages
+            ? (agentResult?.status === 'completed'
+                ? agentResult.message
+                : (task.chatMessages || []).find(m => m.role === 'assistant')?.content)
+            : null;
+
+          let skippedAgent = false;
           return messages.filter((msg) => {
-            // Skip the first assistant message (it's the agent's initial response, shown above)
-            if (!skippedFirst && msg.role === 'assistant') {
-              skippedFirst = true;
+            if (!skippedAgent && agentDisplayMessage && msg.role === 'assistant' && msg.content === agentDisplayMessage) {
+              skippedAgent = true;
               return false;
             }
             return true;
           });
-        })().map((msg) => (
-          <div key={msg.id} className="mb-4">
-            <div className={`flex items-start gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-              <div className={`
-                w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0
-                ${msg.role === 'user'
-                  ? 'bg-inbox-accent text-inbox-text-inverse'
-                  : 'bg-inbox-accent-light text-inbox-accent'
-                }
-              `}>
-                <MaterialIcon
-                  name={msg.role === 'user' ? 'person' : 'auto_awesome'}
-                  size={16}
-                />
-              </div>
-              <div className={`flex-1 min-w-0 ${msg.role === 'user' ? 'flex justify-end' : 'pt-1'}`}>
-                {msg.role === 'user' ? (
-                  <div className="max-w-[85%] p-4 rounded-2xl text-inbox-body bg-inbox-accent text-inbox-text-inverse">
-                    {msg.content}
-                  </div>
-                ) : (
-                  <Markdown content={msg.content} />
-                )}
+        })().map((msg) => {
+          // Show KeyFactsLine on the agent's main result when it flows in the chat list
+          const isAgentResult = msg.role === 'assistant' && agentResult?.status === 'completed' && msg.content === agentResult.message;
+          const quickInfo = isAgentResult ? (agentResult?.quickInfo || task.agentQuickInfo) : null;
+
+          return (
+            <div key={msg.id} className="mb-4">
+              <div className={`flex items-start gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                <div className={`
+                  w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0
+                  ${msg.role === 'user'
+                    ? 'bg-inbox-accent text-inbox-text-inverse'
+                    : 'bg-inbox-accent-light text-inbox-accent'
+                  }
+                `}>
+                  <MaterialIcon
+                    name={msg.role === 'user' ? 'person' : 'auto_awesome'}
+                    size={16}
+                  />
+                </div>
+                <div className={`flex-1 min-w-0 ${msg.role === 'user' ? 'flex justify-end' : 'pt-1'}`}>
+                  {msg.role === 'user' ? (
+                    <div className="max-w-[85%] p-4 rounded-2xl text-inbox-body bg-inbox-accent text-inbox-text-inverse">
+                      {msg.content}
+                    </div>
+                  ) : (
+                    <>
+                      <Markdown content={msg.content} />
+                      {quickInfo && !isInformationalQuery(task.title) && (
+                        <KeyFactsLine quickInfo={quickInfo} />
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {/* Loading indicator for chat API */}
         {isLoading && (

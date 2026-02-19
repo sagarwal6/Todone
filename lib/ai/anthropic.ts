@@ -82,11 +82,11 @@ ${user?.name ? `USER: ${user.name}` : ''}${user?.email ? ` · ${user.email}` : '
 PRINCIPLES:
 1. Personal data first — check calendar and email before web search. The user's own data is more relevant than generic results.${user?.location ? ` Include "${user.location}" in local searches.` : ' Ask for location if needed for local searches.'}
 2. Know the person — any task involving a person ("message X", "call X", "do I meet with X?"), use contacts_analyze FIRST. It gives you relationship history: email frequency, last contact, meeting patterns, who initiates. This is how you know which "Andrew" they mean and what the relationship looks like.
-3. Right person first, then right channel — disambiguate the person BEFORE choosing how to reach them. Use context clues: an imminent meeting suggests that person; a recent email thread about the topic suggests that person. If contacts_analyze returns multiple people and the top result doesn't match the contextual signal (calendar or email), do a second lookup using the stronger match's full name or email. Once you've identified the right person, pick the channel: "text" = always sms, "email" = always draft, "message/msg" = sms if phone available (with email draft fallback), "call" = tel link. For sms links: [Text Name](sms:+1XXXXXXXXXX&body=URL_ENCODED_MESSAGE).
+3. Right person first, then right channel — disambiguate the person BEFORE choosing how to reach them. Use context clues: an imminent meeting suggests that person; a recent email thread about the topic suggests that person. If contacts_analyze returns multiple people and the top result doesn't match the contextual signal (calendar or email), do a second lookup using the stronger match's full name or email. Once you've identified the right person, pick the channel: "text" = always sms, "email" = always draft, "message/msg" = sms if phone available (with email draft fallback), "call" = tel link. For sms links: [Text Name](sms:+1XXXXXXXXXX&body=URL_ENCODED_MESSAGE). Contact matching must be strong: a 2-letter prefix match on a last name is NOT a match (e.g., "zo" does NOT match "Zojcheski"). Require the search term to match a first name, a nickname, or a substantial portion of a name. If no strong match exists, the term is probably not a person — treat it as a thing/place/brand.
 4. Be decisive — if there's a strong signal (e.g., meeting with someone in the next hour, recent email thread about the topic, or only one match), just act. Don't present multiple options when the answer is clear. Only show options when there's genuine ambiguity (multiple people, no contextual signal to disambiguate). Cross-reference: if contacts_analyze and calendar_list return different people for the same first name, weigh recency and relevance — don't default to a contact with zero recent activity.
 5. Keep working until you're confident — don't present partial or uncertain results. If a search returns ambiguous results, search again with different terms. If you found a phone number but no hours, search for the hours. Tool calls are cheap; wrong or incomplete answers waste the user's time. You're done when you'd bet money on your answer. BUT — if after exhausting your tools you still can't answer, say so plainly. Never fabricate information. "I couldn't find X" is always better than a guess. NEVER construct email addresses from a person's name — only use addresses found in contacts, email history, or calendar attendee data. If you can't find a verified email, say so.
 6. Verify before proposing — show what you found, confirm it's right, then build on it. Don't propose plans on unverified assumptions.
-7. Respect stated intent — the task description is what the user wants. Lead with what helps them accomplish it.
+7. Respect stated intent — the task description is what the user wants. Lead with what helps them accomplish it. Parse EVERY word — if the task mentions a name, device, place, product, or any specific noun you don't recognize, you MUST research it. First check email/calendar/contacts; if those don't explain it, web_search for it. NEVER assume you know what an unfamiliar term is — "clawdbot" is not "Claude", "zoho" is not a person named Zo. If you can't find it anywhere, say so. "set up X on Y's computer" means you need to figure out who Y is AND what X is — both require research, not guessing.
 
 STYLE:
 - Facts first. No preambles, no "Based on my analysis...", no hand-holding. Never explain your reasoning process.
@@ -94,6 +94,7 @@ STYLE:
 - Business phone numbers should include hours + timezone when available.
 - No results? Say so once: "No results for X." Don't speculate or over-explain.
 - Only present exact matches — similar names are not the same entity.
+- Email drafts: sound like the user wrote them. Call tone_analyze before drafting — study the returned email samples to absorb the user's vocabulary, phrasing, sentence rhythm, and punctuation. Someone who has received 100 emails from this user should think the user wrote the draft themselves. The task tells you WHAT to say; the samples show HOW they'd say it. Always end with their sign-off. If no history, be concise and professional.
 - Default: concise. Lead with tappable action links, then one sentence of context. Max 3-4 lines.
 - EXCEPTION — meeting prep: Be thorough. For new contacts, tell their STORY — for each company/org they built or led, include what it does, scale, and outcome (IPO, acquired, raised $X). The user should not need to click LinkedIn to know the person. For familiar contacts, lead with recent email context and open items. Scheduling details get one sentence, not a timeline. Include [clickable links](url) throughout for deep-dives. Briefs can be long — thoroughness beats brevity.
 
@@ -133,6 +134,9 @@ export async function runAgenticLoop(context: AgentLoopContext): Promise<AgentRe
   const failedSteps: { tool: string; error: string }[] = [];
   const succeededSteps: string[] = [];
   const attemptedSteps: string[] = [];
+
+  // Track which user chat messages we've already injected (by ID)
+  const injectedMessageIds = new Set<string>();
 
   // Build initial messages
   const messages: Anthropic.MessageParam[] = [
@@ -197,6 +201,11 @@ export async function runAgenticLoop(context: AgentLoopContext): Promise<AgentRe
       }
 
       iteration++;
+
+      // Check for new user messages sent while agent is working.
+      // Users can send additional context (links, notes) during agent execution.
+      // These get injected into the conversation so Claude produces a unified response.
+      await injectUserMessages(taskId, injectedMessageIds, messages, onProgress);
 
       // Call Claude with retry for transient errors (429, 529)
       let response;
@@ -277,8 +286,23 @@ export async function runAgenticLoop(context: AgentLoopContext): Promise<AgentRe
         });
       }
 
-      // If no tool calls and stop_reason is end_turn, we're done
+      // If no tool calls and stop_reason is end_turn, we're done — unless user sent new context
       if (toolCalls.length === 0 && stopReason === 'end_turn') {
+        // Before finalizing, check for user messages that arrived during the Claude call.
+        // Brief delay lets the client's async Supabase PUT land before we check.
+        await new Promise(resolve => setTimeout(resolve, 200));
+        const lateMessages = await injectUserMessages(taskId, injectedMessageIds, messages, onProgress);
+        if (lateMessages) {
+          // User sent context — add Claude's current response and a continuation prompt
+          // to maintain strict user/assistant alternation required by the Anthropic API
+          messages.push({ role: 'assistant', content: response.content });
+          messages.push({
+            role: 'user',
+            content: 'The user provided additional context above. Please incorporate it and provide your complete updated response.',
+          });
+          continue;
+        }
+
         // Extract quickinfo from the response
         const { message: cleanMessage, quickInfo } = extractQuickInfo(textContent || 'Task completed');
 
@@ -676,6 +700,80 @@ function parseResponse(response: Anthropic.Message): {
     textContent,
     stopReason: response.stop_reason || 'unknown',
   };
+}
+
+/**
+ * Inject new user messages into the agent conversation.
+ * Handles message alternation correctly — if last user message contains
+ * tool_result blocks (array content), appends a text block to the array
+ * instead of overwriting it.
+ * Returns true if messages were injected, false otherwise.
+ */
+async function injectUserMessages(
+  taskId: string,
+  injectedMessageIds: Set<string>,
+  messages: Anthropic.MessageParam[],
+  onProgress: (event: AgentProgressEvent) => Promise<void>
+): Promise<boolean> {
+  const newUserMessages = await getNewUserMessages(taskId, injectedMessageIds);
+  if (newUserMessages.length === 0) return false;
+
+  const combinedText = newUserMessages.map(m => m.content).join('\n\n');
+  for (const msg of newUserMessages) {
+    injectedMessageIds.add(msg.id);
+  }
+
+  const lastMsg = messages[messages.length - 1];
+  if (lastMsg?.role === 'user') {
+    if (Array.isArray(lastMsg.content)) {
+      // Last message has tool_result blocks — append a text block to preserve them
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (lastMsg.content as any[]).push({ type: 'text', text: '\n\n[Additional context from user]: ' + combinedText });
+    } else {
+      // Simple string content — append
+      lastMsg.content = (lastMsg.content as string) + '\n\n[Additional context from user]: ' + combinedText;
+    }
+  } else {
+    // Last message is from assistant — add new user message
+    messages.push({
+      role: 'user',
+      content: '[Additional context from user]: ' + combinedText,
+    });
+  }
+
+  await onProgress({
+    type: 'thinking',
+    message: 'Incorporating your message...',
+    timestamp: Date.now(),
+  });
+
+  return true;
+}
+
+/**
+ * Fetch new user chat messages for a task that haven't been injected yet.
+ * Called between agent loop iterations to pick up messages sent while working.
+ */
+async function getNewUserMessages(
+  taskId: string,
+  alreadyInjected: Set<string>
+): Promise<{ id: string; content: string }[]> {
+  try {
+    const { data } = await supabaseAdmin
+      .from('tasks')
+      .select('chat_messages')
+      .eq('id', taskId)
+      .single();
+
+    if (!data?.chat_messages) return [];
+
+    const chatMessages = data.chat_messages as unknown as { id: string; role: string; content: string }[];
+    return chatMessages
+      .filter(m => m.role === 'user' && !alreadyInjected.has(m.id))
+      .map(m => ({ id: m.id, content: m.content }));
+  } catch {
+    return [];
+  }
 }
 
 /**

@@ -74,11 +74,39 @@ async function deleteTaskFromSupabase(taskId: string): Promise<{ success: boolea
 }
 
 // Merge Supabase tasks with localStorage tasks (Supabase wins for conflicts)
-// For cross-device sync: Supabase is source of truth, localStorage is just cache
-function mergeTasks(supabaseTasks: Task[], _localTasks: Task[]): Task[] {
-  // Supabase is the source of truth - just use Supabase tasks
-  // Local-only tasks should have been synced when created
-  return supabaseTasks.sort((a, b) => a.order - b.order);
+// For cross-device sync: Supabase is source of truth, localStorage is just cache.
+// Exception: chatMessages are merged by union (local messages may not have synced yet).
+// Local-only tasks (not yet POSTed to Supabase) are preserved to avoid disappearing tasks.
+function mergeTasks(supabaseTasks: Task[], localTasks: Task[]): Task[] {
+  const localMap = new Map(localTasks.map(t => [t.id, t]));
+  const supabaseIds = new Set(supabaseTasks.map(t => t.id));
+
+  const merged = supabaseTasks.map(st => {
+    const local = localMap.get(st.id);
+    if (local) {
+      const supabaseMessages = st.chatMessages || [];
+      const localMessages = local.chatMessages || [];
+
+      // If local has messages that Supabase doesn't, merge them in
+      if (localMessages.length > supabaseMessages.length) {
+        const supabaseMsgIds = new Set(supabaseMessages.map(m => m.id));
+        const unsynced = localMessages.filter(m => !supabaseMsgIds.has(m.id));
+        if (unsynced.length > 0) {
+          const mergedMessages = [...supabaseMessages, ...unsynced]
+            .sort((a, b) => a.timestamp - b.timestamp);
+          return { ...st, chatMessages: mergedMessages };
+        }
+      }
+    }
+    return st;
+  });
+
+  // Preserve local-only tasks that haven't been POSTed to Supabase yet.
+  // Without this, a task created moments ago would vanish on the next refetch.
+  const localOnly = localTasks.filter(t => !supabaseIds.has(t.id));
+  merged.push(...localOnly);
+
+  return merged.sort((a, b) => a.order - b.order);
 }
 
 export function useTasks() {
@@ -394,7 +422,24 @@ export function useTasks() {
       return { ...t, chatMessages: [...existingMessages, message], updatedAt: Date.now() };
     }));
 
-    taskOps.addChatMessage(taskId, message);
+    // Update localStorage and sync ONLY chatMessages to Supabase.
+    // Sending the full task would overwrite agent-set fields (status, etc.)
+    // and is slower — this targeted PUT is faster so the running agent loop
+    // picks up mid-run messages before it finalizes.
+    const task = taskOps.addChatMessage(taskId, message);
+    if (task) {
+      fetch(`/api/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatMessages: task.chatMessages }),
+      }).then(response => {
+        if (!response.ok) {
+          setSyncError({ type: 'server', message: 'Failed to save message', taskId });
+        }
+      }).catch(() => {
+        setSyncError({ type: 'network', message: 'Unable to save message', taskId });
+      });
+    }
   }, []);
 
   // Set agent quick info for a task + Supabase sync

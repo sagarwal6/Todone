@@ -7,6 +7,34 @@ Phase 16 (insight panel refactor) complete — meetings use ConversationPanel, e
 Phase 15 (gmail_triage compound tool) complete — server-side search+score+preview in one call, saves 2-3 agent iterations per triage task.
 Phase 15 also included scoring fixes: self-sent emails deprioritized (-20), mailing lists no longer get DIRECT_RECIPIENT bonus, "morning/evening brief" pattern added to marketing detection.
 
+Phase 18 (mid-run messaging & agent reliability) complete — message ordering, disappearing messages/tasks, agent link pickup, unknown term research.
+
+**Phase 17 (InsightDetailPanel UX + tone_analyze enhancements) — IN PROGRESS.** See `sessions/2-18-draft-quality/issues.md` for open issues.
+
+### Phase 17 changes (uncommitted on `feature/improve-agent`)
+
+**UI changes (InsightDetailPanel.tsx, InsightItem.tsx):**
+- Open in Gmail + dismiss icons moved from header bar to sender info row
+- Email body always visible (removed collapse toggle)
+- Redraft button moved inside textarea (small, bottom-right)
+- Textarea auto-resizes with max-height + bottom gradient fade for scroll indication
+- Footer allows overflow scrolling (max 60vh)
+- Agent progress shown inline during draft generation (mutually exclusive with textarea)
+- DraftWarmupSteps component: animated placeholder steps before real SSE events arrive
+- Completed items can be dismissed from the list
+- Close icon instead of trash icon for dismiss
+- State restored when navigating away and back (isGeneratingDraft, draftText)
+- Redraft sends identical prompt as first draft (captured via ref, no separate path)
+
+**Tone analyzer enhancements (execute-tool.ts):**
+- Added `blankLineAfterGreeting`, `blankLineBeforeSignOff`, `usesProperCapitalization` to StyleSignals
+- All three detected from actual sent email analysis
+- Recommendation string includes spacing and capitalization signals
+- No hardcoded style rules — all data-driven from analyzer
+
+**API changes:**
+- `execute/route.ts`: Allow `draft_response` actions to re-execute when completed (enables redraft)
+
 ## Lessons Learned
 
 1. **Prescriptive prompts don't scale.** Phase 1 added 20 rules for 12 test failures. Rules contradicted each other, everything was "CRITICAL", and long-tail tasks had no rules. Phase 1b replaced them with 6 principles — the model reasons better from principles than rulebooks.
@@ -135,9 +163,9 @@ Testing deferred to Phase 8 — test everything together after all code phases a
 Read-only tools execute via `Promise.all`, write tools sequentially after. Results reassembled in original call order.
 
 ### Testing
-- [ ] Multi-tool tasks noticeably faster
-- [ ] Write tools still execute after read tools
-- [ ] Error in one parallel tool doesn't block others
+- [x] Multi-tool tasks noticeably faster — `Promise.all(readCalls.map(executeOneToolCall))` at anthropic.ts:416-418
+- [x] Write tools still execute after read tools — sequential `for` loop at anthropic.ts:421-424, only runs after Promise.all resolves
+- [x] Error in one parallel tool doesn't block others — `executeTool` never throws (double try/catch returns `{ success: false }` for all error paths)
 
 ---
 
@@ -148,8 +176,8 @@ Read-only tools execute via `Promise.all`, write tools sequentially after. Resul
 `logCost()` writes JSONL to `logs/ai-costs.jsonl` (gitignored). Hooked into agent loop (with cache tracking), insight scan, and Gemini research. Pricing table for Sonnet 4, Haiku 3.5, Gemini Flash.
 
 ### Testing
-- [ ] JSONL lines appear with reasonable numbers for each AI call type
-- [ ] Cache read tokens are non-zero
+- [x] JSONL lines appear with reasonable numbers for each AI call type
+- [x] Cache read tokens are non-zero
 
 ---
 
@@ -166,9 +194,9 @@ Read-only tools execute via `Promise.all`, write tools sequentially after. Resul
 - Returns structured data: email counts, frequency/month, who initiates, recent subjects, meeting pattern detection (weekly/biweekly/monthly), relationship strength (high/medium/low/none), and one-line summary
 
 ### Testing
-- [ ] "Message Andrew" with many matches → ranks by email activity
-- [ ] "Do I meet with X regularly?" → shows meeting pattern from contact analysis
-- [ ] Automated senders filtered, result under 8000 chars
+- [x] "Message Andrew" with many matches → ranks by email activity
+- [x] "Do I meet with X regularly?" → shows meeting pattern from contact analysis
+- [x] Automated senders filtered, result under 8000 chars
 
 ---
 
@@ -535,6 +563,74 @@ gmail_triage: {
 - [x] 3-pane layout: TaskList | InsightView | right panel
 - [x] Stale "Preparing..."/"Drafting..." actions time out
 - [x] Build: lint, typecheck, build pass
+
+---
+
+## Phase 18: Mid-Run Messaging & Agent Reliability (DONE)
+
+**Why:** Multiple issues when users sent messages while the agent was working: messages disappeared, appeared in wrong order, links weren't picked up, agent assumed what unknown terms meant instead of researching, and newly created tasks vanished from the list.
+
+### Root Causes & Fixes
+
+1. **Messages disappearing** (`useTasks.ts`): `addChatMessage` only saved to React state + localStorage, not Supabase. When `loadTasks()` ran (window focus), Supabase data overwrote everything.
+   - [x] Added Supabase sync to `addChatMessage`
+   - [x] Changed `mergeTasks` to merge chatMessages by union (preserving unsynced local messages)
+
+2. **Messages still disappearing** (`ConversationPanel.tsx`): `useEffect` with `task.chatMessages` dependency overwrote local state when Supabase refetch raced with local updates.
+   - [x] Changed dependency to `[task.id]` only — local state is authoritative while panel is mounted
+
+3. **Multiple disconnected responses**: User's message went to separate `/api/chat` endpoint while agent was running, producing a second unrelated response.
+   - [x] When `isRunning`, skip `/api/chat` — just save message for agent loop to pick up from Supabase
+
+4. **Agent not picking up mid-run messages** (`anthropic.ts`): Added `injectUserMessages` to check Supabase for new user messages between iterations. Also checks right before `end_turn` finalization with 200ms delay to let async PUT land.
+   - [x] `injectUserMessages` handles both string and array (tool_result) content
+   - [x] Proper message alternation maintained (continuation `user` message after assistant response)
+   - [x] 200ms delay before end_turn late-message check
+
+5. **Wrong message ordering** (`ConversationPanel.tsx`): Agent result was in a dedicated section hardcoded ABOVE chat messages. User's mid-run message appeared below.
+   - [x] Dedicated agent result section conditional — only shown when no user messages exist
+   - [x] When user sent messages, everything flows chronologically in chat list
+   - [x] Skip logic only applies when dedicated section is visible
+   - [x] KeyFactsLine renders on agent result in chat list
+
+6. **Links not picked up — race condition** (`useTasks.ts`): `addChatMessage` sent the ENTIRE task via PUT (slow, overwrites agent-set fields like `status`).
+   - [x] Changed to send only `{ chatMessages }` in the PUT — faster, no field overwrite
+
+7. **Agent not researching unknown terms** (`anthropic.ts`): Principle 7 said "search personal data before falling back to web" — agent treated "falling back" as optional.
+   - [x] Strengthened: "NEVER assume you know what an unfamiliar term is — web_search if personal data doesn't explain it"
+
+8. **Tasks disappearing from list** (`useTasks.ts`): `mergeTasks` only iterated `supabaseTasks.map(...)` — any task not yet POSTed to Supabase was silently dropped. `saveTasks()` then overwrote localStorage too, destroying it permanently.
+   - [x] `mergeTasks` now preserves local-only tasks that haven't synced yet
+
+9. **Weak contact matching** (`execute-tool.ts`): Google People API fuzzy matches returned irrelevant contacts for short queries (e.g., "zo" → "Goce Zojcheski").
+   - [x] Short queries (≤3 chars) require `startsWith` match on first name, display name, or email prefix
+
+10. **400 API errors — tool_use/tool_result pairing** (`anthropic.ts`): User message injection was overwriting tool_result array content with a string.
+    - [x] Detect array content and push text block instead of overwriting
+
+### Lessons Learned
+
+10. **Dual state sources require explicit ownership.** React state + localStorage + Supabase creates three potential sources of truth. The fix wasn't "pick one winner" — it was defining ownership per lifecycle phase: local state owns the panel session, Supabase owns persistence, and `mergeTasks` reconciles at boundaries.
+
+11. **Full-object PUTs are dangerous during concurrent writes.** Sending the entire task from the client overwrites agent-set fields (status, steps) because the client has stale data. Partial PUTs (`{ chatMessages }` only) are both faster and safer.
+
+12. **Race conditions need defense in depth.** A single check for mid-run messages isn't enough — the async PUT may not have landed. Multiple checks (start of iteration + before end_turn + delay) provide overlapping coverage.
+
+### Files Modified
+| File | Change |
+|------|--------|
+| `hooks/useTasks.ts` | `addChatMessage` Supabase sync (partial PUT), `mergeTasks` preserves local-only tasks |
+| `components/ConversationPanel.tsx` | Message ordering, conditional dedicated section, skip logic, KeyFactsLine in chat |
+| `lib/ai/anthropic.ts` | `injectUserMessages`, late-message check with delay, system prompt principle 7 |
+| `lib/ai/execute-tool.ts` | Contacts filtering for short queries |
+
+### Testing
+- [x] User message sent mid-run persists (doesn't disappear on refetch)
+- [x] User message appears above agent response (chronological order)
+- [x] Agent incorporates mid-run context into unified response
+- [x] Short contact queries don't match irrelevant names
+- [x] Newly created tasks don't vanish from list
+- [x] Build passes (lint, typecheck)
 
 ---
 
